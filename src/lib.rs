@@ -75,9 +75,8 @@ impl KbinXml {
     let root = Element::bare("root");
     let mut stack = vec![root];
     {
-      let mut nodes_left = true;
       let node_buf_end = data_buf_start.into();
-      while nodes_left && node_buf.position() < node_buf_end {
+      while node_buf.position() < node_buf_end {
         let raw_node_type = node_buf.read_u8().expect("Unable to read node type");
         let is_array = raw_node_type & 64 == 64;
         let node_type = raw_node_type & !64;
@@ -102,7 +101,6 @@ impl KbinXml {
                 to.append_child(node);
               }
             }
-            //nodes_left = false;
             break;
           },
           _ => {},
