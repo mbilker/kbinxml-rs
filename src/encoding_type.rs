@@ -1,3 +1,6 @@
+use encoding::{DecoderTrap, Encoding};
+use encoding::all::{ASCII, EUC_JP, ISO_8859_1, WINDOWS_31J};
+
 #[allow(non_camel_case_types)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum EncodingType {
@@ -34,5 +37,25 @@ impl EncodingType {
     };
 
     Some(val)
+  }
+
+  /// Decode bytes using the encoding definition from the `encoding` crate.
+  ///
+  /// A `Some` value indicates an encoding should be used from the `encoding`
+  /// crate. A `None` value indicates Rust's own UTF-8 handling should be used.
+  pub fn decode_bytes(&self, input: Vec<u8>) -> String {
+    const DECODER_FAIL: &str = "Unable to interpret string as alternate encoding";
+
+    match *self {
+      EncodingType::None |
+      EncodingType::UTF_8 => {
+        String::from_utf8(input).expect("Unable to interpret string as UTF-8")
+      },
+
+      EncodingType::ASCII      => ASCII.decode(&input, DecoderTrap::Strict).expect(DECODER_FAIL),
+      EncodingType::ISO_8859_1 => ISO_8859_1.decode(&input, DecoderTrap::Strict).expect(DECODER_FAIL),
+      EncodingType::EUC_JP     => EUC_JP.decode(&input, DecoderTrap::Strict).expect(DECODER_FAIL),
+      EncodingType::SHIFT_JIS  => WINDOWS_31J.decode(&input, DecoderTrap::Strict).expect(DECODER_FAIL),
+    }
   }
 }

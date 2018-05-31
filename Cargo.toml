@@ -5,6 +5,7 @@ authors = ["Matt Bilker <me@mbilker.us>"]
 
 [dependencies]
 byteorder = "1.2.3"
+encoding = "0.2"
 lazy_static = "1.0.0"
 log = "0.4.1"
 minidom = "0.9.0"
