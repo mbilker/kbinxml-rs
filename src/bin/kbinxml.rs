@@ -13,7 +13,7 @@ fn main() -> std::io::Result<()> {
   pretty_env_logger::init();
 
   if let Some(file_name) = env::args().skip(1).next() {
-    println!("file_name: {}", file_name);
+    eprintln!("file_name: {}", file_name);
 
     let mut file = File::open(file_name)?;
     let mut contents = Vec::new();

@@ -9,7 +9,7 @@ macro_rules! number_impl {
     $(
       impl KbinWrapperType<$inner_type> for $inner_type {
         fn from_kbin_bytes(output: &mut String, input: &[u8]) {
-          println!("KbinWrapperType<{}> => input: {:02x?}", stringify!($inner_type), input);
+          trace!("KbinWrapperType<{}> => input: {:02x?}", stringify!($inner_type), input);
 
           let mut data = [0; ::std::mem::size_of::<$inner_type>()];
           data.clone_from_slice(input);
@@ -23,7 +23,7 @@ macro_rules! number_impl {
     $(
       impl KbinWrapperType<$inner_type> for $inner_type {
         fn from_kbin_bytes(output: &mut String, input: &[u8]) {
-          println!("KbinWrapperType<{}> => input: {:02x?}", stringify!($inner_type), input);
+          trace!("KbinWrapperType<{}> => input: {:02x?}", stringify!($inner_type), input);
 
           let mut data = [0; ::std::mem::size_of::<$inner_type>()];
           data.clone_from_slice(input);
@@ -42,8 +42,7 @@ number_impl!(float; u32 => f32, u64 => f64);
 
 impl KbinWrapperType<bool> for bool {
   fn from_kbin_bytes(output: &mut String, input: &[u8]) {
-    println!("KbinWrapperType<bool> => input: {:02x?}", input);
-    //String::from("bool")
+    trace!("KbinWrapperType<bool> => input: {:02x?}", input);
 
     let value = match input[0] {
       0x00 => "0",
@@ -57,7 +56,7 @@ impl KbinWrapperType<bool> for bool {
 struct Ip4;
 impl KbinWrapperType<Ip4> for Ip4 {
   fn from_kbin_bytes(output: &mut String, input: &[u8]) {
-    println!("KbinWrapperType<Ip4> => input: {:02x?}", input);
+    trace!("KbinWrapperType<Ip4> => input: {:02x?}", input);
 
     if input.len() < 4 {
       panic!("Ip4 type requires 4 bytes of data, input: {:02x?}", input);
@@ -159,7 +158,7 @@ macro_rules! construct_types {
       {
         let type_size = (size as usize) * (count as usize);
         let arr_count = input.len() / type_size;
-        println!("parse_bytes({}) => size: {}, count: {}, input_len: {}, arr_count: {}", name, size, count, input.len(), arr_count);
+        debug!("parse_bytes({}) => size: {}, count: {}, input_len: {}, arr_count: {}", name, size, count, input.len(), arr_count);
 
         let mut result = String::new();
 
