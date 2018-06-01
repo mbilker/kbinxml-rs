@@ -190,8 +190,7 @@ impl KbinXml {
     let len_data = data_buf.read_u32::<BigEndian>().expect("Unable to read len_data");
     println!("len_data: {} (0x{:x})", len_data, len_data);
 
-    let root = Element::bare("root");
-    let mut stack = vec![root];
+    let mut stack: Vec<Element> = Vec::new();
     {
       let node_buf_end = data_buf_start.into();
       while node_buf.position() < node_buf_end {

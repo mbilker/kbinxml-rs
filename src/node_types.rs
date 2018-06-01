@@ -1,18 +1,20 @@
+use std::fmt::Write;
+
 trait KbinWrapperType<T> {
-  fn from_kbin_bytes(input: &[u8]) -> String;
+  fn from_kbin_bytes(output: &mut String, input: &[u8]);
 }
 
 macro_rules! number_impl {
   (integer; $($inner_type:ident),*) => {
     $(
       impl KbinWrapperType<$inner_type> for $inner_type {
-        fn from_kbin_bytes(input: &[u8]) -> String {
+        fn from_kbin_bytes(output: &mut String, input: &[u8]) {
           println!("KbinWrapperType<{}> => input: {:02x?}", stringify!($inner_type), input);
-          //String::from(concat!("integer ", stringify!($inner_type)))
 
           let mut data = [0; ::std::mem::size_of::<$inner_type>()];
           data.clone_from_slice(input);
-          format!("{}", $inner_type::from_be($inner_type::from_bytes(data)))
+          write!(output, "{}", $inner_type::from_be($inner_type::from_bytes(data)))
+            .expect(concat!("Failed to write ", stringify!($inner_type), " to output string"));
         }
       }
     )*
@@ -20,15 +22,15 @@ macro_rules! number_impl {
   (float; $($intermediate:ident => $inner_type:ident),*) => {
     $(
       impl KbinWrapperType<$inner_type> for $inner_type {
-        fn from_kbin_bytes(input: &[u8]) -> String {
+        fn from_kbin_bytes(output: &mut String, input: &[u8]) {
           println!("KbinWrapperType<{}> => input: {:02x?}", stringify!($inner_type), input);
-          //String::from(concat!("float ", stringify!($inner_type)))
 
           let mut data = [0; ::std::mem::size_of::<$inner_type>()];
           data.clone_from_slice(input);
           let bits = $intermediate::from_be($intermediate::from_bytes(data));
 
-          format!("{:.6}", $inner_type::from_bits(bits))
+          write!(output, "{:.6}", $inner_type::from_bits(bits))
+            .expect(concat!("Failed to write ", stringify!($inner_type), " to output string"));
         }
       }
     )*
@@ -39,7 +41,7 @@ number_impl!(integer; i8, u8, i16, u16, i32, u32, i64, u64);
 number_impl!(float; u32 => f32, u64 => f64);
 
 impl KbinWrapperType<bool> for bool {
-  fn from_kbin_bytes(input: &[u8]) -> String {
+  fn from_kbin_bytes(output: &mut String, input: &[u8]) {
     println!("KbinWrapperType<bool> => input: {:02x?}", input);
     //String::from("bool")
 
@@ -48,20 +50,32 @@ impl KbinWrapperType<bool> for bool {
       0x01 => "1",
       v => panic!("Unsupported value for boolean: {}", v),
     };
-    String::from(value)
+    output.push_str(value);
+  }
+}
+
+struct Ip4;
+impl KbinWrapperType<Ip4> for Ip4 {
+  fn from_kbin_bytes(output: &mut String, input: &[u8]) {
+    println!("KbinWrapperType<Ip4> => input: {:02x?}", input);
+
+    if input.len() < 4 {
+      panic!("Ip4 type requires 4 bytes of data, input: {:02x?}", input);
+    }
+
+    write!(output, "{}.{}.{}.{}", input[0], input[1], input[2], input[3])
+      .expect("Failed to write IP address to output string");
   }
 }
 
 struct DummyConverter;
 impl KbinWrapperType<DummyConverter> for DummyConverter {
-  fn from_kbin_bytes(_input: &[u8]) -> String {
-    String::from("")
-  }
+  fn from_kbin_bytes(_output: &mut String, _input: &[u8]) {}
 }
 
 struct InvalidConverter;
 impl KbinWrapperType<InvalidConverter> for InvalidConverter {
-  fn from_kbin_bytes(input: &[u8]) -> String {
+  fn from_kbin_bytes(_output: &mut String, input: &[u8]) {
     panic!("Invalid kbin type converter called for input: {:02x?}", input);
   }
 }
@@ -122,22 +136,58 @@ macro_rules! construct_types {
         }
       }
 
+      fn parse_array<T>(output: &mut String, input: &[u8], size: usize, count: usize, arr_count: usize)
+        where T: KbinWrapperType<T>
+      {
+        {
+          let first = &input[..size];
+          T::from_kbin_bytes(output, first);
+        }
+
+        let total_nodes = count * arr_count;
+        for i in 1..total_nodes {
+          let offset = i * size;
+          let end = (i + 1) * size;
+          let data = &input[offset..end];
+          output.push(' ');
+          T::from_kbin_bytes(output, data);
+        }
+      }
+
+      fn parse_bytes_inner<T>(&self, input: &[u8], name: &str, size: u8, count: i8) -> String
+        where T: KbinWrapperType<T>
+      {
+        let type_size = (size as usize) * (count as usize);
+        let arr_count = input.len() / type_size;
+        println!("parse_bytes({}) => size: {}, count: {}, input_len: {}, arr_count: {}", name, size, count, input.len(), arr_count);
+
+        let mut result = String::new();
+
+        if count == -1 {
+          panic!("Tried to parse special type: {}", self.name());
+        } else if count == 0 {
+          // Do nothing
+        } else if count == 1 {
+          // May have a node (i.e. Ip4) that is only a single count, but it
+          // can be part of an array
+          if arr_count == 1 {
+            T::from_kbin_bytes(&mut result, input);
+          } else {
+            Self::parse_array::<T>(&mut result, input, size as usize, count as usize, arr_count);
+          }
+        } else if count > 1 {
+          Self::parse_array::<T>(&mut result, input, size as usize, count as usize, arr_count);
+        } else {
+          unimplemented!();
+        }
+
+        result
+      }
+
       pub fn parse_bytes(&self, input: &[u8]) -> String {
         match *self {
           $(
-            KbinType::$konst => {
-              if $count == -1 {
-                panic!("Tried to parse special type: {}", self.name());
-              } else if $count == 0 {
-                String::new()
-              } else if $count == 1 {
-                $inner_type::from_kbin_bytes(input)
-              } else if $count > 1 {
-                String::new()
-              } else {
-                unimplemented!();
-              }
-            },
+            KbinType::$konst => self.parse_bytes_inner::<$inner_type>(input, $name, $size, $count),
           )+
         }
       }
@@ -156,7 +206,7 @@ construct_types! {
   ( 9, U64,      "u64",    None,           8, 1, u64);
   (10, Binary,   "bin",    Some("binary"), 1, -1, DummyConverter);
   (11, String,   "str",    Some("string"), 1, -1, DummyConverter);
-  (12, Ip4,      "ip4",    None,           1, 4, DummyConverter); // TODO: implement IP address parsing
+  (12, Ip4,      "ip4",    None,           4, 1, Ip4); // Using size of 4 rather than count of 4
   (13, Time,     "time",   None,           4, 1, u32);
   (14, Float,    "float",  Some("f"),      4, 1, f32);
   (15, Double,   "double", Some("d"),      8, 1, f64);
@@ -194,8 +244,8 @@ construct_types! {
   // no 47
   (48, Vs8,      "vs8",    None,           1, 16, i8);
   (49, Vu8,      "vu8",    None,           1, 16, u8);
-  (50, Vs16,     "vs16",   None,           1, 8, i16);
-  (51, Vu16,     "vu16",   None,           1, 8, u16);
+  (50, Vs16,     "vs16",   None,           2, 8, i16);
+  (51, Vu16,     "vu16",   None,           2, 8, u16);
   (52, Boolean,  "bool",   Some("b"),      1, 1, bool);
   (53, Boolean2, "2b",     None,           1, 2, bool);
   (54, Boolean3, "3b",     None,           1, 3, bool);
