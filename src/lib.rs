@@ -5,6 +5,7 @@ extern crate encoding;
 extern crate minidom;
 extern crate num;
 
+#[macro_use] extern crate failure;
 #[macro_use] extern crate lazy_static;
 #[macro_use] extern crate log;
 
@@ -13,10 +14,12 @@ use std::fmt::Write;
 use std::io::{Cursor, Read, Seek, SeekFrom};
 
 use byteorder::{BigEndian, ReadBytesExt};
+use failure::ResultExt;
 use minidom::Element;
 
 mod compression;
 mod encoding_type;
+mod error;
 mod node_types;
 mod sixbit;
 
@@ -24,6 +27,8 @@ use compression::Compression;
 use encoding_type::EncodingType;
 use node_types::KbinType;
 use sixbit::unpack_sixbit;
+
+pub use error::{KbinError, KbinErrorKind};
 
 const SIGNATURE: u8 = 0xA0;
 
@@ -52,19 +57,19 @@ impl KbinXml {
     data_buf.position()
   }
 
-  fn data_buf_read(&mut self, data_buf: &mut Cursor<&[u8]>) -> Vec<u8> {
-    let size = data_buf.read_u32::<BigEndian>().expect("Unable to read data size");
+  fn data_buf_read(&mut self, data_buf: &mut Cursor<&[u8]>) -> Result<Vec<u8>, KbinError> {
+    let size = data_buf.read_u32::<BigEndian>().context(KbinErrorKind::DataReadSize)?;
     let mut data = vec![0; size as usize];
-    data_buf.read_exact(&mut data).expect("Unable to read data");
+    data_buf.read_exact(&mut data).context(KbinErrorKind::DataRead)?;
     trace!("data_buf_read => size: {}, data: 0x{:02x?}", data.len(), data);
 
-    self.data_buf_realign(data_buf, None);
+    self.data_buf_realign(data_buf, None)?;
 
-    data
+    Ok(data)
   }
 
-  fn data_buf_read_str(&mut self, data_buf: &mut Cursor<&[u8]>, encoding: EncodingType) -> String {
-    let mut data = self.data_buf_read(data_buf);
+  fn data_buf_read_str(&mut self, data_buf: &mut Cursor<&[u8]>, encoding: EncodingType) -> Result<String, KbinError> {
+    let mut data = self.data_buf_read(data_buf)?;
 
     // Remove trailing null bytes
     let mut index = data.len() - 1;
@@ -74,17 +79,17 @@ impl KbinXml {
     data.truncate(index + 1);
     trace!("data_buf_read_str => size: {}, data: 0x{:02x?}", data.len(), data);
 
-    encoding.decode_bytes(data)
+    Ok(encoding.decode_bytes(data))
   }
 
-  fn data_buf_get(&mut self, data_buf: &mut Cursor<&[u8]>, size: u32) -> Vec<u8> {
+  fn data_buf_get(&mut self, data_buf: &mut Cursor<&[u8]>, size: u32) -> Result<Vec<u8>, KbinError> {
     let mut data = vec![0; size as usize];
-    data_buf.read_exact(&mut data).expect("Unable to read data");
+    data_buf.read_exact(&mut data).context(KbinErrorKind::DataRead)?;
 
-    data
+    Ok(data)
   }
 
-  fn data_buf_get_aligned(&mut self, data_buf: &mut Cursor<&[u8]>, data_type: KbinType) -> Vec<u8> {
+  fn data_buf_get_aligned(&mut self, data_buf: &mut Cursor<&[u8]>, data_type: KbinType) -> Result<Vec<u8>, KbinError> {
     if self.offset_1 % 4 == 0 {
       self.offset_1 = self.data_buf_offset(data_buf);
     }
@@ -97,26 +102,26 @@ impl KbinXml {
     trace!("data_buf_get_aligned => old_pos: {}, size: {}", old_pos, size);
     let (check_old, data) = match size {
       1 => {
-        data_buf.seek(SeekFrom::Start(self.offset_1)).expect("Unable to seek data buffer");
+        data_buf.seek(SeekFrom::Start(self.offset_1)).context(KbinErrorKind::Seek)?;
 
-        let data = data_buf.read_u8().expect("Unable to read 1 byte data");
+        let data = data_buf.read_u8().context(KbinErrorKind::DataReadOneByte)?;
         self.offset_1 += 1;
 
         (true, vec![data])
       },
       2 => {
-        data_buf.seek(SeekFrom::Start(self.offset_2)).expect("Unable to seek data buffer");
+        data_buf.seek(SeekFrom::Start(self.offset_2)).context(KbinErrorKind::Seek)?;
 
         let mut data = vec![0; 2];
-        data_buf.read_exact(&mut data).expect("Unable to read 2 byte data");
+        data_buf.read_exact(&mut data).context(KbinErrorKind::DataReadTwoByte)?;
         self.offset_2 += 2;
 
         (true, data)
       },
       size => {
         let mut data = vec![0; size as usize];
-        data_buf.read_exact(&mut data).expect("Unable to read aligned data from data buffer");
-        self.data_buf_realign(data_buf, None);
+        data_buf.read_exact(&mut data).context(KbinErrorKind::DataReadAligned)?;
+        self.data_buf_realign(data_buf, None)?;
 
         (false, data)
       },
@@ -124,30 +129,32 @@ impl KbinXml {
 
 
     if check_old {
-      data_buf.seek(SeekFrom::Start(old_pos)).expect("Unable to seek data buffer");
+      data_buf.seek(SeekFrom::Start(old_pos)).context(KbinErrorKind::Seek)?;
 
       let trailing = max(self.offset_1, self.offset_2);
       trace!("data_buf_get_aligned => old_pos: {}, trailing: {}", old_pos, trailing);
       if old_pos < trailing {
-        data_buf.seek(SeekFrom::Start(trailing)).expect("Unable to seek data buffer");
-        self.data_buf_realign(data_buf, None);
+        data_buf.seek(SeekFrom::Start(trailing)).context(KbinErrorKind::Seek)?;
+        self.data_buf_realign(data_buf, None)?;
       }
     }
 
-    data
+    Ok(data)
   }
 
-  fn data_buf_realign(&mut self, data_buf: &mut Cursor<&[u8]>, size: Option<u64>) {
+  fn data_buf_realign(&mut self, data_buf: &mut Cursor<&[u8]>, size: Option<u64>) -> Result<(), KbinError> {
     let size = size.unwrap_or(4);
     trace!("data_buf_realign => position: {}, size: {}", data_buf.position(), size);
 
     while data_buf.position() % size > 0 {
-      data_buf.seek(SeekFrom::Current(1)).expect("Unable to seek data buffer");
+      data_buf.seek(SeekFrom::Current(1)).context(KbinErrorKind::Seek)?;
     }
     trace!("data_buf_realign => realigned to: {}", data_buf.position());
+
+    Ok(())
   }
 
-  fn from_binary_internal(&mut self, input: &[u8]) -> Element {
+  fn from_binary_internal(&mut self, input: &[u8]) -> Result<Element, KbinError> {
     // Node buffer starts from the beginning.
     // Data buffer starts later after reading `len_data`.
     let mut node_buf = Cursor::new(&input[..]);
@@ -228,7 +235,7 @@ impl KbinXml {
           if let Some(to) = stack.last_mut() {
             match xml_type {
               KbinType::Attribute => {
-                let val = self.data_buf_read_str(&mut data_buf, encoding);
+                let val = self.data_buf_read_str(&mut data_buf, encoding)?;
                 debug!("attr name: {}, val: {}", name, val);
                 to.set_attr(name, val);
               },
@@ -239,7 +246,7 @@ impl KbinXml {
               KbinType::String => {
                 to.set_attr("__type", xml_type.name());
 
-                let val = self.data_buf_read_str(&mut data_buf, encoding);
+                let val = self.data_buf_read_str(&mut data_buf, encoding)?;
                 debug!("name: {}, val: {}", name, val);
                 to.append_text_node(val);
               },
@@ -269,12 +276,12 @@ impl KbinXml {
                   size);
 
                 let data = if is_array {
-                  let data = self.data_buf_get(&mut data_buf, size);
-                  self.data_buf_realign(&mut data_buf, None);
+                  let data = self.data_buf_get(&mut data_buf, size)?;
+                  self.data_buf_realign(&mut data_buf, None)?;
 
                   data
                 } else {
-                  self.data_buf_get_aligned(&mut data_buf, xml_type)
+                  self.data_buf_get_aligned(&mut data_buf, xml_type)?
                 };
 
                 debug!("data: 0x{:02x?}", data);
@@ -303,10 +310,10 @@ impl KbinXml {
       warn!("stack: {:#?}", stack);
     }
     stack.truncate(1);
-    stack.pop().expect("Stack must have root node")
+    Ok(stack.pop().expect("Stack must have root node"))
   }
 
-  pub fn from_binary(input: &[u8]) -> Element {
+  pub fn from_binary(input: &[u8]) -> Result<Element, KbinError> {
     let mut kbinxml = KbinXml::new();
     kbinxml.from_binary_internal(input)
   }
