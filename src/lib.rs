@@ -79,7 +79,7 @@ impl KbinXml {
     data.truncate(index + 1);
     trace!("data_buf_read_str => size: {}, data: 0x{:02x?}", data.len(), data);
 
-    Ok(encoding.decode_bytes(data))
+    encoding.decode_bytes(data)
   }
 
   fn data_buf_get(&mut self, data_buf: &mut Cursor<&[u8]>, size: u32) -> Result<Vec<u8>, KbinError> {
@@ -159,25 +159,25 @@ impl KbinXml {
     // Data buffer starts later after reading `len_data`.
     let mut node_buf = Cursor::new(&input[..]);
 
-    let signature = node_buf.read_u8().expect("Unable to read signature byte");
+    let signature = node_buf.read_u8().context(KbinErrorKind::SignatureRead)?;
     assert_eq!(signature, SIGNATURE);
 
     // TODO: support uncompressed
-    let compress_byte = node_buf.read_u8().expect("Unable to read compression byte");
+    let compress_byte = node_buf.read_u8().context(KbinErrorKind::CompressionRead)?;
     assert_eq!(compress_byte, SIG_COMPRESSED);
 
-    let compressed = Compression::from_byte(compress_byte).expect("Unknown compression value");
+    let compressed = Compression::from_byte(compress_byte)?;
 
-    let encoding_byte = node_buf.read_u8().expect("Unable to read encoding byte");
-    let encoding_negation = node_buf.read_u8().expect("Unable to read encoding negation byte");
-    let encoding = EncodingType::from_byte(encoding_byte).expect("Unknown encoding");
+    let encoding_byte = node_buf.read_u8().context(KbinErrorKind::EncodingRead)?;
+    let encoding_negation = node_buf.read_u8().context(KbinErrorKind::EncodingNegationRead)?;
+    let encoding = EncodingType::from_byte(encoding_byte)?;
     assert_eq!(encoding_negation, 0xFF ^ encoding_byte);
 
     info!("signature: 0x{:x}", signature);
     info!("compression: 0x{:x} ({:?})", compress_byte, compressed);
     info!("encoding: 0x{:x} ({:?})", encoding_byte, encoding);
 
-    let len_node = node_buf.read_u32::<BigEndian>().expect("Unable to read len_node");
+    let len_node = node_buf.read_u32::<BigEndian>().context(KbinErrorKind::LenNodeRead)?;
     info!("len_node: {} (0x{:x})", len_node, len_node);
 
     // We have read 8 bytes so far, so offset the start of the data buffer from
@@ -192,14 +192,14 @@ impl KbinXml {
       trace!("offset_1: {}, offset_2: {}", self.offset_1, self.offset_2);
     }
 
-    let len_data = data_buf.read_u32::<BigEndian>().expect("Unable to read len_data");
+    let len_data = data_buf.read_u32::<BigEndian>().context(KbinErrorKind::LenDataRead)?;
     info!("len_data: {} (0x{:x})", len_data, len_data);
 
     let mut stack: Vec<Element> = Vec::new();
     {
       let node_buf_end = data_buf_start.into();
       while node_buf.position() < node_buf_end {
-        let raw_node_type = node_buf.read_u8().expect("Unable to read node type");
+        let raw_node_type = node_buf.read_u8().context(KbinErrorKind::NodeTypeRead)?;
         let is_array = raw_node_type & 64 == 64;
         let node_type = raw_node_type & !64;
 
@@ -224,7 +224,7 @@ impl KbinXml {
           _ => {},
         };
 
-        let name = unpack_sixbit(&mut node_buf);
+        let name = unpack_sixbit(&mut node_buf)?;
 
         if xml_type == KbinType::NodeStart {
           stack.push(Element::bare(name));
@@ -256,10 +256,10 @@ impl KbinXml {
                 let type_size = xml_type.size();
                 let type_count = xml_type.count();
                 let (is_array, size) = if type_count == -1 {
-                  (true, data_buf.read_u32::<BigEndian>().expect("Unable to read binary/string byte length"))
+                  (true, data_buf.read_u32::<BigEndian>().context(KbinErrorKind::BinaryLengthRead)?)
                 } else if is_array {
                   let node_size = type_size * type_count;
-                  let arr_count = data_buf.read_u32::<BigEndian>().expect("Unable to read array node length") / node_size as u32;
+                  let arr_count = data_buf.read_u32::<BigEndian>().context(KbinErrorKind::ArrayLengthRead)? / node_size as u32;
                   to.set_attr("__count", arr_count);
 
                   let size = (node_size as u32) * arr_count;
@@ -296,7 +296,7 @@ impl KbinXml {
                   debug!("name: {}, string: {}", name, val);
                   to.append_text_node(val);
                 } else {
-                  let inner_value = xml_type.parse_bytes(&data);
+                  let inner_value = xml_type.parse_bytes(&data)?;
                   debug!("name: {}, string: {}", name, inner_value);
                   to.append_text_node(inner_value);
                 }

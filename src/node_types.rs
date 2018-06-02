@@ -1,20 +1,26 @@
+use error::{KbinError, KbinErrorKind};
+
 use std::fmt::Write;
 
+use failure::ResultExt;
+
 trait KbinWrapperType<T> {
-  fn from_kbin_bytes(output: &mut String, input: &[u8]);
+  fn from_kbin_bytes(output: &mut String, input: &[u8]) -> Result<(), KbinError>;
 }
 
 macro_rules! number_impl {
   (integer; $($inner_type:ident),*) => {
     $(
       impl KbinWrapperType<$inner_type> for $inner_type {
-        fn from_kbin_bytes(output: &mut String, input: &[u8]) {
+        fn from_kbin_bytes(output: &mut String, input: &[u8]) -> Result<(), KbinError> {
           trace!("KbinWrapperType<{}> => input: {:02x?}", stringify!($inner_type), input);
 
           let mut data = [0; ::std::mem::size_of::<$inner_type>()];
           data.clone_from_slice(input);
           write!(output, "{}", $inner_type::from_be($inner_type::from_bytes(data)))
-            .expect(concat!("Failed to write ", stringify!($inner_type), " to output string"));
+            .context(KbinErrorKind::ByteParse(stringify!($inner_type)))?;
+
+          Ok(())
         }
       }
     )*
@@ -22,7 +28,7 @@ macro_rules! number_impl {
   (float; $($intermediate:ident => $inner_type:ident),*) => {
     $(
       impl KbinWrapperType<$inner_type> for $inner_type {
-        fn from_kbin_bytes(output: &mut String, input: &[u8]) {
+        fn from_kbin_bytes(output: &mut String, input: &[u8]) -> Result<(), KbinError> {
           trace!("KbinWrapperType<{}> => input: {:02x?}", stringify!($inner_type), input);
 
           let mut data = [0; ::std::mem::size_of::<$inner_type>()];
@@ -30,7 +36,9 @@ macro_rules! number_impl {
           let bits = $intermediate::from_be($intermediate::from_bytes(data));
 
           write!(output, "{:.6}", $inner_type::from_bits(bits))
-            .expect(concat!("Failed to write ", stringify!($inner_type), " to output string"));
+            .context(KbinErrorKind::ByteParse(stringify!($inner_type)))?;
+
+          Ok(())
         }
       }
     )*
@@ -41,7 +49,7 @@ number_impl!(integer; i8, u8, i16, u16, i32, u32, i64, u64);
 number_impl!(float; u32 => f32, u64 => f64);
 
 impl KbinWrapperType<bool> for bool {
-  fn from_kbin_bytes(output: &mut String, input: &[u8]) {
+  fn from_kbin_bytes(output: &mut String, input: &[u8]) -> Result<(), KbinError> {
     trace!("KbinWrapperType<bool> => input: {:02x?}", input);
 
     let value = match input[0] {
@@ -50,12 +58,14 @@ impl KbinWrapperType<bool> for bool {
       v => panic!("Unsupported value for boolean: {}", v),
     };
     output.push_str(value);
+
+    Ok(())
   }
 }
 
 struct Ip4;
 impl KbinWrapperType<Ip4> for Ip4 {
-  fn from_kbin_bytes(output: &mut String, input: &[u8]) {
+  fn from_kbin_bytes(output: &mut String, input: &[u8]) -> Result<(), KbinError> {
     trace!("KbinWrapperType<Ip4> => input: {:02x?}", input);
 
     if input.len() < 4 {
@@ -63,18 +73,20 @@ impl KbinWrapperType<Ip4> for Ip4 {
     }
 
     write!(output, "{}.{}.{}.{}", input[0], input[1], input[2], input[3])
-      .expect("Failed to write IP address to output string");
+      .context(KbinErrorKind::ByteParse("Ip4"))?;
+
+    Ok(())
   }
 }
 
 struct DummyConverter;
 impl KbinWrapperType<DummyConverter> for DummyConverter {
-  fn from_kbin_bytes(_output: &mut String, _input: &[u8]) {}
+  fn from_kbin_bytes(_output: &mut String, _input: &[u8]) -> Result<(), KbinError> { Ok(()) }
 }
 
 struct InvalidConverter;
 impl KbinWrapperType<InvalidConverter> for InvalidConverter {
-  fn from_kbin_bytes(_output: &mut String, input: &[u8]) {
+  fn from_kbin_bytes(_output: &mut String, input: &[u8]) -> Result<(), KbinError> {
     panic!("Invalid kbin type converter called for input: {:02x?}", input);
   }
 }
@@ -135,12 +147,12 @@ macro_rules! construct_types {
         }
       }
 
-      fn parse_array<T>(output: &mut String, input: &[u8], size: usize, count: usize, arr_count: usize)
+      fn parse_array<T>(output: &mut String, input: &[u8], size: usize, count: usize, arr_count: usize) -> Result<(), KbinError>
         where T: KbinWrapperType<T>
       {
         {
           let first = &input[..size];
-          T::from_kbin_bytes(output, first);
+          T::from_kbin_bytes(output, first)?;
         }
 
         let total_nodes = count * arr_count;
@@ -149,11 +161,13 @@ macro_rules! construct_types {
           let end = (i + 1) * size;
           let data = &input[offset..end];
           output.push(' ');
-          T::from_kbin_bytes(output, data);
+          T::from_kbin_bytes(output, data)?;
         }
+
+        Ok(())
       }
 
-      fn parse_bytes_inner<T>(&self, input: &[u8], name: &str, size: u8, count: i8) -> String
+      fn parse_bytes_inner<T>(&self, input: &[u8], name: &str, size: u8, count: i8) -> Result<String, KbinError>
         where T: KbinWrapperType<T>
       {
         let type_size = (size as usize) * (count as usize);
@@ -170,20 +184,20 @@ macro_rules! construct_types {
           // May have a node (i.e. Ip4) that is only a single count, but it
           // can be part of an array
           if arr_count == 1 {
-            T::from_kbin_bytes(&mut result, input);
+            T::from_kbin_bytes(&mut result, input)?;
           } else {
-            Self::parse_array::<T>(&mut result, input, size as usize, count as usize, arr_count);
+            Self::parse_array::<T>(&mut result, input, size as usize, count as usize, arr_count)?;
           }
         } else if count > 1 {
-          Self::parse_array::<T>(&mut result, input, size as usize, count as usize, arr_count);
+          Self::parse_array::<T>(&mut result, input, size as usize, count as usize, arr_count)?;
         } else {
           unimplemented!();
         }
 
-        result
+        Ok(result)
       }
 
-      pub fn parse_bytes(&self, input: &[u8]) -> String {
+      pub fn parse_bytes(&self, input: &[u8]) -> Result<String, KbinError> {
         match *self {
           $(
             KbinType::$konst => self.parse_bytes_inner::<$inner_type>(input, $name, $size, $count),

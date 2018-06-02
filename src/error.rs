@@ -1,4 +1,5 @@
 use std::fmt;
+use std::string::FromUtf8Error;
 
 use failure::{Backtrace, Context, Fail};
 
@@ -26,6 +27,54 @@ pub enum KbinErrorKind {
 
   #[fail(display = "Unable to seek data buffer")]
   Seek,
+
+  #[fail(display = "Unable to read signature byte")]
+  SignatureRead,
+
+  #[fail(display = "Unable to read compression byte")]
+  CompressionRead,
+
+  #[fail(display = "Unknown compression value")]
+  UnknownCompression,
+
+  #[fail(display = "Unable to read encoding byte")]
+  EncodingRead,
+
+  #[fail(display = "Unable to read encoding negation byte")]
+  EncodingNegationRead,
+
+  #[fail(display = "Unknown encoding")]
+  UnknownEncoding,
+
+  #[fail(display = "Unable to read len_node")]
+  LenNodeRead,
+
+  #[fail(display = "Unable to read len_data")]
+  LenDataRead,
+
+  #[fail(display = "Unable to read node type")]
+  NodeTypeRead,
+
+  #[fail(display = "Unable to read binary/string byte length")]
+  BinaryLengthRead,
+
+  #[fail(display = "Unable to read array node length")]
+  ArrayLengthRead,
+
+  #[fail(display = "Failed to write {} to output string", _0)]
+  ByteParse(&'static str),
+
+  #[fail(display = "Unable to read sixbit string length")]
+  SixbitLengthRead,
+
+  #[fail(display = "Unable to read sixbit string content")]
+  SixbitRead,
+
+  #[fail(display = "Unable to interpret string as UTF-8")]
+  Utf8,
+
+  #[fail(display = "Unable to interpret string as alternate encoding")]
+  EncodingDecode,
 }
 
 impl fmt::Display for KbinError {
@@ -53,5 +102,11 @@ impl From<KbinErrorKind> for KbinError {
 impl From<Context<KbinErrorKind>> for KbinError {
   fn from(inner: Context<KbinErrorKind>) -> KbinError {
     KbinError { inner }
+  }
+}
+
+impl From<FromUtf8Error> for KbinError {
+  fn from(inner: FromUtf8Error) -> KbinError {
+    inner.context(KbinErrorKind::Utf8).into()
   }
 }

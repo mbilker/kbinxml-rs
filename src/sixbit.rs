@@ -2,7 +2,10 @@ use std::collections::HashMap;
 use std::io::{Read, Write};
 
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
+use failure::ResultExt;
 use num::{BigUint, FromPrimitive, ToPrimitive};
+
+use error::{KbinError, KbinErrorKind};
 
 static CHAR_MAP: &'static [u8] = b"0123456789:ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz";
 
@@ -42,10 +45,10 @@ pub fn pack_sixbit<T>(writer: &mut T, input: &str)
   writer.write_uint::<BigEndian>(bits, (input.len() * 6 + padding) / 8).expect("Unable to write sixbit contents");
 }
 
-pub fn unpack_sixbit<T>(reader: &mut T) -> String
+pub fn unpack_sixbit<T>(reader: &mut T) -> Result<String, KbinError>
   where T: Read
 {
-  let len = reader.read_u8().expect("Unable to read sixbit string length");
+  let len = reader.read_u8().context(KbinErrorKind::SixbitLengthRead)?;
   let real_len = (f32::from(len * 6) / 8f32).ceil();
   let real_len = (real_len as u32) as usize;
   let padding = (8 - ((len * 6) % 8)) as usize;
@@ -53,7 +56,7 @@ pub fn unpack_sixbit<T>(reader: &mut T) -> String
   debug!("sixbit_len: {}, real_len: {}, padding: {}", len, real_len, padding);
 
   let mut buf = vec![0; real_len];
-  reader.read_exact(&mut buf).expect("Unable to read sixbit string content");
+  reader.read_exact(&mut buf).context(KbinErrorKind::SixbitRead)?;
 
   let bits = BigUint::from_bytes_be(&buf);
   let bits = bits >> padding;
@@ -76,5 +79,5 @@ pub fn unpack_sixbit<T>(reader: &mut T) -> String
   }).collect();
 
   debug!("result: {}", result);
-  result
+  Ok(result)
 }

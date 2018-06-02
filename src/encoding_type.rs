@@ -1,3 +1,5 @@
+use error::{KbinError, KbinErrorKind};
+
 use encoding::{DecoderTrap, Encoding};
 use encoding::all::{ASCII, EUC_JP, ISO_8859_1, WINDOWS_31J};
 
@@ -25,7 +27,7 @@ impl EncodingType {
     }
   }
 
-  pub fn from_byte(byte: u8) -> Option<Self> {
+  pub fn from_byte(byte: u8) -> Result<Self, KbinError> {
     let val = match byte {
       0x00 => EncodingType::None,
       0x20 => EncodingType::ASCII,
@@ -33,29 +35,31 @@ impl EncodingType {
       0x60 => EncodingType::EUC_JP,
       0x80 => EncodingType::SHIFT_JIS,
       0xA0 => EncodingType::UTF_8,
-      _ => return None,
+      _ => return Err(KbinErrorKind::UnknownEncoding.into()),
     };
 
-    Some(val)
+    Ok(val)
   }
 
   /// Decode bytes using the encoding definition from the `encoding` crate.
   ///
   /// A `Some` value indicates an encoding should be used from the `encoding`
   /// crate. A `None` value indicates Rust's own UTF-8 handling should be used.
-  pub fn decode_bytes(&self, input: Vec<u8>) -> String {
-    const DECODER_FAIL: &str = "Unable to interpret string as alternate encoding";
+  pub fn decode_bytes(&self, input: Vec<u8>) -> Result<String, KbinError> {
+    let decoder_fail = |e| {
+      format_err!("{}", e).context(KbinErrorKind::EncodingDecode)
+    };
 
-    match *self {
+    let result = match *self {
       EncodingType::None |
-      EncodingType::UTF_8 => {
-        String::from_utf8(input).expect("Unable to interpret string as UTF-8")
-      },
+      EncodingType::UTF_8 => String::from_utf8(input)?,
 
-      EncodingType::ASCII      => ASCII.decode(&input, DecoderTrap::Strict).expect(DECODER_FAIL),
-      EncodingType::ISO_8859_1 => ISO_8859_1.decode(&input, DecoderTrap::Strict).expect(DECODER_FAIL),
-      EncodingType::EUC_JP     => EUC_JP.decode(&input, DecoderTrap::Strict).expect(DECODER_FAIL),
-      EncodingType::SHIFT_JIS  => WINDOWS_31J.decode(&input, DecoderTrap::Strict).expect(DECODER_FAIL),
-    }
+      EncodingType::ASCII      => ASCII.decode(&input, DecoderTrap::Strict).map_err(decoder_fail)?,
+      EncodingType::ISO_8859_1 => ISO_8859_1.decode(&input, DecoderTrap::Strict).map_err(decoder_fail)?,
+      EncodingType::EUC_JP     => EUC_JP.decode(&input, DecoderTrap::Strict).map_err(decoder_fail)?,
+      EncodingType::SHIFT_JIS  => WINDOWS_31J.decode(&input, DecoderTrap::Strict).map_err(decoder_fail)?,
+    };
+
+    Ok(result)
   }
 }
