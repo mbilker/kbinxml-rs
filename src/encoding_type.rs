@@ -15,18 +15,6 @@ pub enum EncodingType {
 }
 
 impl EncodingType {
-  #[allow(dead_code)]
-  pub fn to_byte(&self) -> u8 {
-    match *self {
-      EncodingType::None       => 0x00, // 0x00 >> 5 = 0
-      EncodingType::ASCII      => 0x20, // 0x20 >> 5 = 1
-      EncodingType::ISO_8859_1 => 0x40, // 0x40 >> 5 = 2
-      EncodingType::EUC_JP     => 0x60, // 0x60 >> 5 = 3
-      EncodingType::SHIFT_JIS  => 0x80, // 0x80 >> 5 = 4
-      EncodingType::UTF_8      => 0xA0, // 0xA0 >> 5 = 5
-    }
-  }
-
   pub fn from_byte(byte: u8) -> Result<Self, KbinError> {
     let val = match byte {
       0x00 => EncodingType::None,
@@ -39,6 +27,17 @@ impl EncodingType {
     };
 
     Ok(val)
+  }
+
+  pub fn to_byte(&self) -> u8 {
+    match *self {
+      EncodingType::None       => 0x00, // 0x00 >> 5 = 0
+      EncodingType::ASCII      => 0x20, // 0x20 >> 5 = 1
+      EncodingType::ISO_8859_1 => 0x40, // 0x40 >> 5 = 2
+      EncodingType::EUC_JP     => 0x60, // 0x60 >> 5 = 3
+      EncodingType::SHIFT_JIS  => 0x80, // 0x80 >> 5 = 4
+      EncodingType::UTF_8      => 0xA0, // 0xA0 >> 5 = 5
+    }
   }
 
   /// Decode bytes using the encoding definition from the `encoding` crate.

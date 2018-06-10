@@ -46,6 +46,9 @@ fn main() -> std::io::Result<()> {
     let stdout = stdout();
     stdout.lock().write_all(&buf)?;
     println!();
+
+    let buf = KbinXml::to_binary(&element).map_err(display_err)?;
+    assert_eq!(buf, contents);
   }
   Ok(())
 }

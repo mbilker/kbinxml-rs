@@ -4,16 +4,17 @@ extern crate byteorder;
 extern crate encoding;
 extern crate minidom;
 extern crate num;
+extern crate rustc_hex;
 
 #[macro_use] extern crate failure;
 #[macro_use] extern crate lazy_static;
 #[macro_use] extern crate log;
 
 use std::cmp::max;
-use std::fmt::Write;
-use std::io::{Cursor, Read, Seek, SeekFrom};
+use std::fmt::Write as FmtWrite;
+use std::io::{Cursor, Read, Seek, SeekFrom, Write};
 
-use byteorder::{BigEndian, ReadBytesExt};
+use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use failure::ResultExt;
 use minidom::Element;
 
@@ -25,8 +26,9 @@ mod sixbit;
 
 use compression::Compression;
 use encoding_type::EncodingType;
-use node_types::KbinType;
-use sixbit::unpack_sixbit;
+use node_types::{KbinType, StandardType};
+use sixbit::{pack_sixbit, unpack_sixbit};
+use rustc_hex::FromHex;
 
 pub use error::{KbinError, KbinErrorKind};
 
@@ -63,7 +65,7 @@ impl KbinXml {
     data_buf.read_exact(&mut data).context(KbinErrorKind::DataRead)?;
     trace!("data_buf_read => size: {}, data: 0x{:02x?}", data.len(), data);
 
-    self.data_buf_realign(data_buf, None)?;
+    self.data_buf_realign_reads(data_buf, None)?;
 
     Ok(data)
   }
@@ -99,7 +101,7 @@ impl KbinXml {
     }
 
     let old_pos = self.data_buf_offset(data_buf);
-    let size = data_type.size() * data_type.count();
+    let size = data_type.size * data_type.count;
     trace!("data_buf_get_aligned => old_pos: {}, size: {}", old_pos, size);
     let (check_old, data) = match size {
       1 => {
@@ -122,7 +124,7 @@ impl KbinXml {
       size => {
         let mut data = vec![0; size as usize];
         data_buf.read_exact(&mut data).context(KbinErrorKind::DataReadAligned)?;
-        self.data_buf_realign(data_buf, None)?;
+        self.data_buf_realign_reads(data_buf, None)?;
 
         (false, data)
       },
@@ -136,14 +138,14 @@ impl KbinXml {
       trace!("data_buf_get_aligned => old_pos: {}, trailing: {}", old_pos, trailing);
       if old_pos < trailing {
         data_buf.seek(SeekFrom::Start(trailing)).context(KbinErrorKind::Seek)?;
-        self.data_buf_realign(data_buf, None)?;
+        self.data_buf_realign_reads(data_buf, None)?;
       }
     }
 
     Ok(data)
   }
 
-  fn data_buf_realign(&mut self, data_buf: &mut Cursor<&[u8]>, size: Option<u64>) -> Result<(), KbinError> {
+  fn data_buf_realign_reads(&mut self, data_buf: &mut Cursor<&[u8]>, size: Option<u64>) -> Result<(), KbinError> {
     let size = size.unwrap_or(4);
     trace!("data_buf_realign => position: {}, size: {}", data_buf.position(), size);
 
@@ -204,11 +206,11 @@ impl KbinXml {
         let is_array = raw_node_type & 64 == 64;
         let node_type = raw_node_type & !64;
 
-        let xml_type = KbinType::from_u8(node_type);
+        let xml_type = StandardType::from_u8(node_type);
         debug!("raw_node_type: {}, node_type: {:?} ({}), is_array: {}", raw_node_type, xml_type, node_type, is_array);
 
         match xml_type {
-          KbinType::NodeEnd | KbinType::FileEnd => {
+          StandardType::NodeEnd | StandardType::FileEnd => {
             if stack.len() > 1 {
               let node = stack.pop().expect("Stack must have last node");
               if let Some(to) = stack.last_mut() {
@@ -216,9 +218,9 @@ impl KbinXml {
               }
             }
 
-            if xml_type == KbinType::NodeEnd {
+            if xml_type == StandardType::NodeEnd {
               continue;
-            } else if xml_type == KbinType::FileEnd {
+            } else if xml_type == StandardType::FileEnd {
               break;
             }
           },
@@ -227,15 +229,15 @@ impl KbinXml {
 
         let name = unpack_sixbit(&mut node_buf)?;
 
-        if xml_type == KbinType::NodeStart {
+        if xml_type == StandardType::NodeStart {
           stack.push(Element::bare(name));
         } else {
-          if xml_type != KbinType::Attribute {
+          if xml_type != StandardType::Attribute {
             stack.push(Element::bare(name.clone()));
           }
           if let Some(to) = stack.last_mut() {
             match xml_type {
-              KbinType::Attribute => {
+              StandardType::Attribute => {
                 let val = self.data_buf_read_str(&mut data_buf, encoding)?;
                 debug!("attr name: {}, val: {}", name, val);
                 to.set_attr(name, val);
@@ -244,18 +246,18 @@ impl KbinXml {
               //
               // Handle String nodes separately to use the string reading logic
               // which automatically removes trailing null bytes.
-              KbinType::String => {
-                to.set_attr("__type", xml_type.name());
+              StandardType::String => {
+                to.set_attr("__type", xml_type.name);
 
                 let val = self.data_buf_read_str(&mut data_buf, encoding)?;
                 debug!("name: {}, val: {}", name, val);
                 to.append_text_node(val);
               },
               _ => {
-                to.set_attr("__type", xml_type.name());
+                to.set_attr("__type", xml_type.name);
 
-                let type_size = xml_type.size();
-                let type_count = xml_type.count();
+                let type_size = xml_type.size;
+                let type_count = xml_type.count;
                 let (is_array, size) = if type_count == -1 {
                   (true, data_buf.read_u32::<BigEndian>().context(KbinErrorKind::BinaryLengthRead)?)
                 } else if is_array {
@@ -278,15 +280,15 @@ impl KbinXml {
 
                 let data = if is_array {
                   let data = self.data_buf_get(&mut data_buf, size)?;
-                  self.data_buf_realign(&mut data_buf, None)?;
+                  self.data_buf_realign_reads(&mut data_buf, None)?;
 
                   data
                 } else {
-                  self.data_buf_get_aligned(&mut data_buf, xml_type)?
+                  self.data_buf_get_aligned(&mut data_buf, *xml_type)?
                 };
 
                 debug!("data: 0x{:02x?}", data);
-                if xml_type == KbinType::Binary {
+                if xml_type == StandardType::Binary {
                   to.set_attr("__size", data.len());
 
                   let len = data.len() * 2;
@@ -314,8 +316,98 @@ impl KbinXml {
     Ok(stack.pop().expect("Stack must have root node"))
   }
 
+  fn write_node<W>(&mut self, node_buf: &mut W, data_buf: &mut W, input: &Element) -> Result<(), KbinError>
+    where W: Write
+  {
+    let text = input.text();
+    let node_type = match input.attr("__type") {
+      Some(name) => StandardType::from_name(name),
+      None => {
+        if text.len() == 0 {
+          StandardType::NodeStart
+        } else {
+          StandardType::String
+        }
+      },
+    };
+
+    let (array_mask, count) = match input.attr("__count") {
+      Some(count) => {
+        let array_mask = 1 << 6;
+        let count = count.parse::<i8>().context(KbinErrorKind::StringParse("array count"))?;
+        (array_mask, count)
+      },
+      None => {
+        (0, 0)
+      },
+    };
+
+    println!("input name: {}", input.name());
+
+    node_buf.write_u8(node_type.id | array_mask).context(KbinErrorKind::DataWrite(node_type.name))?;
+    pack_sixbit(node_buf, input.name())?;
+
+    match node_type {
+      StandardType::NodeStart => {},
+
+      StandardType::Binary => {
+        let bin = text.from_hex();
+        println!("data: {:?}", bin);
+      },
+      StandardType::String => {
+        println!("str: {}", text);
+      },
+
+      _ => {
+      },
+    }
+
+    for child in input.children() {
+      self.write_node(node_buf, data_buf, child)?;
+    }
+
+    // Always has the array bit set
+    node_buf.write_u8(StandardType::NodeEnd.id | 64).context(KbinErrorKind::DataWrite("node end"))?;
+
+    Ok(())
+  }
+
+  fn to_binary_internal(&mut self, input: &Element) -> Result<Vec<u8>, KbinError> {
+    let mut header = Cursor::new(Vec::with_capacity(8));
+    header.write_u8(SIGNATURE).context(KbinErrorKind::HeaderWrite("signature"))?;
+    header.write_u8(SIG_COMPRESSED).context(KbinErrorKind::HeaderWrite("compression"))?;
+
+    let encoding = EncodingType::SHIFT_JIS.to_byte();
+    header.write_u8(encoding).context(KbinErrorKind::HeaderWrite("encoding"))?;
+    header.write_u8(0xFF ^ encoding).context(KbinErrorKind::HeaderWrite("encoding negation"))?;
+
+    let mut node_buf = Cursor::new(Vec::new());
+    let mut data_buf = Cursor::new(Vec::new());
+
+    self.write_node(&mut node_buf, &mut data_buf, input)?;
+
+    node_buf.write_u8(StandardType::FileEnd.id | 64).context(KbinErrorKind::DataWrite("file end"))?;
+
+    let mut output = header.into_inner();
+
+    let node_buf = node_buf.into_inner();
+    output.write_u32::<BigEndian>(node_buf.len() as u32).context(KbinErrorKind::HeaderWrite("node buffer length"))?;
+    output.extend_from_slice(&node_buf);
+
+    let data_buf = data_buf.into_inner();
+    output.write_u32::<BigEndian>(data_buf.len() as u32).context(KbinErrorKind::HeaderWrite("data buffer length"))?;
+    output.extend_from_slice(&data_buf);
+
+    Ok(output)
+  }
+
   pub fn from_binary(input: &[u8]) -> Result<Element, KbinError> {
     let mut kbinxml = KbinXml::new();
     kbinxml.from_binary_internal(input)
+  }
+
+  pub fn to_binary(input: &Element) -> Result<Vec<u8>, KbinError> {
+    let mut kbinxml = KbinXml::new();
+    kbinxml.to_binary_internal(input)
   }
 }

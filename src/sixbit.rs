@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::io::{Read, Write};
 
-use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
+use byteorder::{ReadBytesExt, WriteBytesExt};
 use failure::ResultExt;
 use num::{BigUint, FromPrimitive, ToPrimitive};
 
@@ -21,8 +21,7 @@ lazy_static! {
   };
 }
 
-#[allow(dead_code)]
-pub fn pack_sixbit<T>(writer: &mut T, input: &str)
+pub fn pack_sixbit<T>(writer: &mut T, input: &str) -> Result<(), KbinError>
   where T: Write
 {
   let sixbit_chars = input
@@ -30,19 +29,24 @@ pub fn pack_sixbit<T>(writer: &mut T, input: &str)
     .map(|ch| {
       *BYTE_MAP.get(&ch).expect("Character must be a valid sixbit character")
     });
-  let padding = 8 - input.len() * 6 % 8;
+  let len = input.len() as usize;
+  let padding = 8 - len * 6 % 8;
   let padding = if padding == 8 { 0 } else { padding };
+  let real_len = (len * 6 + padding) / 8;
+  debug!("sixbit_len: {}, real_len: {}, padding: {}", len, real_len, padding);
 
-  let mut bits = 0;
+  let mut bits = BigUint::new(vec![0; real_len]);
   for ch in sixbit_chars {
     bits <<= 6;
-    bits |= ch as u64;
+    bits |= BigUint::from_u8(ch).unwrap();
   }
   bits <<= padding;
 
-  let len = input.len() as u8;
-  writer.write_u8(len).expect("Unable to write sixbit string length");
-  writer.write_uint::<BigEndian>(bits, (input.len() * 6 + padding) / 8).expect("Unable to write sixbit contents");
+  let bytes = bits.to_bytes_be();
+  writer.write_u8(len as u8).context(KbinErrorKind::SixbitLengthWrite)?;
+  writer.write(&bytes).context(KbinErrorKind::SixbitWrite)?;
+
+  Ok(())
 }
 
 pub fn unpack_sixbit<T>(reader: &mut T) -> Result<String, KbinError>

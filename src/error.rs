@@ -70,11 +70,26 @@ pub enum KbinErrorKind {
   #[fail(display = "Unable to read sixbit string content")]
   SixbitRead,
 
+  #[fail(display = "Unable to write sixbit string length")]
+  SixbitLengthWrite,
+
+  #[fail(display = "Unable to write sixbit string content")]
+  SixbitWrite,
+
   #[fail(display = "Unable to interpret string as UTF-8")]
   Utf8,
 
   #[fail(display = "Unable to interpret string as alternate encoding")]
   EncodingDecode,
+
+  #[fail(display = "Unable to write {} header field", _0)]
+  HeaderWrite(&'static str),
+
+  #[fail(display = "Unable to write a {} node", _0)]
+  DataWrite(&'static str),
+
+  #[fail(display = "Unable to interpret input as {}", _0)]
+  StringParse(&'static str),
 }
 
 impl fmt::Display for KbinError {
