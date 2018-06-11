@@ -1,6 +1,6 @@
 use error::{KbinError, KbinErrorKind};
 
-use std::fmt::Write;
+use std::fmt::{self, Write};
 use std::ops::Deref;
 
 use byteorder::WriteBytesExt;
@@ -27,9 +27,9 @@ macro_rules! number_impl {
         }
 
         fn to_kbin_bytes(output: &mut Vec<u8>, input: &str) -> Result<(), KbinError> {
-          trace!("KbinWrapperType<{}> to bytes => input: {}", stringify!($inner_type), input);
-
           let num = input.parse::<$inner_type>().context(KbinErrorKind::StringParse(stringify!($inner_type)))?;
+          trace!("KbinWrapperType<{}> to bytes => input: '{}', output: {}", stringify!($inner_type), input, num);
+
           let data = $inner_type::to_bytes($inner_type::to_be(num));
           output.extend_from_slice(&data);
 
@@ -55,9 +55,9 @@ macro_rules! number_impl {
         }
 
         fn to_kbin_bytes(output: &mut Vec<u8>, input: &str) -> Result<(), KbinError> {
-          trace!("KbinWrapperType<{}> to bytes => input: {}", stringify!($inner_type), input);
-
           let num = input.parse::<$inner_type>().context(KbinErrorKind::StringParse(stringify!($inner_type)))?;
+          trace!("KbinWrapperType<{}> to bytes => input: '{}', output: {}", stringify!($inner_type), input, num);
+
           let data = $intermediate::to_bytes($intermediate::to_be(num.to_bits()));
           output.extend_from_slice(&data);
 
@@ -86,13 +86,13 @@ impl KbinWrapperType<bool> for bool {
   }
 
   fn to_kbin_bytes(output: &mut Vec<u8>, input: &str) -> Result<(), KbinError> {
-    trace!("KbinWrapperType<bool> to bytes => input: {}", input);
-
     let value = match input {
       "0" => 0x00,
       "1" => 0x01,
       v => panic!("Unsupported value for boolean: {}", v),
     };
+
+    trace!("KbinWrapperType<bool> to bytes => input: '{}', output: {}", input, value);
     output.write_u8(value).context(KbinErrorKind::DataWrite("bool"))?;
 
     Ok(())
@@ -102,7 +102,7 @@ impl KbinWrapperType<bool> for bool {
 struct Ip4;
 impl KbinWrapperType<Ip4> for Ip4 {
   fn from_kbin_bytes(output: &mut String, input: &[u8]) -> Result<(), KbinError> {
-    trace!("KbinWrapperType<Ip4> => input: {:02x?}", input);
+    trace!("KbinWrapperType<Ip4> from bytes => input: {:02x?}", input);
 
     if input.len() != 4 {
       panic!("Ip4 type requires exactly 4 bytes of data, input: {:02x?}", input);
@@ -115,7 +115,7 @@ impl KbinWrapperType<Ip4> for Ip4 {
   }
 
   fn to_kbin_bytes(output: &mut Vec<u8>, input: &str) -> Result<(), KbinError> {
-    trace!("KbinWrapperType<Ip4> => self: Ip4 (needs implementation!)");
+    trace!("KbinWrapperType<Ip4> to bytes => input: '{}'", input);
 
     for part in input.split('.') {
       let num = part.parse::<u8>().context(KbinErrorKind::StringParse("ip4 segment"))?;
@@ -158,13 +158,18 @@ impl KbinType {
   {
     let size = self.size as usize;
     let count = self.count as usize;
+    let total_nodes = count * arr_count;
+
+    let total_size = size * total_nodes;
+    if total_size != input.len() {
+      return Err(KbinErrorKind::SizeMismatch(*self, total_size, input.len()).into());
+    }
 
     {
       let first = &input[..size];
       T::from_kbin_bytes(output, first)?;
     }
 
-    let total_nodes = count * arr_count;
     for i in 1..total_nodes {
       let offset = i * size;
       let end = (i + 1) * size;
@@ -209,14 +214,25 @@ impl KbinType {
   fn to_array<T>(&self, output: &mut Vec<u8>, input: &str, arr_count: usize) -> Result<(), KbinError>
     where T: KbinWrapperType<T>
   {
+    for part in input.split(' ') {
+      T::to_kbin_bytes(output, part)?;
+    }
+
+    let type_size = (self.size as usize) * (self.count as usize);
+    let total_size = arr_count * type_size;
+    if total_size != output.len() {
+      return Err(KbinErrorKind::SizeMismatch(*self, total_size, output.len()).into());
+    }
+
     Ok(())
   }
 
-  #[allow(dead_code)]
-  fn to_bytes_inner<T>(&self, data_buf: &mut Vec<u8>, input: &str, arr_count: usize) -> Result<(), KbinError>
+  fn to_bytes_inner<T>(&self, input: &str, arr_count: usize) -> Result<Vec<u8>, KbinError>
     where T: KbinWrapperType<T>
   {
     debug!("to_bytes_inner({}) => size: {}, count: {}, input_len: {}, arr_count: {}", self.name, self.size, self.count, input.len(), arr_count);
+
+    let mut output = Vec::new();
 
     if self.count == -1 {
       panic!("Tried to write special type: {}", self.name);
@@ -224,15 +240,21 @@ impl KbinType {
       // May have a node (i.e. Ip4) that is only a single count, but it
       // can be part of an array
       if arr_count == 1 {
-        T::to_kbin_bytes(data_buf, input)?;
+        T::to_kbin_bytes(&mut output, input)?;
       } else {
-        self.to_array::<T>(data_buf, input, arr_count)?;
+        self.to_array::<T>(&mut output, input, arr_count)?;
       }
     } else if self.count > 1 {
-      self.to_array::<T>(data_buf, input, arr_count)?;
+      self.to_array::<T>(&mut output, input, arr_count)?;
     }
 
-    Ok(())
+    Ok(output)
+  }
+}
+
+impl fmt::Display for KbinType {
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    write!(f, "{}", self.name)
   }
 }
 
@@ -286,11 +308,10 @@ macro_rules! construct_types {
         }
       }
 
-      #[allow(dead_code)]
-      pub fn to_bytes(&self, output: &mut Vec<u8>, input: &str, arr_count: usize) -> Result<(), KbinError> {
+      pub fn to_bytes(&self, input: &str, arr_count: usize) -> Result<Vec<u8>, KbinError> {
         match *self {
           $(
-            StandardType::$konst => self.to_bytes_inner::<$inner_type>(output, input, arr_count),
+            StandardType::$konst => self.to_bytes_inner::<$inner_type>(input, arr_count),
           )+
         }
       }

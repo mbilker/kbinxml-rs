@@ -3,6 +3,8 @@ use std::string::FromUtf8Error;
 
 use failure::{Backtrace, Context, Fail};
 
+use node_types::KbinType;
+
 #[derive(Debug)]
 pub struct KbinError {
   inner: Context<KbinErrorKind>,
@@ -43,9 +45,6 @@ pub enum KbinErrorKind {
   #[fail(display = "Unable to read encoding negation byte")]
   EncodingNegationRead,
 
-  #[fail(display = "Unknown encoding")]
-  UnknownEncoding,
-
   #[fail(display = "Unable to read len_node")]
   LenNodeRead,
 
@@ -79,17 +78,26 @@ pub enum KbinErrorKind {
   #[fail(display = "Unable to interpret string as UTF-8")]
   Utf8,
 
+  #[fail(display = "Unknown encoding")]
+  UnknownEncoding,
+
   #[fail(display = "Unable to interpret string as alternate encoding")]
-  EncodingDecode,
+  Encoding,
 
   #[fail(display = "Unable to write {} header field", _0)]
   HeaderWrite(&'static str),
 
-  #[fail(display = "Unable to write a {} node", _0)]
+  #[fail(display = "Unable to write a {}", _0)]
   DataWrite(&'static str),
+
+  #[fail(display = "Size Mismatch, type: {}, expected size: {}, actual size: {}", _0, _1, _2)]
+  SizeMismatch(KbinType, usize, usize),
 
   #[fail(display = "Unable to interpret input as {}", _0)]
   StringParse(&'static str),
+
+  #[fail(display = "Unable to convert from hexadecimal")]
+  HexError,
 }
 
 impl fmt::Display for KbinError {

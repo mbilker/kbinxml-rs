@@ -1,6 +1,6 @@
 use error::{KbinError, KbinErrorKind};
 
-use encoding::{DecoderTrap, Encoding};
+use encoding::{DecoderTrap, EncoderTrap, Encoding};
 use encoding::all::{ASCII, EUC_JP, ISO_8859_1, WINDOWS_31J};
 
 #[allow(non_camel_case_types)]
@@ -46,7 +46,7 @@ impl EncodingType {
   /// crate. A `None` value indicates Rust's own UTF-8 handling should be used.
   pub fn decode_bytes(&self, input: Vec<u8>) -> Result<String, KbinError> {
     let decoder_fail = |e| {
-      format_err!("{}", e).context(KbinErrorKind::EncodingDecode)
+      format_err!("{}", e).context(KbinErrorKind::Encoding)
     };
 
     let result = match *self {
@@ -58,6 +58,31 @@ impl EncodingType {
       EncodingType::EUC_JP     => EUC_JP.decode(&input, DecoderTrap::Strict).map_err(decoder_fail)?,
       EncodingType::SHIFT_JIS  => WINDOWS_31J.decode(&input, DecoderTrap::Strict).map_err(decoder_fail)?,
     };
+
+    Ok(result)
+  }
+
+  /// Encode bytes using the encoding definition from the `encoding` crate.
+  ///
+  /// A `Some` value indicates the encoding should be used from the `encoding`
+  /// crate. A `None` value indicates Rust's own UTF-8 handling should be used.
+  pub fn encode_bytes(&self, input: &str) -> Result<Vec<u8>, KbinError> {
+    let encoder_fail = |e| {
+      format_err!("{}", e).context(KbinErrorKind::Encoding)
+    };
+
+    let mut result = match *self {
+      EncodingType::None |
+      EncodingType::UTF_8 => input.as_bytes().to_vec(),
+
+      EncodingType::ASCII      => ASCII.encode(input, EncoderTrap::Strict).map_err(encoder_fail)?,
+      EncodingType::ISO_8859_1 => ISO_8859_1.encode(input, EncoderTrap::Strict).map_err(encoder_fail)?,
+      EncodingType::EUC_JP     => EUC_JP.encode(input, EncoderTrap::Strict).map_err(encoder_fail)?,
+      EncodingType::SHIFT_JIS  => WINDOWS_31J.encode(input, EncoderTrap::Strict).map_err(encoder_fail)?,
+    };
+
+    // Add trailing null byte
+    result.push(0);
 
     Ok(result)
   }
