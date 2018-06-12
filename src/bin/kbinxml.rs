@@ -30,12 +30,16 @@ fn display_err(err: impl Fail) -> IoError {
   IoError::new(IoErrorKind::Other, "Error parsing kbin")
 }
 
-fn display_element(element: &Element) -> Result<(), IoError> {
+fn to_text(element: &Element) -> Result<Vec<u8>, IoError> {
   let inner = Cursor::new(Vec::new());
   let mut writer = Writer::new_with_indent(inner, b' ', 2);
   element.to_writer(&mut writer).map_err(|e| IoError::new(IoErrorKind::Other, format!("{:?}", e)))?;
 
   let buf = writer.into_inner().into_inner();
+  Ok(buf)
+}
+
+fn display_buf(buf: &[u8]) -> Result<(), IoError> {
   let stdout = stdout();
   stdout.lock().write_all(&buf)?;
   println!();
@@ -93,17 +97,19 @@ fn main() -> std::io::Result<()> {
     let mut contents = Vec::new();
     file.read_to_end(&mut contents)?;
 
-    let (element, encoding) = KbinXml::from_binary(&contents).map_err(display_err)?;
+    let (element, encoding_original) = KbinXml::from_binary(&contents).map_err(display_err)?;
     //println!("element: {:#?}", element);
-    display_element(&element)?;
+    let text_original = to_text(&element)?;
+    display_buf(&text_original)?;
 
-    let options = EncodingOptions::with_encoding(encoding);
+    let options = EncodingOptions::with_encoding(encoding_original);
     let buf = KbinXml::to_binary_with_options(options, &element).map_err(display_err)?;
     compare_slice(&buf, &contents);
 
-    let (element, new_encoding) = KbinXml::from_binary(&buf).map_err(display_err)?;
-    display_element(&element)?;
-    assert_eq!(encoding, new_encoding);
+    let (element, encoding_new) = KbinXml::from_binary(&buf).map_err(display_err)?;
+    let text_new = to_text(&element)?;
+    assert_eq!(encoding_original, encoding_new);
+    assert_eq!(text_original, text_new);
   }
   Ok(())
 }
