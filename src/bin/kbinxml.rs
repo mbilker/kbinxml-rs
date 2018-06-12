@@ -11,7 +11,7 @@ use std::fs::File;
 use std::io::{Cursor, Error as IoError, ErrorKind as IoErrorKind, Read, Write, stdout};
 
 use failure::Fail;
-use kbinxml::KbinXml;
+use kbinxml::{EncodingOptions, KbinXml};
 use minidom::Element;
 use quick_xml::Writer;
 
@@ -93,15 +93,17 @@ fn main() -> std::io::Result<()> {
     let mut contents = Vec::new();
     file.read_to_end(&mut contents)?;
 
-    let element = KbinXml::from_binary(&contents).map_err(display_err)?;
+    let (element, encoding) = KbinXml::from_binary(&contents).map_err(display_err)?;
     //println!("element: {:#?}", element);
     display_element(&element)?;
 
-    let buf = KbinXml::to_binary(&element).map_err(display_err)?;
+    let options = EncodingOptions::with_encoding(encoding);
+    let buf = KbinXml::to_binary_with_options(options, &element).map_err(display_err)?;
     compare_slice(&buf, &contents);
 
-    let element = KbinXml::from_binary(&buf).map_err(display_err)?;
+    let (element, new_encoding) = KbinXml::from_binary(&buf).map_err(display_err)?;
     display_element(&element)?;
+    assert_eq!(encoding, new_encoding);
   }
   Ok(())
 }

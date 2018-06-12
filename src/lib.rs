@@ -13,24 +13,27 @@ extern crate rustc_hex;
 use std::cmp::max;
 use std::fmt::Write as FmtWrite;
 use std::io::{Cursor, Read, Seek, SeekFrom, Write};
+use std::result::Result as StdResult;
 
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use failure::ResultExt;
 use minidom::Element;
+use rustc_hex::FromHex;
 
 mod compression;
 mod encoding_type;
 mod error;
 mod node_types;
+mod options;
 mod sixbit;
 
 use compression::Compression;
 use encoding_type::EncodingType;
 use node_types::{KbinType, StandardType};
 use sixbit::{pack_sixbit, unpack_sixbit};
-use rustc_hex::FromHex;
 
 pub use error::{KbinError, KbinErrorKind};
+pub use options::EncodingOptions;
 
 const SIGNATURE: u8 = 0xA0;
 
@@ -38,7 +41,11 @@ const SIG_COMPRESSED: u8 = 0x42;
 
 const ARRAY_MASK: u8 = 1 << 6; // 1 << 6 = 64
 
+type Result<T> = StdResult<T, KbinError>;
+
 pub struct KbinXml {
+  options: EncodingOptions,
+
   offset_1: u64,
   offset_2: u64,
 }
@@ -46,6 +53,17 @@ pub struct KbinXml {
 impl KbinXml {
   pub fn new() -> Self {
     Self {
+      options: EncodingOptions::default(),
+
+      offset_1: 0,
+      offset_2: 0,
+    }
+  }
+
+  pub fn with_options(options: EncodingOptions) -> Self {
+    Self {
+      options,
+
       offset_1: 0,
       offset_2: 0,
     }
@@ -61,7 +79,7 @@ impl KbinXml {
     data_buf.position()
   }
 
-  fn data_buf_read(&mut self, data_buf: &mut Cursor<&[u8]>) -> Result<Vec<u8>, KbinError> {
+  fn data_buf_read(&mut self, data_buf: &mut Cursor<&[u8]>) -> Result<Vec<u8>> {
     let size = data_buf.read_u32::<BigEndian>().context(KbinErrorKind::DataReadSize)?;
     debug!("data_buf_read => index: {}, size: {}", data_buf.position(), size);
 
@@ -74,7 +92,7 @@ impl KbinXml {
     Ok(data)
   }
 
-  fn data_buf_write(&mut self, data_buf: &mut Cursor<Vec<u8>>, data: &[u8]) -> Result<(), KbinError> {
+  fn data_buf_write(&mut self, data_buf: &mut Cursor<Vec<u8>>, data: &[u8]) -> Result<()> {
     data_buf.write_u32::<BigEndian>(data.len() as u32).context(KbinErrorKind::DataWrite("data length integer"))?;
     debug!("data_buf_write => index: {}, size: {}", data_buf.position(), data.len());
 
@@ -86,7 +104,7 @@ impl KbinXml {
     Ok(())
   }
 
-  fn data_buf_read_str(&mut self, data_buf: &mut Cursor<&[u8]>, encoding: EncodingType) -> Result<String, KbinError> {
+  fn data_buf_read_str(&mut self, data_buf: &mut Cursor<&[u8]>, encoding: EncodingType) -> Result<String> {
     let mut data = self.data_buf_read(data_buf)?;
 
     // Remove trailing null bytes
@@ -101,7 +119,7 @@ impl KbinXml {
     encoding.decode_bytes(data)
   }
 
-  fn data_buf_write_str(&mut self, data_buf: &mut Cursor<Vec<u8>>, data: &str, encoding: EncodingType) -> Result<(), KbinError> {
+  fn data_buf_write_str(&mut self, data_buf: &mut Cursor<Vec<u8>>, data: &str, encoding: EncodingType) -> Result<()> {
     trace!("data_buf_write_str => input: {}", data);
 
     let bytes = encoding.encode_bytes(data)?;
@@ -110,14 +128,14 @@ impl KbinXml {
     Ok(())
   }
 
-  fn data_buf_get(&mut self, data_buf: &mut Cursor<&[u8]>, size: u32) -> Result<Vec<u8>, KbinError> {
+  fn data_buf_get(&mut self, data_buf: &mut Cursor<&[u8]>, size: u32) -> Result<Vec<u8>> {
     let mut data = vec![0; size as usize];
     data_buf.read_exact(&mut data).context(KbinErrorKind::DataRead)?;
 
     Ok(data)
   }
 
-  fn data_buf_get_aligned(&mut self, data_buf: &mut Cursor<&[u8]>, data_type: KbinType) -> Result<Vec<u8>, KbinError> {
+  fn data_buf_get_aligned(&mut self, data_buf: &mut Cursor<&[u8]>, data_type: KbinType) -> Result<Vec<u8>> {
     if self.offset_1 % 4 == 0 {
       self.offset_1 = self.data_buf_offset(data_buf);
     }
@@ -171,7 +189,7 @@ impl KbinXml {
     Ok(data)
   }
 
-  fn data_buf_write_aligned(&mut self, data_buf: &mut Cursor<Vec<u8>>, data_type: KbinType, data: &[u8]) -> Result<(), KbinError> {
+  fn data_buf_write_aligned(&mut self, data_buf: &mut Cursor<Vec<u8>>, data_type: KbinType, data: &[u8]) -> Result<()> {
     if self.offset_1 % 4 == 0 {
       self.offset_1 = self.data_buf_offset(data_buf);
     }
@@ -235,7 +253,7 @@ impl KbinXml {
     Ok(())
   }
 
-  fn data_buf_realign_reads(&self, data_buf: &mut Cursor<&[u8]>, size: Option<u64>) -> Result<(), KbinError> {
+  fn data_buf_realign_reads(&self, data_buf: &mut Cursor<&[u8]>, size: Option<u64>) -> Result<()> {
     let size = size.unwrap_or(4);
     trace!("data_buf_realign_reads => position: {}, size: {}", data_buf.position(), size);
 
@@ -247,7 +265,7 @@ impl KbinXml {
     Ok(())
   }
 
-  fn data_buf_realign_writes(&self, data_buf: &mut Cursor<Vec<u8>>, size: Option<u64>) -> Result<(), KbinError> {
+  fn data_buf_realign_writes(&self, data_buf: &mut Cursor<Vec<u8>>, size: Option<u64>) -> Result<()> {
     let size = size.unwrap_or(4);
     trace!("data_buf_realign_writes => position: {}, size: {}", data_buf.position(), size);
 
@@ -259,7 +277,7 @@ impl KbinXml {
     Ok(())
   }
 
-  fn from_binary_internal(&mut self, stack: &mut Vec<Element>, input: &[u8]) -> Result<Element, KbinError> {
+  fn from_binary_internal(&mut self, stack: &mut Vec<Element>, input: &[u8]) -> Result<(Element, EncodingType)> {
     // Node buffer starts from the beginning.
     // Data buffer starts later after reading `len_data`.
     let mut node_buf = Cursor::new(&input[..]);
@@ -414,10 +432,12 @@ impl KbinXml {
       warn!("stack: {:#?}", stack);
     }
     stack.truncate(1);
-    Ok(stack.pop().expect("Stack must have root node"))
+
+    let element = stack.pop().expect("Stack must have root node");
+    Ok((element, encoding))
   }
 
-  fn write_node(&mut self, node_buf: &mut Cursor<Vec<u8>>, data_buf: &mut Cursor<Vec<u8>>, input: &Element) -> Result<(), KbinError> {
+  fn write_node(&mut self, node_buf: &mut Cursor<Vec<u8>>, data_buf: &mut Cursor<Vec<u8>>, input: &Element) -> Result<()> {
     let encoding = EncodingType::SHIFT_JIS;
     let text = input.text();
     let node_type = match input.attr("__type") {
@@ -509,12 +529,12 @@ impl KbinXml {
     Ok(())
   }
 
-  fn to_binary_internal(&mut self, input: &Element) -> Result<Vec<u8>, KbinError> {
+  fn to_binary_internal(&mut self, input: &Element) -> Result<Vec<u8>> {
     let mut header = Cursor::new(Vec::with_capacity(8));
     header.write_u8(SIGNATURE).context(KbinErrorKind::HeaderWrite("signature"))?;
     header.write_u8(SIG_COMPRESSED).context(KbinErrorKind::HeaderWrite("compression"))?;
 
-    let encoding = EncodingType::SHIFT_JIS.to_byte();
+    let encoding = self.options.encoding.to_byte();
     header.write_u8(encoding).context(KbinErrorKind::HeaderWrite("encoding"))?;
     header.write_u8(0xFF ^ encoding).context(KbinErrorKind::HeaderWrite("encoding negation"))?;
 
@@ -541,7 +561,7 @@ impl KbinXml {
     Ok(output)
   }
 
-  pub fn from_binary(input: &[u8]) -> Result<Element, KbinError> {
+  pub fn from_binary(input: &[u8]) -> Result<(Element, EncodingType)> {
     let mut kbinxml = KbinXml::new();
     let mut stack: Vec<Element> = Vec::new();
 
@@ -553,8 +573,13 @@ impl KbinXml {
     })
   }
 
-  pub fn to_binary(input: &Element) -> Result<Vec<u8>, KbinError> {
+  pub fn to_binary(input: &Element) -> Result<Vec<u8>> {
     let mut kbinxml = KbinXml::new();
+    kbinxml.to_binary_internal(input)
+  }
+
+  pub fn to_binary_with_options(options: EncodingOptions, input: &Element) -> Result<Vec<u8>> {
+    let mut kbinxml = KbinXml::with_options(options);
     kbinxml.to_binary_internal(input)
   }
 }

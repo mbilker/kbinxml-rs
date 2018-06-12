@@ -14,6 +14,12 @@ pub enum EncodingType {
   UTF_8,
 }
 
+impl Default for EncodingType {
+  fn default() -> Self {
+    EncodingType::SHIFT_JIS
+  }
+}
+
 impl EncodingType {
   pub fn from_byte(byte: u8) -> Result<Self, KbinError> {
     let val = match byte {
