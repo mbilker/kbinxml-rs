@@ -28,10 +28,11 @@ mod options;
 mod sixbit;
 
 use compression::Compression;
-use encoding_type::EncodingType;
 use node_types::{KbinType, StandardType};
 use sixbit::{pack_sixbit, unpack_sixbit};
 
+// Public exports
+pub use encoding_type::EncodingType;
 pub use error::{KbinError, KbinErrorKind};
 pub use options::EncodingOptions;
 
