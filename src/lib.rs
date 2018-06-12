@@ -443,7 +443,8 @@ impl KbinXml {
     let node_type = match input.attr("__type") {
       Some(name) => StandardType::from_name(name),
       None => {
-        if text.len() == 0 {
+        // Screw whitespace with pretty printed XML
+        if text.trim().len() == 0 {
           StandardType::NodeStart
         } else {
           StandardType::String
