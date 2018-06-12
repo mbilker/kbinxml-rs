@@ -318,116 +318,115 @@ impl KbinXml {
     let len_data = data_buf.read_u32::<BigEndian>().context(KbinErrorKind::LenDataRead)?;
     info!("len_data: {} (0x{:x})", len_data, len_data);
 
-    {
-      let node_buf_end = data_buf_start.into();
-      while node_buf.position() < node_buf_end {
-        let raw_node_type = node_buf.read_u8().context(KbinErrorKind::NodeTypeRead)?;
-        let is_array = raw_node_type & 64 == 64;
-        let node_type = raw_node_type & !64;
+    let node_buf_end = data_buf_start.into();
+    while node_buf.position() < node_buf_end {
+      let raw_node_type = node_buf.read_u8().context(KbinErrorKind::NodeTypeRead)?;
+      let is_array = raw_node_type & 64 == 64;
+      let node_type = raw_node_type & !64;
 
-        let xml_type = StandardType::from_u8(node_type);
-        debug!("raw_node_type: {}, node_type: {:?} ({}), is_array: {}", raw_node_type, xml_type, node_type, is_array);
+      let xml_type = StandardType::from_u8(node_type);
+      debug!("raw_node_type: {}, node_type: {:?} ({}), is_array: {}", raw_node_type, xml_type, node_type, is_array);
 
-        match xml_type {
-          StandardType::NodeEnd | StandardType::FileEnd => {
-            if stack.len() > 1 {
-              let node = stack.pop().expect("Stack must have last node");
-              if let Some(to) = stack.last_mut() {
-                to.append_child(node);
-              }
+      match xml_type {
+        StandardType::NodeEnd | StandardType::FileEnd => {
+          if stack.len() > 1 {
+            let node = stack.pop().expect("Stack must have last node");
+            if let Some(to) = stack.last_mut() {
+              to.append_child(node);
             }
-
-            if xml_type == StandardType::NodeEnd {
-              continue;
-            } else if xml_type == StandardType::FileEnd {
-              break;
-            }
-          },
-          _ => {},
-        };
-
-        let name = unpack_sixbit(&mut node_buf)?;
-
-        if xml_type == StandardType::NodeStart {
-          stack.push(Element::bare(name));
-        } else {
-          if xml_type != StandardType::Attribute {
-            stack.push(Element::bare(name.clone()));
           }
-          if let Some(to) = stack.last_mut() {
-            match xml_type {
-              StandardType::Attribute => {
-                let val = self.data_buf_read_str(&mut data_buf, encoding)?;
-                debug!("attr name: {}, val: {}", name, val);
-                to.set_attr(name, val);
-              },
-              // Removing null bytes is *so much* fun.
-              //
-              // Handle String nodes separately to use the string reading logic
-              // which automatically removes trailing null bytes.
-              StandardType::String => {
-                to.set_attr("__type", xml_type.name);
 
-                let val = self.data_buf_read_str(&mut data_buf, encoding)?;
-                debug!("name: {}, val: {}", name, val);
+          if xml_type == StandardType::NodeEnd {
+            continue;
+          } else if xml_type == StandardType::FileEnd {
+            break;
+          }
+        },
+        _ => {},
+      };
+
+      let name = unpack_sixbit(&mut node_buf)?;
+
+      if xml_type == StandardType::NodeStart {
+        stack.push(Element::bare(name));
+      } else {
+        if xml_type != StandardType::Attribute {
+          stack.push(Element::bare(name.clone()));
+        }
+        if let Some(to) = stack.last_mut() {
+          match xml_type {
+            StandardType::Attribute => {
+              let val = self.data_buf_read_str(&mut data_buf, encoding)?;
+              debug!("attr name: {}, val: {}", name, val);
+              to.set_attr(name, val);
+            },
+            // Removing null bytes is *so much* fun.
+            //
+            // Handle String nodes separately to use the string reading logic
+            // which automatically removes trailing null bytes.
+            StandardType::String => {
+              to.set_attr("__type", xml_type.name);
+
+              let val = self.data_buf_read_str(&mut data_buf, encoding)?;
+              debug!("name: {}, val: {}", name, val);
+              to.append_text_node(val);
+            },
+            _ => {
+              to.set_attr("__type", xml_type.name);
+
+              let type_size = xml_type.size;
+              let type_count = xml_type.count;
+              let (is_array, size) = if type_count == -1 {
+                (true, data_buf.read_u32::<BigEndian>().context(KbinErrorKind::BinaryLengthRead)?)
+              } else if is_array {
+                let node_size = type_size * type_count;
+                let arr_count = data_buf.read_u32::<BigEndian>().context(KbinErrorKind::ArrayLengthRead)? / node_size as u32;
+                to.set_attr("__count", arr_count);
+
+                let size = (node_size as u32) * arr_count;
+                (true, size)
+              } else {
+                (false, 1)
+              };
+
+              debug!("type: {:?}, type_size: {}, type_count: {}, is_array: {}, size: {}",
+                xml_type,
+                type_size,
+                type_count,
+                is_array,
+                size);
+
+              let data = if is_array {
+                let data = self.data_buf_get(&mut data_buf, size)?;
+                self.data_buf_realign_reads(&mut data_buf, None)?;
+
+                data
+              } else {
+                self.data_buf_get_aligned(&mut data_buf, *xml_type)?
+              };
+
+              debug!("data: 0x{:02x?}", data);
+              if xml_type == StandardType::Binary {
+                to.set_attr("__size", data.len());
+
+                let len = data.len() * 2;
+                let val = data.into_iter().fold(String::with_capacity(len), |mut val, x| {
+                  write!(val, "{:02x}", x).expect("Failed to append hex char");
+                  val
+                });
+                debug!("name: {}, string: {}", name, val);
                 to.append_text_node(val);
-              },
-              _ => {
-                to.set_attr("__type", xml_type.name);
-
-                let type_size = xml_type.size;
-                let type_count = xml_type.count;
-                let (is_array, size) = if type_count == -1 {
-                  (true, data_buf.read_u32::<BigEndian>().context(KbinErrorKind::BinaryLengthRead)?)
-                } else if is_array {
-                  let node_size = type_size * type_count;
-                  let arr_count = data_buf.read_u32::<BigEndian>().context(KbinErrorKind::ArrayLengthRead)? / node_size as u32;
-                  to.set_attr("__count", arr_count);
-
-                  let size = (node_size as u32) * arr_count;
-                  (true, size)
-                } else {
-                  (false, 1)
-                };
-
-                debug!("type: {:?}, type_size: {}, type_count: {}, is_array: {}, size: {}",
-                  xml_type,
-                  type_size,
-                  type_count,
-                  is_array,
-                  size);
-
-                let data = if is_array {
-                  let data = self.data_buf_get(&mut data_buf, size)?;
-                  self.data_buf_realign_reads(&mut data_buf, None)?;
-
-                  data
-                } else {
-                  self.data_buf_get_aligned(&mut data_buf, *xml_type)?
-                };
-
-                debug!("data: 0x{:02x?}", data);
-                if xml_type == StandardType::Binary {
-                  to.set_attr("__size", data.len());
-
-                  let len = data.len() * 2;
-                  let val = data.into_iter().fold(String::with_capacity(len), |mut val, x| {
-                    write!(val, "{:02x}", x).expect("Failed to append hex char");
-                    val
-                  });
-                  debug!("name: {}, string: {}", name, val);
-                  to.append_text_node(val);
-                } else {
-                  let inner_value = xml_type.parse_bytes(&data)?;
-                  debug!("name: {}, string: {}", name, inner_value);
-                  to.append_text_node(inner_value);
-                }
-              },
-            };
-          }
+              } else {
+                let inner_value = xml_type.parse_bytes(&data)?;
+                debug!("name: {}, string: {}", name, inner_value);
+                to.append_text_node(inner_value);
+              }
+            },
+          };
         }
       }
     }
+
     if stack.len() > 1 {
       warn!("stack: {:#?}", stack);
     }
