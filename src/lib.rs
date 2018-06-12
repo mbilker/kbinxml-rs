@@ -34,7 +34,7 @@ use sixbit::{pack_sixbit, unpack_sixbit};
 // Public exports
 pub use encoding_type::EncodingType;
 pub use error::{KbinError, KbinErrorKind};
-pub use options::EncodingOptions;
+pub use options::Options;
 
 const SIGNATURE: u8 = 0xA0;
 
@@ -45,7 +45,7 @@ const ARRAY_MASK: u8 = 1 << 6; // 1 << 6 = 64
 type Result<T> = StdResult<T, KbinError>;
 
 pub struct KbinXml {
-  options: EncodingOptions,
+  options: Options,
 
   offset_1: u64,
   offset_2: u64,
@@ -54,14 +54,14 @@ pub struct KbinXml {
 impl KbinXml {
   pub fn new() -> Self {
     Self {
-      options: EncodingOptions::default(),
+      options: Options::default(),
 
       offset_1: 0,
       offset_2: 0,
     }
   }
 
-  pub fn with_options(options: EncodingOptions) -> Self {
+  pub fn with_options(options: Options) -> Self {
     Self {
       options,
 
@@ -578,7 +578,7 @@ impl KbinXml {
     kbinxml.to_binary_internal(input)
   }
 
-  pub fn to_binary_with_options(options: EncodingOptions, input: &Element) -> Result<Vec<u8>> {
+  pub fn to_binary_with_options(options: Options, input: &Element) -> Result<Vec<u8>> {
     let mut kbinxml = KbinXml::with_options(options);
     kbinxml.to_binary_internal(input)
   }

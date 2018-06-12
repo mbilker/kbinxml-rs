@@ -1,11 +1,11 @@
 use encoding_type::EncodingType;
 
 #[derive(Clone, Debug, Default)]
-pub struct EncodingOptions {
+pub struct Options {
   pub(crate) encoding: EncodingType,
 }
 
-impl EncodingOptions {
+impl Options {
   pub fn new() -> Self {
     Self::default()
   }

@@ -11,7 +11,7 @@ use std::fs::File;
 use std::io::{Cursor, Error as IoError, ErrorKind as IoErrorKind, Read, Write, stdout};
 
 use failure::Fail;
-use kbinxml::{EncodingOptions, KbinXml};
+use kbinxml::{KbinXml, Options};
 use minidom::Element;
 use quick_xml::Writer;
 
@@ -102,7 +102,7 @@ fn main() -> std::io::Result<()> {
     let text_original = to_text(&element)?;
     display_buf(&text_original)?;
 
-    let options = EncodingOptions::with_encoding(encoding_original);
+    let options = Options::with_encoding(encoding_original);
     let buf = KbinXml::to_binary_with_options(options, &element).map_err(display_err)?;
     compare_slice(&buf, &contents);
 
