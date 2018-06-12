@@ -120,10 +120,10 @@ impl KbinXml {
     encoding.decode_bytes(data)
   }
 
-  fn data_buf_write_str(&mut self, data_buf: &mut Cursor<Vec<u8>>, data: &str, encoding: EncodingType) -> Result<()> {
-    trace!("data_buf_write_str => input: {}", data);
+  fn data_buf_write_str(&mut self, data_buf: &mut Cursor<Vec<u8>>, data: &str) -> Result<()> {
+    trace!("data_buf_write_str => input: {}, data: 0x{:02x?}", data, data.as_bytes());
 
-    let bytes = encoding.encode_bytes(data)?;
+    let bytes = self.options.encoding.encode_bytes(data)?;
     self.data_buf_write(data_buf, &bytes)?;
 
     Ok(())
@@ -438,7 +438,6 @@ impl KbinXml {
   }
 
   fn write_node(&mut self, node_buf: &mut Cursor<Vec<u8>>, data_buf: &mut Cursor<Vec<u8>>, input: &Element) -> Result<()> {
-    let encoding = EncodingType::SHIFT_JIS;
     let text = input.text();
     let node_type = match input.attr("__type") {
       Some(name) => StandardType::from_name(name),
@@ -487,7 +486,7 @@ impl KbinXml {
         self.data_buf_realign_writes(data_buf, None)?;
       },
       StandardType::String => {
-        self.data_buf_write_str(data_buf, &text, encoding)?;
+        self.data_buf_write_str(data_buf, &text)?;
       },
 
       _ => {
@@ -513,7 +512,7 @@ impl KbinXml {
 
       trace!("write_node => attr: {}, value: {}", key, value);
 
-      self.data_buf_write_str(data_buf, value, encoding)?;
+      self.data_buf_write_str(data_buf, value)?;
 
       let node_type = StandardType::Attribute;
       node_buf.write_u8(node_type.id).context(KbinErrorKind::DataWrite(node_type.name))?;
