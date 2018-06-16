@@ -12,8 +12,20 @@ pub struct KbinError {
 
 #[derive(Debug, Fail)]
 pub enum KbinErrorKind {
-  #[fail(display = "Unable to read data")]
-  DataRead,
+  #[fail(display = "Unable to read {} byte from header", _0)]
+  HeaderRead(&'static str),
+
+  #[fail(display = "Unable to write {} header field", _0)]
+  HeaderWrite(&'static str),
+
+  #[fail(display = "Invalid byte value for {} header field", _0)]
+  HeaderValue(&'static str),
+
+  #[fail(display = "Unable to read {} bytes from data buffer", _0)]
+  DataRead(usize),
+
+  #[fail(display = "Unable to write a {} to data buffer", _0)]
+  DataWrite(&'static str),
 
   #[fail(display = "Unable to read data size")]
   DataReadSize,
@@ -29,21 +41,6 @@ pub enum KbinErrorKind {
 
   #[fail(display = "Unable to seek data buffer")]
   Seek,
-
-  #[fail(display = "Unable to read signature byte")]
-  SignatureRead,
-
-  #[fail(display = "Unable to read compression byte")]
-  CompressionRead,
-
-  #[fail(display = "Unknown compression value")]
-  UnknownCompression,
-
-  #[fail(display = "Unable to read encoding byte")]
-  EncodingRead,
-
-  #[fail(display = "Unable to read encoding negation byte")]
-  EncodingNegationRead,
 
   #[fail(display = "Unable to read len_node")]
   LenNodeRead,
@@ -78,17 +75,14 @@ pub enum KbinErrorKind {
   #[fail(display = "Unable to interpret string as UTF-8")]
   Utf8,
 
+  #[fail(display = "Unknown compression value")]
+  UnknownCompression,
+
   #[fail(display = "Unknown encoding")]
   UnknownEncoding,
 
   #[fail(display = "Unable to interpret string as alternate encoding")]
   Encoding,
-
-  #[fail(display = "Unable to write {} header field", _0)]
-  HeaderWrite(&'static str),
-
-  #[fail(display = "Unable to write a {}", _0)]
-  DataWrite(&'static str),
 
   #[fail(display = "Size Mismatch, type: {}, expected size: {}, actual size: {}", _0, _1, _2)]
   SizeMismatch(KbinType, usize, usize),

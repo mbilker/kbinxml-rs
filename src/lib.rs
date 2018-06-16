@@ -85,7 +85,7 @@ impl KbinXml {
     debug!("data_buf_read => index: {}, size: {}", data_buf.position(), size);
 
     let mut data = vec![0; size as usize];
-    data_buf.read_exact(&mut data).context(KbinErrorKind::DataRead)?;
+    data_buf.read_exact(&mut data).context(KbinErrorKind::DataRead(size as usize))?;
     trace!("data_buf_read => index: {}, size: {}, data: 0x{:02x?}", data_buf.position(), data.len(), data);
 
     self.data_buf_realign_reads(data_buf, None)?;
@@ -131,7 +131,7 @@ impl KbinXml {
 
   fn data_buf_get(&mut self, data_buf: &mut Cursor<&[u8]>, size: u32) -> Result<Vec<u8>> {
     let mut data = vec![0; size as usize];
-    data_buf.read_exact(&mut data).context(KbinErrorKind::DataRead)?;
+    data_buf.read_exact(&mut data).context(KbinErrorKind::DataRead(size as usize))?;
 
     Ok(data)
   }
@@ -283,19 +283,25 @@ impl KbinXml {
     // Data buffer starts later after reading `len_data`.
     let mut node_buf = Cursor::new(&input[..]);
 
-    let signature = node_buf.read_u8().context(KbinErrorKind::SignatureRead)?;
-    assert_eq!(signature, SIGNATURE);
+    let signature = node_buf.read_u8().context(KbinErrorKind::HeaderRead("signature"))?;
+    if signature != SIGNATURE {
+      return Err(KbinErrorKind::HeaderValue("signature").into());
+    }
 
     // TODO: support uncompressed
-    let compress_byte = node_buf.read_u8().context(KbinErrorKind::CompressionRead)?;
-    assert_eq!(compress_byte, SIG_COMPRESSED);
+    let compress_byte = node_buf.read_u8().context(KbinErrorKind::HeaderRead("compression"))?;
+    if compress_byte != SIG_COMPRESSED {
+      return Err(KbinErrorKind::HeaderValue("compression").into());
+    }
 
     let compressed = Compression::from_byte(compress_byte)?;
 
-    let encoding_byte = node_buf.read_u8().context(KbinErrorKind::EncodingRead)?;
-    let encoding_negation = node_buf.read_u8().context(KbinErrorKind::EncodingNegationRead)?;
+    let encoding_byte = node_buf.read_u8().context(KbinErrorKind::HeaderRead("encoding"))?;
+    let encoding_negation = node_buf.read_u8().context(KbinErrorKind::HeaderRead("encoding negation"))?;
     let encoding = EncodingType::from_byte(encoding_byte)?;
-    assert_eq!(encoding_negation, 0xFF ^ encoding_byte);
+    if encoding_negation != 0xFF ^ encoding_byte {
+      return Err(KbinErrorKind::HeaderValue("encoding negation").into());
+    }
 
     info!("signature: 0x{:x}", signature);
     info!("compression: 0x{:x} ({:?})", compress_byte, compressed);
