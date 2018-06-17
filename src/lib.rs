@@ -111,7 +111,7 @@ impl KbinXml {
     // Remove trailing null bytes
     let mut index = data.len() - 1;
     let len = data.len();
-    while index < len && data[index] == 0x00 {
+    while index > 0 && index < len && data[index] == 0x00 {
       index -= 1;
     }
     data.truncate(index + 1);
