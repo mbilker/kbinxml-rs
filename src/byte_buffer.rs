@@ -144,9 +144,9 @@ impl<R: AsRef<[u8]>> ByteBufferRead<R> {
 }
 
 impl ByteBufferWrite {
-  pub fn new(buffer: Cursor<Vec<u8>>) -> Self {
+  pub fn new(buffer: Vec<u8>) -> Self {
     Self {
-      buffer,
+      buffer: Cursor::new(buffer),
       offset_1: 0,
       offset_2: 0,
     }

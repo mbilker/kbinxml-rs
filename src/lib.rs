@@ -334,8 +334,8 @@ impl KbinXml {
     header.write_u8(encoding).context(KbinErrorKind::HeaderWrite("encoding"))?;
     header.write_u8(0xFF ^ encoding).context(KbinErrorKind::HeaderWrite("encoding negation"))?;
 
-    let mut node_buf = ByteBufferWrite::new(Cursor::new(Vec::new()));
-    let mut data_buf = ByteBufferWrite::new(Cursor::new(Vec::new()));
+    let mut node_buf = ByteBufferWrite::new(Vec::new());
+    let mut data_buf = ByteBufferWrite::new(Vec::new());
 
     self.write_node(&mut node_buf, &mut data_buf, input)?;
 
