@@ -1,16 +1,19 @@
 use std::fmt;
+use std::result::Result as StdResult;
 use std::string::FromUtf8Error;
 
 use failure::{Backtrace, Context, Fail};
 
 use node_types::KbinType;
 
+pub type Result<T> = StdResult<T, KbinError>;
+
 #[derive(Debug)]
 pub struct KbinError {
   inner: Context<KbinErrorKind>,
 }
 
-#[derive(Debug, Fail)]
+#[derive(Clone, Debug, Fail)]
 pub enum KbinErrorKind {
   #[fail(display = "Unable to read {} byte from header", _0)]
   HeaderRead(&'static str),
@@ -100,6 +103,14 @@ impl fmt::Display for KbinError {
   }
 }
 
+impl Clone for KbinError {
+  fn clone(&self) -> Self {
+    Self {
+      inner: Context::new(self.inner.get_context().clone())
+    }
+  }
+}
+
 impl Fail for KbinError {
   fn cause(&self) -> Option<&Fail> {
     self.inner.cause()
@@ -111,14 +122,14 @@ impl Fail for KbinError {
 }
 
 impl From<KbinErrorKind> for KbinError {
-  fn from(kind: KbinErrorKind) -> KbinError {
-    KbinError { inner: Context::new(kind) }
+  fn from(kind: KbinErrorKind) -> Self {
+    Self { inner: Context::new(kind) }
   }
 }
 
 impl From<Context<KbinErrorKind>> for KbinError {
-  fn from(inner: Context<KbinErrorKind>) -> KbinError {
-    KbinError { inner }
+  fn from(inner: Context<KbinErrorKind>) -> Self {
+    Self { inner }
   }
 }
 

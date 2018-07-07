@@ -10,16 +10,15 @@ extern crate rustc_hex;
 #[macro_use] extern crate lazy_static;
 #[macro_use] extern crate log;
 
-use std::cmp::max;
 use std::fmt::Write as FmtWrite;
-use std::io::{Cursor, Read, Seek, SeekFrom, Write};
-use std::result::Result as StdResult;
+use std::io::{Cursor, Write};
 
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use failure::ResultExt;
 use minidom::Element;
 use rustc_hex::FromHex;
 
+mod byte_buffer;
 mod compression;
 mod encoding_type;
 mod error;
@@ -27,13 +26,14 @@ mod node_types;
 mod options;
 mod sixbit;
 
+use byte_buffer::{ByteBufferRead, ByteBufferWrite};
 use compression::Compression;
-use node_types::{KbinType, StandardType};
+use node_types::StandardType;
 use sixbit::{pack_sixbit, unpack_sixbit};
 
 // Public exports
 pub use encoding_type::EncodingType;
-pub use error::{KbinError, KbinErrorKind};
+pub use error::{KbinError, KbinErrorKind, Result};
 pub use options::Options;
 
 const SIGNATURE: u8 = 0xA0;
@@ -41,8 +41,6 @@ const SIGNATURE: u8 = 0xA0;
 const SIG_COMPRESSED: u8 = 0x42;
 
 const ARRAY_MASK: u8 = 1 << 6; // 1 << 6 = 64
-
-type Result<T> = StdResult<T, KbinError>;
 
 pub struct KbinXml {
   options: Options,
@@ -70,218 +68,10 @@ impl KbinXml {
     }
   }
 
-  #[inline]
-  fn data_buf_offset<T>(&self, data_buf: &Cursor<T>) -> u64 {
-    // Position is not the index of the previously read byte, it is the current
-    // index (offset).
-    //
-    // This is so much fun to debug.
-    //data_buf.position() - 1
-    data_buf.position()
-  }
-
-  fn data_buf_read(&mut self, data_buf: &mut Cursor<&[u8]>) -> Result<Vec<u8>> {
-    let size = data_buf.read_u32::<BigEndian>().context(KbinErrorKind::DataReadSize)?;
-    debug!("data_buf_read => index: {}, size: {}", data_buf.position(), size);
-
-    let mut data = vec![0; size as usize];
-    data_buf.read_exact(&mut data).context(KbinErrorKind::DataRead(size as usize))?;
-    trace!("data_buf_read => index: {}, size: {}, data: 0x{:02x?}", data_buf.position(), data.len(), data);
-
-    self.data_buf_realign_reads(data_buf, None)?;
-
-    Ok(data)
-  }
-
-  fn data_buf_write(&mut self, data_buf: &mut Cursor<Vec<u8>>, data: &[u8]) -> Result<()> {
-    data_buf.write_u32::<BigEndian>(data.len() as u32).context(KbinErrorKind::DataWrite("data length integer"))?;
-    debug!("data_buf_write => index: {}, size: {}", data_buf.position(), data.len());
-
-    data_buf.write_all(data).context(KbinErrorKind::DataWrite("data block"))?;
-    trace!("data_buf_write => index: {}, size: {}, data: 0x{:02x?}", data_buf.position(), data.len(), data);
-
-    self.data_buf_realign_writes(data_buf, None)?;
-
-    Ok(())
-  }
-
-  fn data_buf_read_str(&mut self, data_buf: &mut Cursor<&[u8]>, encoding: EncodingType) -> Result<String> {
-    let mut data = self.data_buf_read(data_buf)?;
-
-    // Remove trailing null bytes
-    let mut index = data.len() - 1;
-    let len = data.len();
-    while index > 0 && index < len && data[index] == 0x00 {
-      index -= 1;
-    }
-    data.truncate(index + 1);
-    trace!("data_buf_read_str => size: {}, data: 0x{:02x?}", data.len(), data);
-
-    encoding.decode_bytes(data)
-  }
-
-  fn data_buf_write_str(&mut self, data_buf: &mut Cursor<Vec<u8>>, data: &str) -> Result<()> {
-    trace!("data_buf_write_str => input: {}, data: 0x{:02x?}", data, data.as_bytes());
-
-    let bytes = self.options.encoding.encode_bytes(data)?;
-    self.data_buf_write(data_buf, &bytes)?;
-
-    Ok(())
-  }
-
-  fn data_buf_get(&mut self, data_buf: &mut Cursor<&[u8]>, size: u32) -> Result<Vec<u8>> {
-    let mut data = vec![0; size as usize];
-    data_buf.read_exact(&mut data).context(KbinErrorKind::DataRead(size as usize))?;
-
-    Ok(data)
-  }
-
-  fn data_buf_get_aligned(&mut self, data_buf: &mut Cursor<&[u8]>, data_type: KbinType) -> Result<Vec<u8>> {
-    if self.offset_1 % 4 == 0 {
-      self.offset_1 = self.data_buf_offset(data_buf);
-    }
-    if self.offset_2 % 4 == 0 {
-      self.offset_2 = self.data_buf_offset(data_buf);
-    }
-
-    let old_pos = self.data_buf_offset(data_buf);
-    let size = data_type.size * data_type.count;
-    trace!("data_buf_get_aligned => old_pos: {}, size: {}", old_pos, size);
-
-    let (check_old, data) = match size {
-      1 => {
-        data_buf.seek(SeekFrom::Start(self.offset_1)).context(KbinErrorKind::Seek)?;
-
-        let data = data_buf.read_u8().context(KbinErrorKind::DataReadOneByte)?;
-        self.offset_1 += 1;
-
-        (true, vec![data])
-      },
-      2 => {
-        data_buf.seek(SeekFrom::Start(self.offset_2)).context(KbinErrorKind::Seek)?;
-
-        let mut data = vec![0; 2];
-        data_buf.read_exact(&mut data).context(KbinErrorKind::DataReadTwoByte)?;
-        self.offset_2 += 2;
-
-        (true, data)
-      },
-      size => {
-        let mut data = vec![0; size as usize];
-        data_buf.read_exact(&mut data).context(KbinErrorKind::DataReadAligned)?;
-        self.data_buf_realign_reads(data_buf, None)?;
-
-        (false, data)
-      },
-    };
-
-
-    if check_old {
-      data_buf.seek(SeekFrom::Start(old_pos)).context(KbinErrorKind::Seek)?;
-
-      let trailing = max(self.offset_1, self.offset_2);
-      trace!("data_buf_get_aligned => old_pos: {}, trailing: {}", old_pos, trailing);
-      if old_pos < trailing {
-        data_buf.seek(SeekFrom::Start(trailing)).context(KbinErrorKind::Seek)?;
-        self.data_buf_realign_reads(data_buf, None)?;
-      }
-    }
-
-    Ok(data)
-  }
-
-  fn data_buf_write_aligned(&mut self, data_buf: &mut Cursor<Vec<u8>>, data_type: KbinType, data: &[u8]) -> Result<()> {
-    if self.offset_1 % 4 == 0 {
-      self.offset_1 = self.data_buf_offset(data_buf);
-    }
-    if self.offset_2 % 4 == 0 {
-      self.offset_2 = self.data_buf_offset(data_buf);
-    }
-
-    let old_pos = self.data_buf_offset(data_buf);
-    let size = (data_type.size as usize) * (data_type.count as usize);
-    trace!("data_buf_write_aligned => old_pos: {}, size: {}", old_pos, size);
-
-    if size != data.len() {
-      return Err(KbinErrorKind::SizeMismatch(data_type, size, data.len()).into());
-    }
-
-    let check_old = match size {
-      1 => {
-        // Make room for new DWORD
-        if self.offset_1 % 4 == 0 {
-          data_buf.write_u32::<BigEndian>(0).context(KbinErrorKind::DataWrite("empty DWORD"))?;
-        }
-
-        data_buf.seek(SeekFrom::Start(self.offset_1)).context(KbinErrorKind::Seek)?;
-        data_buf.write_u8(data[0]).context(KbinErrorKind::DataWrite("1 byte value"))?;
-        self.offset_1 += 1;
-
-        true
-      },
-      2 => {
-        // Make room for new DWORD
-        if self.offset_2 % 4 == 0 {
-          data_buf.write_u32::<BigEndian>(0).context(KbinErrorKind::DataWrite("empty DWORD"))?;
-        }
-
-        data_buf.seek(SeekFrom::Start(self.offset_2)).context(KbinErrorKind::Seek)?;
-        data_buf.write_u8(data[0]).context(KbinErrorKind::DataWrite("first byte of 2 byte value"))?;
-        data_buf.write_u8(data[1]).context(KbinErrorKind::DataWrite("second byte of 2 byte value"))?;
-        self.offset_2 += 2;
-
-        true
-      },
-      _ => {
-        data_buf.write_all(data).context(KbinErrorKind::DataWrite("large value"))?;
-        self.data_buf_realign_writes(data_buf, None)?;
-
-        false
-      },
-    };
-
-    if check_old {
-      data_buf.seek(SeekFrom::Start(old_pos)).context(KbinErrorKind::Seek)?;
-
-      let trailing = max(self.offset_1, self.offset_2);
-      trace!("data_buf_write_aligned => old_pos: {}, trailing: {}", old_pos, trailing);
-      if old_pos < trailing {
-        data_buf.seek(SeekFrom::Start(trailing)).context(KbinErrorKind::Seek)?;
-        self.data_buf_realign_writes(data_buf, None)?;
-      }
-    }
-
-    Ok(())
-  }
-
-  fn data_buf_realign_reads(&self, data_buf: &mut Cursor<&[u8]>, size: Option<u64>) -> Result<()> {
-    let size = size.unwrap_or(4);
-    trace!("data_buf_realign_reads => position: {}, size: {}", data_buf.position(), size);
-
-    while data_buf.position() % size > 0 {
-      data_buf.seek(SeekFrom::Current(1)).context(KbinErrorKind::Seek)?;
-    }
-    trace!("data_buf_realign_reads => realigned to: {}", data_buf.position());
-
-    Ok(())
-  }
-
-  fn data_buf_realign_writes(&self, data_buf: &mut Cursor<Vec<u8>>, size: Option<u64>) -> Result<()> {
-    let size = size.unwrap_or(4);
-    trace!("data_buf_realign_writes => position: {}, size: {}", data_buf.position(), size);
-
-    while data_buf.position() % size > 0 {
-      data_buf.write_u8(0).context(KbinErrorKind::Seek)?;
-    }
-    trace!("data_buf_realign_writes => realigned to: {}", data_buf.position());
-
-    Ok(())
-  }
-
   fn from_binary_internal(&mut self, stack: &mut Vec<Element>, input: &[u8]) -> Result<(Element, EncodingType)> {
     // Node buffer starts from the beginning.
     // Data buffer starts later after reading `len_data`.
-    let mut node_buf = Cursor::new(&input[..]);
+    let mut node_buf = ByteBufferRead::new(&input[..]);
 
     let signature = node_buf.read_u8().context(KbinErrorKind::HeaderRead("signature"))?;
     if signature != SIGNATURE {
@@ -313,7 +103,7 @@ impl KbinXml {
     // We have read 8 bytes so far, so offset the start of the data buffer from
     // our current position.
     let data_buf_start = len_node + 8;
-    let mut data_buf = Cursor::new(&input[(data_buf_start as usize)..]);
+    let mut data_buf = ByteBufferRead::new(&input[(data_buf_start as usize)..]);
 
     {
       let pos = data_buf.position();
@@ -352,7 +142,7 @@ impl KbinXml {
         _ => {},
       };
 
-      let name = unpack_sixbit(&mut node_buf)?;
+      let name = unpack_sixbit(&mut *node_buf)?;
 
       if xml_type == StandardType::NodeStart {
         stack.push(Element::bare(name));
@@ -363,7 +153,7 @@ impl KbinXml {
         if let Some(to) = stack.last_mut() {
           match xml_type {
             StandardType::Attribute => {
-              let val = self.data_buf_read_str(&mut data_buf, encoding)?;
+              let val = data_buf.read_str(encoding)?;
               debug!("attr name: {}, val: {}", name, val);
               to.set_attr(name, val);
             },
@@ -374,7 +164,7 @@ impl KbinXml {
             StandardType::String => {
               to.set_attr("__type", xml_type.name);
 
-              let val = self.data_buf_read_str(&mut data_buf, encoding)?;
+              let val = data_buf.read_str(encoding)?;
               debug!("name: {}, val: {}", name, val);
               to.append_text_node(val);
             },
@@ -404,12 +194,12 @@ impl KbinXml {
                 size);
 
               let data = if is_array {
-                let data = self.data_buf_get(&mut data_buf, size)?;
-                self.data_buf_realign_reads(&mut data_buf, None)?;
+                let data = data_buf.get(size)?;
+                data_buf.realign_reads(None)?;
 
                 data
               } else {
-                self.data_buf_get_aligned(&mut data_buf, *xml_type)?
+                data_buf.get_aligned(*xml_type)?
               };
 
               debug!("data: 0x{:02x?}", data);
@@ -443,7 +233,7 @@ impl KbinXml {
     Ok((element, encoding))
   }
 
-  fn write_node(&mut self, node_buf: &mut Cursor<Vec<u8>>, data_buf: &mut Cursor<Vec<u8>>, input: &Element) -> Result<()> {
+  fn write_node(&mut self, node_buf: &mut ByteBufferWrite, data_buf: &mut ByteBufferWrite, input: &Element) -> Result<()> {
     let text = input.text();
     let node_type = match input.attr("__type") {
       Some(name) => StandardType::from_name(name),
@@ -477,7 +267,7 @@ impl KbinXml {
       count);
 
     node_buf.write_u8(node_type.id | array_mask).context(KbinErrorKind::DataWrite(node_type.name))?;
-    pack_sixbit(node_buf, input.name())?;
+    pack_sixbit(&mut **node_buf, input.name())?;
 
     match node_type {
       StandardType::NodeStart => {},
@@ -489,10 +279,10 @@ impl KbinXml {
         let size = (data.len() as u32) * (node_type.size as u32);
         data_buf.write_u32::<BigEndian>(size).context(KbinErrorKind::DataWrite("binary node size"))?;
         data_buf.write(&data).context(KbinErrorKind::DataWrite("binary"))?;
-        self.data_buf_realign_writes(data_buf, None)?;
+        data_buf.realign_writes(None)?;
       },
       StandardType::String => {
-        self.data_buf_write_str(data_buf, &text)?;
+        data_buf.write_str(self.options.encoding, &text)?;
       },
 
       _ => {
@@ -503,9 +293,9 @@ impl KbinXml {
 
           data_buf.write_u32::<BigEndian>(total_size).context(KbinErrorKind::DataWrite("node size"))?;
           data_buf.write_all(&data).context(KbinErrorKind::DataWrite(node_type.name))?;
-          self.data_buf_realign_writes(data_buf, None)?;
+          data_buf.realign_writes(None)?;
         } else {
-          self.data_buf_write_aligned(data_buf, *node_type, &data)?;
+          data_buf.write_aligned(*node_type, &data)?;
         }
       },
     }
@@ -518,11 +308,11 @@ impl KbinXml {
 
       trace!("write_node => attr: {}, value: {}", key, value);
 
-      self.data_buf_write_str(data_buf, value)?;
+      data_buf.write_str(self.options.encoding, value)?;
 
       let node_type = StandardType::Attribute;
       node_buf.write_u8(node_type.id).context(KbinErrorKind::DataWrite(node_type.name))?;
-      pack_sixbit(node_buf, key)?;
+      pack_sixbit(&mut **node_buf, key)?;
     }
 
     for child in input.children() {
@@ -544,13 +334,13 @@ impl KbinXml {
     header.write_u8(encoding).context(KbinErrorKind::HeaderWrite("encoding"))?;
     header.write_u8(0xFF ^ encoding).context(KbinErrorKind::HeaderWrite("encoding negation"))?;
 
-    let mut node_buf = Cursor::new(Vec::new());
-    let mut data_buf = Cursor::new(Vec::new());
+    let mut node_buf = ByteBufferWrite::new(Cursor::new(Vec::new()));
+    let mut data_buf = ByteBufferWrite::new(Cursor::new(Vec::new()));
 
     self.write_node(&mut node_buf, &mut data_buf, input)?;
 
     node_buf.write_u8(StandardType::FileEnd.id | ARRAY_MASK).context(KbinErrorKind::DataWrite("file end"))?;
-    self.data_buf_realign_writes(&mut node_buf, None)?;
+    data_buf.realign_writes(None)?;
 
     let mut output = header.into_inner();
 
