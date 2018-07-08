@@ -1,5 +1,4 @@
 use std::io::{Cursor, Write};
-use std::mem;
 use std::result::Result as StdResult;
 
 use byteorder::{BigEndian, ByteOrder, WriteBytesExt};
@@ -9,13 +8,14 @@ use serde::ser::{self, Impossible, Serialize};
 use byte_buffer::ByteBufferWrite;
 use encoding_type::EncodingType;
 use node_types::StandardType;
-use sixbit::pack_sixbit;
 use super::error::{KbinError, KbinErrorKind};
 
 mod error;
+mod structure;
 mod tuple;
 
 use self::error::Error;
+use self::structure::Struct;
 use self::tuple::Tuple;
 
 const SIGNATURE: u8 = 0xA0;
@@ -37,10 +37,11 @@ pub(crate) enum WriteMode {
 pub struct Serializer {
   encoding: EncodingType,
 
-  pub(crate) write_mode: WriteMode,
+  hierarchy: Vec<&'static str>,
+  write_mode: WriteMode,
 
-  pub(crate) node_buf: ByteBufferWrite,
-  pub(crate) data_buf: ByteBufferWrite,
+  node_buf: ByteBufferWrite,
+  data_buf: ByteBufferWrite,
 }
 
 #[derive(Debug)]
@@ -65,6 +66,7 @@ pub fn to_bytes<T>(value: &T) -> Result<Vec<u8>>
 {
   let mut serializer = Serializer {
     encoding: EncodingType::SHIFT_JIS,
+    hierarchy: Vec::new(),
     write_mode: WriteMode::Single,
     node_buf: ByteBufferWrite::new(Vec::new()),
     data_buf: ByteBufferWrite::new(Vec::new()),
@@ -157,7 +159,7 @@ impl<'a> ser::Serializer for &'a mut Serializer {
   type SerializeTupleStruct = Impossible<Self::Ok, Self::Error>;
   type SerializeTupleVariant = Impossible<Self::Ok, Self::Error>;
   type SerializeMap = Self;
-  type SerializeStruct = Self;
+  type SerializeStruct = Struct<'a>;
   type SerializeStructVariant = Impossible<Self::Ok, Self::Error>;
 
   byte_impl!(bool, serialize_bool, Boolean as u8);
@@ -280,11 +282,7 @@ impl<'a> ser::Serializer for &'a mut Serializer {
   fn serialize_struct(self, name: &'static str, len: usize) -> Result<Self::SerializeStruct> {
     debug!("serialize_struct => name: {}, len: {}", name, len);
 
-    let node_type = StandardType::NodeStart;
-    self.node_buf.write_u8(node_type.id).context(KbinErrorKind::DataWrite(node_type.name))?;
-    pack_sixbit(&mut *self.node_buf, name)?;
-
-    Ok(self)
+    Struct::new(self, name, len)
   }
 
   fn serialize_struct_variant(self, name: &'static str, variant_index: u32, variant: &'static str, len: usize) -> Result<Self::SerializeStructVariant> {
@@ -318,38 +316,5 @@ impl<'a> ser::SerializeMap for &'a mut Serializer {
   fn end(self) -> Result<Self::Ok> {
     debug!("SerializeMap: end");
     Ok(None)
-  }
-}
-
-impl<'a> ser::SerializeStruct for &'a mut Serializer {
-  type Ok = Option<TypeHint>;
-  type Error = Error;
-
-  fn serialize_field<T>(&mut self, key: &'static str, value: &T) -> Result<()>
-    where T: ?Sized + Serialize
-  {
-    let size = mem::size_of_val(value);
-    debug!("SerializeStruct: serialize_field, key: {}, value size: {}", key, size);
-
-    let hint = value.serialize(&mut **self)?.ok_or(KbinErrorKind::MissingTypeHint)?;
-    let array_mask = if hint.is_array { ARRAY_MASK } else { 0 };
-    debug!("SerializeStruct: serialize_field, key: {}, hint: {:?}", key, hint);
-
-    self.node_buf.write_u8(hint.node_type.id | array_mask).context(KbinErrorKind::DataWrite(hint.node_type.name))?;
-    pack_sixbit(&mut *self.node_buf, key)?;
-
-    // TODO: Make sure this does not prematurely end nodes
-    self.node_buf.write_u8(StandardType::NodeEnd.id | ARRAY_MASK).context(KbinErrorKind::DataWrite("node end"))?;
-
-    Ok(())
-  }
-
-  fn end(self) -> Result<Self::Ok> {
-    debug!("SerializeStruct: end");
-    self.node_buf.write_u8(StandardType::NodeEnd.id | ARRAY_MASK).context(KbinErrorKind::DataWrite("node end"))?;
-
-    trace!("SerializeStruct::end() => node_buf: {:02x?}", self.node_buf.get_ref());
-
-    Ok(Some(TypeHint::from_type(StandardType::NodeStart)))
   }
 }
