@@ -43,11 +43,11 @@ impl<R: AsRef<[u8]>> ByteBufferRead<R> {
 
   pub fn buf_read(&mut self) -> Result<Vec<u8>> {
     let size = self.buffer.read_u32::<BigEndian>().context(KbinErrorKind::DataReadSize)?;
-    debug!("data_buf_read => index: {}, size: {}", self.buffer.position(), size);
+    debug!("buf_read => index: {}, size: {}", self.buffer.position(), size);
 
     let mut data = vec![0; size as usize];
     self.buffer.read_exact(&mut data).context(KbinErrorKind::DataRead(size as usize))?;
-    trace!("data_buf_read => index: {}, size: {}, data: 0x{:02x?}", self.buffer.position(), data.len(), data);
+    trace!("buf_read => index: {}, size: {}, data: 0x{:02x?}", self.buffer.position(), data.len(), data);
 
     self.realign_reads(None)?;
 
@@ -64,7 +64,7 @@ impl<R: AsRef<[u8]>> ByteBufferRead<R> {
       index -= 1;
     }
     data.truncate(index + 1);
-    trace!("data_buf_read_str => size: {}, data: 0x{:02x?}", data.len(), data);
+    trace!("read_str => size: {}, data: 0x{:02x?}", data.len(), data);
 
     encoding.decode_bytes(data)
   }
@@ -86,7 +86,7 @@ impl<R: AsRef<[u8]>> ByteBufferRead<R> {
 
     let old_pos = self.data_buf_offset();
     let size = data_type.size * data_type.count;
-    trace!("data_buf_get_aligned => old_pos: {}, size: {}", old_pos, size);
+    trace!("get_aligned => old_pos: {}, size: {}", old_pos, size);
 
     let (check_old, data) = match size {
       1 => {
@@ -120,7 +120,7 @@ impl<R: AsRef<[u8]>> ByteBufferRead<R> {
       self.buffer.seek(SeekFrom::Start(old_pos)).context(KbinErrorKind::Seek)?;
 
       let trailing = max(self.offset_1, self.offset_2);
-      trace!("data_buf_get_aligned => old_pos: {}, trailing: {}", old_pos, trailing);
+      trace!("get_aligned => old_pos: {}, trailing: {}", old_pos, trailing);
       if old_pos < trailing {
         self.buffer.seek(SeekFrom::Start(trailing)).context(KbinErrorKind::Seek)?;
         self.realign_reads(None)?;
@@ -132,12 +132,12 @@ impl<R: AsRef<[u8]>> ByteBufferRead<R> {
 
   pub fn realign_reads(&mut self, size: Option<u64>) -> Result<()> {
     let size = size.unwrap_or(4);
-    trace!("data_buf_realign_reads => position: {}, size: {}", self.buffer.position(), size);
+    trace!("realign_reads => position: {}, size: {}", self.buffer.position(), size);
 
     while self.buffer.position() % size > 0 {
       self.buffer.seek(SeekFrom::Current(1)).context(KbinErrorKind::Seek)?;
     }
-    trace!("data_buf_realign_reads => realigned to: {}", self.buffer.position());
+    trace!("realign_reads => realigned to: {}", self.buffer.position());
 
     Ok(())
   }
@@ -168,10 +168,10 @@ impl ByteBufferWrite {
 
   pub fn buf_write(&mut self, data: &[u8]) -> Result<()> {
     self.buffer.write_u32::<BigEndian>(data.len() as u32).context(KbinErrorKind::DataWrite("data length integer"))?;
-    debug!("data_buf_write => index: {}, size: {}", self.buffer.position(), data.len());
+    debug!("buf_write => index: {}, size: {}", self.buffer.position(), data.len());
 
     self.buffer.write_all(data).context(KbinErrorKind::DataWrite("data block"))?;
-    trace!("data_buf_write => index: {}, size: {}, data: 0x{:02x?}", self.buffer.position(), data.len(), data);
+    trace!("buf_write => index: {}, size: {}, data: 0x{:02x?}", self.buffer.position(), data.len(), data);
 
     self.realign_writes(None)?;
 
@@ -179,7 +179,7 @@ impl ByteBufferWrite {
   }
 
   pub fn write_str(&mut self, encoding: EncodingType, data: &str) -> Result<()> {
-    trace!("data_buf_write_str => input: {}, data: 0x{:02x?}", data, data.as_bytes());
+    trace!("write_str => input: {}, data: 0x{:02x?}", data, data.as_bytes());
 
     let bytes = encoding.encode_bytes(data)?;
     self.buf_write(&bytes)?;
@@ -197,7 +197,7 @@ impl ByteBufferWrite {
 
     let old_pos = self.data_buf_offset();
     let size = (data_type.size as usize) * (data_type.count as usize);
-    trace!("data_buf_write_aligned => old_pos: {}, size: {}", old_pos, size);
+    trace!("write_aligned => old_pos: {}, size: {}", old_pos, size);
 
     if size != data.len() {
       return Err(KbinErrorKind::SizeMismatch(data_type, size, data.len()).into());
@@ -241,7 +241,7 @@ impl ByteBufferWrite {
       self.buffer.seek(SeekFrom::Start(old_pos)).context(KbinErrorKind::Seek)?;
 
       let trailing = max(self.offset_1, self.offset_2);
-      trace!("data_buf_write_aligned => old_pos: {}, trailing: {}", old_pos, trailing);
+      trace!("write_aligned => old_pos: {}, trailing: {}", old_pos, trailing);
       if old_pos < trailing {
         self.buffer.seek(SeekFrom::Start(trailing)).context(KbinErrorKind::Seek)?;
         self.realign_writes(None)?;
@@ -253,12 +253,12 @@ impl ByteBufferWrite {
 
   pub fn realign_writes(&mut self, size: Option<u64>) -> Result<()> {
     let size = size.unwrap_or(4);
-    trace!("data_buf_realign_writes => position: {}, size: {}", self.buffer.position(), size);
+    trace!("realign_writes => position: {}, size: {}", self.buffer.position(), size);
 
     while self.buffer.position() % size > 0 {
       self.buffer.write_u8(0).context(KbinErrorKind::Seek)?;
     }
-    trace!("data_buf_realign_writes => realigned to: {}", self.buffer.position());
+    trace!("realign_writes => realigned to: {}", self.buffer.position());
 
     Ok(())
   }
