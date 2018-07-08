@@ -352,7 +352,7 @@ impl KbinXml {
     self.write_node(&mut node_buf, &mut data_buf, input)?;
 
     node_buf.write_u8(StandardType::FileEnd.id | ARRAY_MASK).context(KbinErrorKind::DataWrite("file end"))?;
-    data_buf.realign_writes(None)?;
+    node_buf.realign_writes(None)?;
 
     let mut output = header.into_inner();
 
