@@ -95,6 +95,9 @@ pub enum KbinErrorKind {
 
   #[fail(display = "Unable to convert from hexadecimal")]
   HexError,
+
+  #[fail(display = "Missing type hint where one is required")]
+  MissingTypeHint,
 }
 
 impl fmt::Display for KbinError {

@@ -5,10 +5,14 @@ extern crate encoding;
 extern crate minidom;
 extern crate num;
 extern crate rustc_hex;
+extern crate serde;
 
 #[macro_use] extern crate failure;
 #[macro_use] extern crate lazy_static;
 #[macro_use] extern crate log;
+
+#[cfg(test)]
+#[macro_use] extern crate serde_derive;
 
 use std::fmt::Write as FmtWrite;
 use std::io::{Cursor, Write};
@@ -26,6 +30,9 @@ mod node_types;
 mod options;
 mod sixbit;
 
+//mod de;
+mod ser;
+
 use byte_buffer::{ByteBufferRead, ByteBufferWrite};
 use compression::Compression;
 use node_types::StandardType;
@@ -35,6 +42,7 @@ use sixbit::{pack_sixbit, unpack_sixbit};
 pub use encoding_type::EncodingType;
 pub use error::{KbinError, KbinErrorKind, Result};
 pub use options::Options;
+pub use ser::to_bytes;
 
 const SIGNATURE: u8 = 0xA0;
 
@@ -66,6 +74,10 @@ impl KbinXml {
       offset_1: 0,
       offset_2: 0,
     }
+  }
+
+  pub fn is_binary_xml(input: &[u8]) -> bool {
+    input.len() > 2 && input[0] == SIGNATURE && input[1] == SIG_COMPRESSED
   }
 
   fn from_binary_internal(&mut self, stack: &mut Vec<Element>, input: &[u8]) -> Result<(Element, EncodingType)> {
@@ -278,7 +290,7 @@ impl KbinXml {
 
         let size = (data.len() as u32) * (node_type.size as u32);
         data_buf.write_u32::<BigEndian>(size).context(KbinErrorKind::DataWrite("binary node size"))?;
-        data_buf.write(&data).context(KbinErrorKind::DataWrite("binary"))?;
+        data_buf.write_all(&data).context(KbinErrorKind::DataWrite("binary"))?;
         data_buf.realign_writes(None)?;
       },
       StandardType::String => {

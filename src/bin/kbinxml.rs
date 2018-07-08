@@ -6,14 +6,36 @@ extern crate minidom;
 extern crate pretty_env_logger;
 extern crate quick_xml;
 
+#[macro_use] extern crate serde_derive;
+
 use std::env;
 use std::fs::File;
 use std::io::{Cursor, Error as IoError, ErrorKind as IoErrorKind, Read, Write, stdout};
+use std::str;
 
 use failure::Fail;
-use kbinxml::{KbinXml, Options};
+use kbinxml::{KbinXml, Options, to_bytes};
 use minidom::Element;
 use quick_xml::Writer;
+
+#[derive(Serialize)]
+#[serde(rename = "test2")]
+pub struct Testing2 {
+  hi: u16,
+  ho: i16,
+  vu: Vec<u8>,
+}
+
+#[derive(Serialize)]
+#[serde(rename = "test")]
+pub struct Testing {
+  hi: u8,
+  ok: [u8; 3],
+  hhh: (u8, u8),
+  hhg: (u32, u32),
+  foo: String,
+  testing2: Testing2,
+}
 
 fn display_err(err: impl Fail) -> IoError {
   let mut fail: &Fail = &err;
@@ -97,19 +119,48 @@ fn main() -> std::io::Result<()> {
     let mut contents = Vec::new();
     file.read_to_end(&mut contents)?;
 
-    let (element, encoding_original) = KbinXml::from_binary(&contents).map_err(display_err)?;
-    //println!("element: {:#?}", element);
-    let text_original = to_text(&element)?;
-    display_buf(&text_original)?;
+    if KbinXml::is_binary_xml(&contents) {
+      let (element, encoding_original) = KbinXml::from_binary(&contents).map_err(display_err)?;
+      //println!("element: {:#?}", element);
+      let text_original = to_text(&element)?;
+      display_buf(&text_original)?;
 
-    let options = Options::with_encoding(encoding_original);
-    let buf = KbinXml::to_binary_with_options(options, &element).map_err(display_err)?;
-    compare_slice(&buf, &contents);
+      let options = Options::with_encoding(encoding_original);
+      let buf = KbinXml::to_binary_with_options(options, &element).map_err(display_err)?;
+      compare_slice(&buf, &contents);
+    } else {
+      let contents = str::from_utf8(&contents).expect("Unable to interpret file contents as UTF-8");
+      let element: Element = contents.parse().expect("Unable to construct DOM for input text XML");
 
+      let options = Options::default();
+      let buf = KbinXml::to_binary_with_options(options, &element).map_err(display_err)?;
+      eprintln!("data: {:02x?}", buf);
+    }
+
+    /*
     let (element, encoding_new) = KbinXml::from_binary(&buf).map_err(display_err)?;
     let text_new = to_text(&element)?;
     assert_eq!(encoding_original, encoding_new);
     assert_eq!(text_original, text_new);
+    */
+  } else {
+    let obj = Testing {
+      hi: 12,
+      ok: [12, 24, 48],
+      hhh: (55, 66),
+      hhg: (55, 66),
+      foo: "foobarbaz".to_string(),
+      testing2: Testing2 {
+        hi: 32423,
+        ho: 32000,
+        vu: vec![33, 255, 254],
+      },
+    };
+    let bytes = to_bytes(&obj).unwrap();
+    eprintln!("bytes: {:02x?}", bytes);
+
+    let mut file = File::create("testing.kbin")?;
+    file.write_all(&bytes)?;
   }
   Ok(())
 }
