@@ -98,6 +98,9 @@ pub enum KbinErrorKind {
 
   #[fail(display = "Missing type hint where one is required")]
   MissingTypeHint,
+
+  #[fail(display = "Type mismatch, expected: {}, found: {}", _0, _1)]
+  TypeMismatch(KbinType, KbinType),
 }
 
 impl fmt::Display for KbinError {
