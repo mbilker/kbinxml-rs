@@ -51,12 +51,6 @@ pub struct TypeHint {
 }
 
 impl TypeHint {
-  /*
-  fn new(node_type: StandardType, is_array: bool, count: usize) -> Self {
-    Self { node_type, is_array, count }
-  }
-  */
-
   fn from_type(node_type: StandardType) -> Self {
     Self {
       node_type,
@@ -177,110 +171,6 @@ impl<'a> ser::Serializer for &'a mut Serializer {
   primitive_impl!(i64, serialize_i64, write_i64, S64);
   primitive_impl!(f32, serialize_f32, write_f32, Float);
   primitive_impl!(f64, serialize_f64, write_f64, Double);
-
-  /*
-  fn serialize_bool(self, value: bool) -> Result<Self::Ok> {
-    debug!("serialize_bool => value: {}", value);
-    let value = value as u8;
-
-    let node_type = StandardType::Boolean;
-    match self.write_mode {
-      WriteMode::Single => self.data_buf.write_aligned(*node_type, &[value])
-        .context(KbinErrorKind::DataWrite("bool"))?,
-      WriteMode::Array => self.data_buf.write_u8(value)
-        .context(KbinErrorKind::DataWrite("bool"))?,
-    };
-
-    Ok(TypeHint::from_type(node_type))
-  }
-
-  fn serialize_u8(self, value: u8) -> Result<Self::Ok> {
-    debug!("serialize_u8 => value: {}", value);
-
-    let node_type = StandardType::U8;
-    match self.write_mode {
-      WriteMode::Single => self.data_buf.write_aligned(*node_type, &[value])
-        .context(KbinErrorKind::DataWrite("bool"))?,
-      WriteMode::Array => self.data_buf.write_u8(value)
-        .context(KbinErrorKind::DataWrite("bool"))?,
-    };
-
-    Ok(TypeHint::from_type(node_type))
-  }
-
-  fn serialize_i8(self, value: i8) -> Result<Self::Ok> {
-    debug!("serialize_i8 => value: {}", value);
-    let hint = self.write(StandardType::S8, &[value as u8]).context(KbinErrorKind::DataWrite("i8"))?;
-    Ok(hint)
-  }
-
-  fn serialize_u16(self, value: u16) -> Result<Self::Ok> {
-    debug!("serialize_u16 => value: {}", value);
-    self.data_buf.write_u16::<BigEndian>(value).context(KbinErrorKind::DataWrite("u16"))?;
-
-    Ok(TypeHint::from_type(StandardType::U16))
-  }
-
-  fn serialize_i16(self, value: i16) -> Result<Self::Ok> {
-    debug!("serialize_i16 => value: {}", value);
-
-    let node_type = StandardType::S16;
-    match self.write_mode {
-      WriteMode::Single => {
-        let mut buf = [0; 2];
-        BigEndian::write_i16(&mut buf, value);
-        self.data_buf.write_aligned(*node_type, &buf)?;
-      },
-      WriteMode::Array => {
-        self.data_buf.write_i16::<BigEndian>(value).context(KbinErrorKind::DataWrite(node_type.name))?;
-      }
-    };
-
-    Ok(TypeHint::from_type(node_type))
-  }
-
-  fn serialize_u32(self, value: u32) -> Result<Self::Ok> {
-    debug!("serialize_u32 => value: {}", value);
-    self.data_buf.write_u32::<BigEndian>(value).context(KbinErrorKind::DataWrite("u32"))?;
-
-    Ok(TypeHint::from_type(StandardType::U32))
-  }
-
-  fn serialize_i32(self, value: i32) -> Result<Self::Ok> {
-    debug!("serialize_i32 => value: {}", value);
-    self.data_buf.write_i32::<BigEndian>(value).context(KbinErrorKind::DataWrite("i32"))?;
-
-    Ok(TypeHint::from_type(StandardType::S32))
-  }
-
-  fn serialize_u64(self, value: u64) -> Result<Self::Ok> {
-    debug!("serialize_u64 => value: {}", value);
-    self.data_buf.write_u64::<BigEndian>(value).context(KbinErrorKind::DataWrite("u64"))?;
-
-    Ok(TypeHint::from_type(StandardType::U64))
-  }
-
-  fn serialize_i64(self, value: i64) -> Result<Self::Ok> {
-    debug!("serialize_i64 => value: {}", value);
-    self.data_buf.write_i64::<BigEndian>(value).context(KbinErrorKind::DataWrite("i64"))?;
-
-    Ok(TypeHint::from_type(StandardType::S64))
-  }
-
-  fn serialize_f32(self, value: f32) -> Result<Self::Ok> {
-    debug!("serialize_f32 => value: {}", value);
-    self.data_buf.write_f32::<BigEndian>(value).context(KbinErrorKind::DataWrite("f32"))?;
-
-    Ok(TypeHint::from_type(StandardType::Float))
-  }
-
-  fn serialize_f64(self, value: f64) -> Result<Self::Ok> {
-    debug!("serialize_f64 => value: {}", value);
-    self.data_buf.write_f64::<BigEndian>(value).context(KbinErrorKind::DataWrite("f64"))?;
-
-    Ok(Some(TypeHint::from_type(StandardType::Double)))
-  }
-  */
 
   fn serialize_char(self, value: char) -> Result<Self::Ok> {
     debug!("serialize_char => value: {}", value);
