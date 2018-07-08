@@ -39,7 +39,7 @@ pub struct Serializer {
 
   pub(crate) write_mode: WriteMode,
 
-  pub(crate) node_buf: Cursor<Vec<u8>>,
+  pub(crate) node_buf: ByteBufferWrite,
   pub(crate) data_buf: ByteBufferWrite,
 }
 
@@ -72,7 +72,7 @@ pub fn to_bytes<T>(value: &T) -> Result<Vec<u8>>
   let mut serializer = Serializer {
     encoding: EncodingType::SHIFT_JIS,
     write_mode: WriteMode::Single,
-    node_buf: Cursor::new(Vec::new()),
+    node_buf: ByteBufferWrite::new(Vec::new()),
     data_buf: ByteBufferWrite::new(Vec::new()),
   };
   value.serialize(&mut serializer)?;
@@ -92,7 +92,7 @@ impl Serializer {
     header.write_u8(0xFF ^ encoding).context(KbinErrorKind::HeaderWrite("encoding negation"))?;
 
     self.node_buf.write_u8(StandardType::FileEnd.id | ARRAY_MASK).context(KbinErrorKind::DataWrite("file end"))?;
-    self.data_buf.realign_writes(None)?;
+    self.node_buf.realign_writes(None)?;
 
     let mut output = header.into_inner();
 
@@ -392,7 +392,7 @@ impl<'a> ser::Serializer for &'a mut Serializer {
 
     let node_type = StandardType::NodeStart;
     self.node_buf.write_u8(node_type.id).context(KbinErrorKind::DataWrite(node_type.name))?;
-    pack_sixbit(&mut self.node_buf, name)?;
+    pack_sixbit(&mut *self.node_buf, name)?;
 
     Ok(self)
   }
@@ -446,7 +446,7 @@ impl<'a> ser::SerializeStruct for &'a mut Serializer {
     debug!("SerializeStruct: serialize_field, key: {}, hint: {:?}", key, hint);
 
     self.node_buf.write_u8(hint.node_type.id | array_mask).context(KbinErrorKind::DataWrite(hint.node_type.name))?;
-    pack_sixbit(&mut self.node_buf, key)?;
+    pack_sixbit(&mut *self.node_buf, key)?;
 
     // TODO: Make sure this does not prematurely end nodes
     self.node_buf.write_u8(StandardType::NodeEnd.id | ARRAY_MASK).context(KbinErrorKind::DataWrite("node end"))?;
