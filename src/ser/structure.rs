@@ -57,12 +57,12 @@ impl<'a> SerializeStruct for Struct<'a> {
     // Push key name onto stack so if the value is a struct, it will pick up
     // the correct name
     self.ser.hierarchy.push(key);
-    debug!("SerializeStruct(name: {}): serialize_field, key: {}, hierarchy: {:?}", self.name, key, self.ser.hierarchy);
+    debug!("SerializeStruct(name: {})::serialize_field(key: {}) => hierarchy: {:?}", self.name, key, self.ser.hierarchy);
 
     let hint = value.serialize(&mut *self.ser)?.ok_or(KbinErrorKind::MissingTypeHint)?;
     let node_type = hint.node_type;
     let array_mask = if hint.is_array { ARRAY_MASK } else { 0 };
-    debug!("SerializeStruct(name: {}): serialize_field, key: {}, hint: {:?}", self.name, key, hint);
+    debug!("SerializeStruct(name: {})::serialize_field(key: {}) => hint: {:?}", self.name, key, hint);
 
     // Struct handler outputs the `NodeStart` event by itself. Avoid repeating it.
     if node_type != StandardType::NodeStart {
