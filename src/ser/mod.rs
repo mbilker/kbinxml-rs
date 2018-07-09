@@ -8,21 +8,14 @@ use serde::ser::{self, Impossible, Serialize};
 use byte_buffer::ByteBufferWrite;
 use encoding_type::EncodingType;
 use node_types::StandardType;
-use super::error::{KbinError, KbinErrorKind};
+use error::{Error, KbinError, KbinErrorKind};
+use super::{ARRAY_MASK, SIGNATURE, SIG_COMPRESSED};
 
-mod error;
 mod structure;
 mod tuple;
 
-use self::error::Error;
 use self::structure::Struct;
 use self::tuple::Tuple;
-
-const SIGNATURE: u8 = 0xA0;
-
-const SIG_COMPRESSED: u8 = 0x42;
-
-const ARRAY_MASK: u8 = 1 << 6; // 1 << 6 = 64
 
 pub type Result<T> = StdResult<T, Error>;
 
