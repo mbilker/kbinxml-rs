@@ -14,11 +14,11 @@ use std::io::{Cursor, Error as IoError, ErrorKind as IoErrorKind, Read, Write, s
 use std::str;
 
 use failure::Fail;
-use kbinxml::{KbinXml, Options, to_bytes};
+use kbinxml::{KbinXml, Options, from_bytes, to_bytes};
 use minidom::Element;
 use quick_xml::Writer;
 
-#[derive(Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(rename = "test2")]
 pub struct Testing2 {
   hi: u16,
@@ -26,7 +26,7 @@ pub struct Testing2 {
   vu: Vec<u8>,
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(rename = "test")]
 pub struct Testing {
   hi: u8,
@@ -161,6 +161,9 @@ fn main() -> std::io::Result<()> {
 
     let mut file = File::create("testing.kbin")?;
     file.write_all(&bytes)?;
+
+    let obj2: Testing = from_bytes(&bytes).unwrap();
+    eprintln!("obj2: {:#?}", obj2);
   }
   Ok(())
 }

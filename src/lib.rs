@@ -30,7 +30,7 @@ mod node_types;
 mod options;
 mod sixbit;
 
-//mod de;
+mod de;
 mod ser;
 
 use byte_buffer::{ByteBufferRead, ByteBufferWrite};
@@ -42,6 +42,7 @@ use sixbit::{pack_sixbit, unpack_sixbit};
 pub use encoding_type::EncodingType;
 pub use error::{KbinError, KbinErrorKind, Result};
 pub use options::Options;
+pub use de::from_bytes;
 pub use ser::to_bytes;
 
 const SIGNATURE: u8 = 0xA0;
@@ -52,27 +53,18 @@ const ARRAY_MASK: u8 = 1 << 6; // 1 << 6 = 64
 
 pub struct KbinXml {
   options: Options,
-
-  offset_1: u64,
-  offset_2: u64,
 }
 
 impl KbinXml {
   pub fn new() -> Self {
     Self {
       options: Options::default(),
-
-      offset_1: 0,
-      offset_2: 0,
     }
   }
 
   pub fn with_options(options: Options) -> Self {
     Self {
       options,
-
-      offset_1: 0,
-      offset_2: 0,
     }
   }
 
@@ -116,13 +108,6 @@ impl KbinXml {
     // our current position.
     let data_buf_start = len_node + 8;
     let mut data_buf = ByteBufferRead::new(&input[(data_buf_start as usize)..]);
-
-    {
-      let pos = data_buf.position();
-      self.offset_1 = pos;
-      self.offset_2 = pos;
-      trace!("offset_1: {}, offset_2: {}", self.offset_1, self.offset_2);
-    }
 
     let len_data = data_buf.read_u32::<BigEndian>().context(KbinErrorKind::LenDataRead)?;
     info!("len_data: {} (0x{:x})", len_data, len_data);
