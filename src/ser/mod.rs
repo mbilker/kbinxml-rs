@@ -289,14 +289,14 @@ impl<'a> ser::SerializeMap for &'a mut Serializer {
   type Ok = Option<TypeHint>;
   type Error = Error;
 
-  fn serialize_key<T>(&mut self, key: &T) -> Result<()>
+  fn serialize_key<T>(&mut self, _key: &T) -> Result<()>
     where T: ?Sized + Serialize
   {
     debug!("SerializeMap: serialize_key");
     unimplemented!();
   }
 
-  fn serialize_value<T>(&mut self, value: &T) -> Result<()>
+  fn serialize_value<T>(&mut self, _value: &T) -> Result<()>
     where T: ?Sized + Serialize
   {
     debug!("SerializeMap: serialize_value");
