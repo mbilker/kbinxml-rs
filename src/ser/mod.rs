@@ -98,10 +98,10 @@ impl Serializer {
 }
 
 // `straight_impl` passes a single element array to `write_aligned` where
-// `primitive_impl` will use `BigEndian` to populate a multi-element array for
+// `ser_type` will use `BigEndian` to populate a multi-element array for
 // `write_aligned`
-macro_rules! byte_impl {
-  ($inner_type:ident, $method:ident, $standard_type:ident $($cast:tt)*) => {
+macro_rules! ser_type {
+  (byte; $inner_type:ident, $method:ident, $standard_type:ident $($cast:tt)*) => {
     fn $method(self, value: $inner_type) -> Result<Self::Ok> {
       debug!(concat!(stringify!($method), " => value: {}"), value);
 
@@ -118,11 +118,8 @@ macro_rules! byte_impl {
 
       Ok(Some(TypeHint::from_type(node_type)))
     }
-  }
-}
-
-macro_rules! primitive_impl {
-  ($inner_type:ident, $method:ident, $write_method:ident, $standard_type:ident $($cast:tt)*) => {
+  };
+  (large; $inner_type:ident, $method:ident, $write_method:ident, $standard_type:ident $($cast:tt)*) => {
     fn $method(self, value: $inner_type) -> Result<Self::Ok> {
       debug!(concat!(stringify!($method), " => value: {}"), value);
 
@@ -155,17 +152,21 @@ impl<'a> ser::Serializer for &'a mut Serializer {
   type SerializeStruct = Struct<'a>;
   type SerializeStructVariant = Impossible<Self::Ok, Self::Error>;
 
-  byte_impl!(bool, serialize_bool, Boolean as u8);
-  byte_impl!(u8, serialize_u8, U8);
-  byte_impl!(i8, serialize_i8, S8 as u8);
-  primitive_impl!(u16, serialize_u16, write_u16, U16);
-  primitive_impl!(i16, serialize_i16, write_i16, S16);
-  primitive_impl!(u32, serialize_u32, write_u32, U32);
-  primitive_impl!(i32, serialize_i32, write_i32, S32);
-  primitive_impl!(u64, serialize_u64, write_u64, U64);
-  primitive_impl!(i64, serialize_i64, write_i64, S64);
-  primitive_impl!(f32, serialize_f32, write_f32, Float);
-  primitive_impl!(f64, serialize_f64, write_f64, Double);
+  fn is_human_readable(&self) -> bool {
+    false
+  }
+
+  ser_type!(byte; bool, serialize_bool, Boolean as u8);
+  ser_type!(byte; u8, serialize_u8, U8);
+  ser_type!(byte; i8, serialize_i8, S8 as u8);
+  ser_type!(large; u16, serialize_u16, write_u16, U16);
+  ser_type!(large; i16, serialize_i16, write_i16, S16);
+  ser_type!(large; u32, serialize_u32, write_u32, U32);
+  ser_type!(large; i32, serialize_i32, write_i32, S32);
+  ser_type!(large; u64, serialize_u64, write_u64, U64);
+  ser_type!(large; i64, serialize_i64, write_i64, S64);
+  ser_type!(large; f32, serialize_f32, write_f32, Float);
+  ser_type!(large; f64, serialize_f64, write_f64, Double);
 
   fn serialize_char(self, value: char) -> Result<Self::Ok> {
     debug!("serialize_char => value: {}", value);
@@ -211,7 +212,7 @@ impl<'a> ser::Serializer for &'a mut Serializer {
   // TODO: Figure out a good way to serialize this
   fn serialize_unit(self) -> Result<Self::Ok> {
     debug!("serialize_unit");
-    Ok(None)
+    unimplemented!();
   }
 
   fn serialize_unit_struct(self, name: &'static str) -> Result<Self::Ok> {
@@ -222,16 +223,14 @@ impl<'a> ser::Serializer for &'a mut Serializer {
 
   fn serialize_unit_variant(self, name: &'static str, variant_index: u32, variant: &'static str) -> Result<Self::Ok> {
     debug!("serialize_unit_variant => name: {}, variant_index: {}, variant: {}", name, variant_index, variant);
-    let hint = variant.serialize(&mut *self)?;
-    Ok(hint)
+    variant.serialize(&mut *self)
   }
 
   fn serialize_newtype_struct<T>(self, name: &'static str, value: &T) -> Result<Self::Ok>
     where T: ?Sized + Serialize
   {
     debug!("serialize_newtype_struct => name: {}", name);
-    let hint = value.serialize(&mut *self)?;
-    Ok(hint)
+    value.serialize(&mut *self)
   }
 
   fn serialize_newtype_variant<T>(self, name: &'static str, variant_index: u32, variant: &'static str, value: &T) -> Result<Self::Ok>
