@@ -10,8 +10,9 @@ pub struct Seq<'a, 'de: 'a> {
 }
 
 impl<'de, 'a> Seq<'a, 'de> {
-  pub fn new(de: &'a mut Deserializer<'de>, len: Option<usize>) -> Self {
-    let len = len.unwrap_or(0);
+  pub fn new(de: &'a mut Deserializer<'de>, len: usize) -> Self {
+    trace!("Seq::new(len: {})", len);
+
     Self {
       de,
       index: 0,
@@ -27,6 +28,8 @@ impl<'de, 'a> SeqAccess<'de> for Seq<'a, 'de> {
     where T: DeserializeSeed<'de>
   {
     if self.index >= self.len {
+      trace!("Seq::next_element_seed() => out of bounds read, returning None");
+
       return Ok(None);
     }
     self.index += 1;

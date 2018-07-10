@@ -244,10 +244,12 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     let size = self.data_buf.read_u32::<BigEndian>().context(KbinErrorKind::ArrayLengthRead)?;
     debug!("Deserializer::deserialize_seq() => read array size: {}", size);
 
+    // Changes to `self.read_mode` must stay here as `next_element_seed` is not
+    // called past the length of the array to reset the read mode
     self.read_mode = ReadMode::Array;
-    let value = visitor.visit_seq(Seq::new(self, Some(size as usize)))?;
-    self.data_buf.realign_reads(None)?;
+    let value = visitor.visit_seq(Seq::new(self, size as usize))?;
     self.read_mode = ReadMode::Single;
+    self.data_buf.realign_reads(None)?;
 
     Ok(value)
   }
