@@ -171,6 +171,10 @@ macro_rules! implement_type {
 impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
   type Error = Error;
 
+  fn is_human_readable(&self) -> bool {
+    false
+  }
+
   fn deserialize_any<V>(self, _visitor: V) -> Result<V::Value>
     where V: Visitor<'de>
   {
@@ -271,11 +275,17 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     self.deserialize_seq(visitor)
   }
 
-  fn deserialize_tuple_struct<V>(self, name: &'static str, len: usize, _visitor: V) -> Result<V::Value>
+  fn deserialize_tuple_struct<V>(self, name: &'static str, len: usize, visitor: V) -> Result<V::Value>
     where V: Visitor<'de>
   {
     trace!("Deserializer::deserialize_tuple_struct(name: {:?}, len: {})", name, len);
-    unimplemented!();
+
+    self.read_mode = ReadMode::Array;
+    let value = visitor.visit_seq(Seq::new(self, len))?;
+    self.read_mode = ReadMode::Single;
+    self.data_buf.realign_reads(None)?;
+
+    Ok(value)
   }
 
   fn deserialize_map<V>(self, _visitor: V) -> Result<V::Value>
