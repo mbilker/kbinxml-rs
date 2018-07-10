@@ -35,10 +35,8 @@ impl<'a> Struct<'a> {
     // The `Vec` cannot be borrowed as mutable in an `else` condition because
     // of the immutable borrow made in the previous if statement, so this is a
     // workaround
-    //if ser.hierarchy.is_empty() {
-      ser.hierarchy.push(name);
-      trace!("Struct::new(name: {}) => hierarchy: {:?}", name, ser.hierarchy);
-    //}
+    ser.hierarchy.push(name);
+    trace!("Struct::new(name: {}) => hierarchy: {:?}", name, ser.hierarchy);
 
     Ok(Self {
       ser,
@@ -59,19 +57,21 @@ impl<'a> SerializeStruct for Struct<'a> {
     self.ser.hierarchy.push(key);
     debug!("SerializeStruct(name: {})::serialize_field(key: {}) => hierarchy: {:?}", self.name, key, self.ser.hierarchy);
 
-    let hint = value.serialize(&mut *self.ser)?.ok_or(KbinErrorKind::MissingTypeHint)?;
-    let node_type = hint.node_type;
-    let array_mask = if hint.is_array { ARRAY_MASK } else { 0 };
-    debug!("SerializeStruct(name: {})::serialize_field(key: {}) => hint: {:?}", self.name, key, hint);
+    // Serialize methods that return `None` will not be written
+    if let Some(hint) = value.serialize(&mut *self.ser)? {
+      let node_type = hint.node_type;
+      let array_mask = if hint.is_array { ARRAY_MASK } else { 0 };
+      debug!("SerializeStruct(name: {})::serialize_field(key: {}) => hint: {:?}", self.name, key, hint);
 
-    // Struct handler outputs the `NodeStart` event by itself. Avoid repeating it.
-    if node_type != StandardType::NodeStart {
-      self.ser.node_buf.write_u8(node_type.id | array_mask).context(KbinErrorKind::DataWrite(node_type.name))?;
-      pack_sixbit(&mut *self.ser.node_buf, key)?;
+      // Struct handler outputs the `NodeStart` event by itself. Avoid repeating it.
+      if node_type != StandardType::NodeStart {
+        self.ser.node_buf.write_u8(node_type.id | array_mask).context(KbinErrorKind::DataWrite(node_type.name))?;
+        pack_sixbit(&mut *self.ser.node_buf, key)?;
 
-      // TODO: Make sure this does not prematurely end nodes
-      if node_type != StandardType::Attribute {
-        self.ser.node_buf.write_u8(StandardType::NodeEnd.id | ARRAY_MASK).context(KbinErrorKind::DataWrite("node end"))?;
+        // TODO: Make sure this does not prematurely end nodes
+        if node_type != StandardType::Attribute {
+          self.ser.node_buf.write_u8(StandardType::NodeEnd.id | ARRAY_MASK).context(KbinErrorKind::DataWrite("node end"))?;
+        }
       }
     }
 
