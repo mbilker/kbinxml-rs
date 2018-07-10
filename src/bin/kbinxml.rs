@@ -11,10 +11,11 @@ extern crate quick_xml;
 use std::env;
 use std::fs::File;
 use std::io::{Cursor, Error as IoError, ErrorKind as IoErrorKind, Read, Write, stdout};
+use std::net::Ipv4Addr;
 use std::str;
 
 use failure::Fail;
-use kbinxml::{KbinXml, Options, from_bytes, to_bytes};
+use kbinxml::{Ip4Addr, KbinXml, Options, from_bytes, to_bytes};
 use minidom::Element;
 use quick_xml::Writer;
 
@@ -24,6 +25,9 @@ pub struct Testing2 {
   hi: u16,
   ho: i16,
   vu: Vec<u8>,
+  opt: Option<u8>,
+  opt2: Option<u8>,
+  ip: Ip4Addr,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -154,6 +158,9 @@ fn main() -> std::io::Result<()> {
         hi: 32423,
         ho: 32000,
         vu: vec![33, 255, 254],
+        opt: None,
+        opt2: Some(111),
+        ip: Ip4Addr::new(Ipv4Addr::new(127, 0, 0, 1)),
       },
     };
     let bytes = to_bytes(&obj).unwrap();

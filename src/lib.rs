@@ -26,6 +26,7 @@ mod byte_buffer;
 mod compression;
 mod encoding_type;
 mod error;
+mod ip4;
 mod node_types;
 mod options;
 mod sixbit;
@@ -43,6 +44,7 @@ pub use encoding_type::EncodingType;
 pub use error::{KbinError, KbinErrorKind, Result};
 pub use options::Options;
 pub use de::from_bytes;
+pub use ip4::Ip4Addr;
 pub use ser::to_bytes;
 
 const SIGNATURE: u8 = 0xA0;
