@@ -29,15 +29,16 @@ mod error;
 mod ip4;
 mod node_types;
 mod options;
+mod reader;
 mod sixbit;
 
 mod de;
 mod ser;
 
-use byte_buffer::{ByteBufferRead, ByteBufferWrite};
-use compression::Compression;
+use byte_buffer::ByteBufferWrite;
 use node_types::StandardType;
-use sixbit::{pack_sixbit, unpack_sixbit};
+use reader::Reader;
+use sixbit::pack_sixbit;
 
 // Public exports
 pub use encoding_type::EncodingType;
@@ -75,56 +76,14 @@ impl KbinXml {
   }
 
   fn from_binary_internal(&mut self, stack: &mut Vec<Element>, input: &[u8]) -> Result<(Element, EncodingType)> {
-    // Node buffer starts from the beginning.
-    // Data buffer starts later after reading `len_data`.
-    let mut node_buf = ByteBufferRead::new(&input[..]);
+    let mut reader = Reader::new(input)?;
 
-    let signature = node_buf.read_u8().context(KbinErrorKind::HeaderRead("signature"))?;
-    if signature != SIGNATURE {
-      return Err(KbinErrorKind::HeaderValue("signature").into());
-    }
-
-    // TODO: support uncompressed
-    let compress_byte = node_buf.read_u8().context(KbinErrorKind::HeaderRead("compression"))?;
-    if compress_byte != SIG_COMPRESSED {
-      return Err(KbinErrorKind::HeaderValue("compression").into());
-    }
-
-    let compressed = Compression::from_byte(compress_byte)?;
-
-    let encoding_byte = node_buf.read_u8().context(KbinErrorKind::HeaderRead("encoding"))?;
-    let encoding_negation = node_buf.read_u8().context(KbinErrorKind::HeaderRead("encoding negation"))?;
-    let encoding = EncodingType::from_byte(encoding_byte)?;
-    if encoding_negation != 0xFF ^ encoding_byte {
-      return Err(KbinErrorKind::HeaderValue("encoding negation").into());
-    }
-
-    info!("signature: 0x{:x}", signature);
-    info!("compression: 0x{:x} ({:?})", compress_byte, compressed);
-    info!("encoding: 0x{:x} ({:?})", encoding_byte, encoding);
-
-    let len_node = node_buf.read_u32::<BigEndian>().context(KbinErrorKind::LenNodeRead)?;
-    info!("len_node: {} (0x{:x})", len_node, len_node);
-
-    // We have read 8 bytes so far, so offset the start of the data buffer from
-    // our current position.
-    let data_buf_start = len_node + 8;
-    let mut data_buf = ByteBufferRead::new(&input[(data_buf_start as usize)..]);
-
-    let len_data = data_buf.read_u32::<BigEndian>().context(KbinErrorKind::LenDataRead)?;
-    info!("len_data: {} (0x{:x})", len_data, len_data);
-
-    let node_buf_end = data_buf_start.into();
-    while node_buf.position() < node_buf_end {
-      let raw_node_type = node_buf.read_u8().context(KbinErrorKind::NodeTypeRead)?;
-      let is_array = raw_node_type & 64 == 64;
-      let node_type = raw_node_type & !64;
-
-      let xml_type = StandardType::from_u8(node_type);
-      debug!("raw_node_type: {}, node_type: {:?} ({}), is_array: {}", raw_node_type, xml_type, node_type, is_array);
+    while reader.node_buf.position() < reader.data_buf_start() {
+      let (xml_type, is_array) = reader.read_node_type()?;
 
       match xml_type {
-        StandardType::NodeEnd | StandardType::FileEnd => {
+        StandardType::NodeEnd |
+        StandardType::FileEnd => {
           if stack.len() > 1 {
             let node = stack.pop().expect("Stack must have last node");
             if let Some(to) = stack.last_mut() {
@@ -141,85 +100,92 @@ impl KbinXml {
         _ => {},
       };
 
-      let name = unpack_sixbit(&mut *node_buf)?;
+      let name = reader.read_node_identifier()?;
 
       if xml_type == StandardType::NodeStart {
         stack.push(Element::bare(name));
-      } else {
-        if xml_type != StandardType::Attribute {
-          stack.push(Element::bare(name.clone()));
-        }
-        if let Some(to) = stack.last_mut() {
-          match xml_type {
-            StandardType::Attribute => {
-              let val = data_buf.read_str(encoding)?;
-              debug!("attr name: {}, val: {}", name, val);
-              to.set_attr(name, val);
-            },
-            // Removing null bytes is *so much* fun.
-            //
-            // Handle String nodes separately to use the string reading logic
-            // which automatically removes trailing null bytes.
-            StandardType::String => {
-              to.set_attr("__type", xml_type.name);
+        continue;
+      }
 
-              let val = data_buf.read_str(encoding)?;
-              debug!("name: {}, val: {}", name, val);
-              to.append_text_node(val);
-            },
-            _ => {
-              to.set_attr("__type", xml_type.name);
+      if xml_type != StandardType::Attribute {
+        stack.push(Element::bare(name.clone()));
+      }
+      if let Some(to) = stack.last_mut() {
+        match xml_type {
+          StandardType::Attribute => {
+            let val = reader.read_string()?;
+            debug!("attr name: {}, val: {}", name, val);
+            to.set_attr(name, val);
+          },
+          StandardType::Binary => {
+            to.set_attr("__type", xml_type.name);
 
-              let type_size = xml_type.size;
-              let type_count = xml_type.count;
-              let (is_array, size) = if type_count == -1 {
-                (true, data_buf.read_u32::<BigEndian>().context(KbinErrorKind::BinaryLengthRead)?)
-              } else if is_array {
-                let node_size = type_size * type_count;
-                let arr_count = data_buf.read_u32::<BigEndian>().context(KbinErrorKind::ArrayLengthRead)? / node_size as u32;
-                to.set_attr("__count", arr_count);
+            /*
+            let size = reader.data_buf.read_u32::<BigEndian>().context(KbinErrorKind::BinaryLengthRead)?;
+            let data = reader.data_buf.get(size)?;
+            reader.data_buf.realign_reads(None)?;
+            */
+            let data = reader.read_bytes().context(KbinErrorKind::BinaryLengthRead)?;
 
-                let size = (node_size as u32) * arr_count;
-                (true, size)
-              } else {
-                (false, 1)
-              };
+            to.set_attr("__size", data.len());
 
-              debug!("type: {:?}, type_size: {}, type_count: {}, is_array: {}, size: {}",
-                xml_type,
-                type_size,
-                type_count,
-                is_array,
-                size);
+            let len = data.len() * 2;
+            let val = data.into_iter().fold(String::with_capacity(len), |mut val, x| {
+              write!(val, "{:02x}", x).expect("Failed to append hex char");
+              val
+            });
+            debug!("name: {}, string: {}", name, val);
+            to.append_text_node(val);
+          },
+          // Removing null bytes is *so much* fun.
+          //
+          // Handle String nodes separately to use the string reading logic
+          // which automatically removes trailing null bytes.
+          StandardType::String => {
+            to.set_attr("__type", xml_type.name);
 
-              let data = if is_array {
-                let data = data_buf.get(size)?;
-                data_buf.realign_reads(None)?;
+            let val = reader.read_string()?;
+            debug!("type: {:?}, is_array: {}, name: {}, val: {}", xml_type, is_array, name, val);
+            to.append_text_node(val);
+          },
+          _ => {
+            to.set_attr("__type", xml_type.name);
 
-                data
-              } else {
-                data_buf.get_aligned(*xml_type)?
-              };
+            let type_size = xml_type.size;
+            let type_count = xml_type.count;
+            let (is_array, size) = if is_array {
+              let node_size = type_size * type_count;
+              let arr_count = reader.read_u32().context(KbinErrorKind::ArrayLengthRead)? / node_size as u32;
+              to.set_attr("__count", arr_count);
 
-              debug!("data: 0x{:02x?}", data);
-              if xml_type == StandardType::Binary {
-                to.set_attr("__size", data.len());
+              let size = (node_size as u32) * arr_count;
+              (true, size)
+            } else {
+              (false, 1)
+            };
 
-                let len = data.len() * 2;
-                let val = data.into_iter().fold(String::with_capacity(len), |mut val, x| {
-                  write!(val, "{:02x}", x).expect("Failed to append hex char");
-                  val
-                });
-                debug!("name: {}, string: {}", name, val);
-                to.append_text_node(val);
-              } else {
-                let inner_value = xml_type.parse_bytes(&data)?;
-                debug!("name: {}, string: {}", name, inner_value);
-                to.append_text_node(inner_value);
-              }
-            },
-          };
-        }
+            debug!("type: {:?}, type_size: {}, type_count: {}, is_array: {}, size: {}",
+              xml_type,
+              type_size,
+              type_count,
+              is_array,
+              size);
+
+            let data = if is_array {
+              let data = reader.data_buf.get(size)?;
+              reader.data_buf.realign_reads(None)?;
+
+              data
+            } else {
+              reader.data_buf.get_aligned(*xml_type)?
+            };
+            debug!("data: 0x{:02x?}", data);
+
+            let inner_value = xml_type.parse_bytes(&data)?;
+            debug!("name: {}, string: {}", name, inner_value);
+            to.append_text_node(inner_value);
+          },
+        };
       }
     }
 
@@ -229,6 +195,7 @@ impl KbinXml {
     stack.truncate(1);
 
     let element = stack.pop().expect("Stack must have root node");
+    let encoding = reader.encoding();
     Ok((element, encoding))
   }
 
