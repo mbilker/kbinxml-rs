@@ -11,9 +11,11 @@ use node_types::StandardType;
 use error::{Error, KbinError, KbinErrorKind};
 use super::{ARRAY_MASK, SIGNATURE, SIG_COMPRESSED};
 
+mod custom;
 mod structure;
 mod tuple;
 
+use self::custom::Custom;
 use self::structure::Struct;
 use self::tuple::Tuple;
 
@@ -146,7 +148,7 @@ impl<'a> ser::Serializer for &'a mut Serializer {
 
   type SerializeSeq = Tuple<'a>;
   type SerializeTuple = Tuple<'a>;
-  type SerializeTupleStruct = Impossible<Self::Ok, Self::Error>;
+  type SerializeTupleStruct = Custom<'a>;
   type SerializeTupleVariant = Impossible<Self::Ok, Self::Error>;
   type SerializeMap = Self;
   type SerializeStruct = Struct<'a>;
@@ -258,7 +260,7 @@ impl<'a> ser::Serializer for &'a mut Serializer {
 
   fn serialize_tuple_struct(self, name: &'static str, len: usize) -> Result<Self::SerializeTupleStruct> {
     debug!("serialize_tuple_struct => name: {}, len: {}", name, len);
-    Err(Error::Message("tuple struct not supported".to_string()))
+    Custom::new(self, name, len)
   }
 
   fn serialize_tuple_variant(self, name: &'static str, variant_index: u32, variant: &'static str, len: usize) -> Result<Self::SerializeTupleVariant> {
