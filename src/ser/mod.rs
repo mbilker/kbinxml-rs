@@ -293,18 +293,14 @@ impl<'a> ser::SerializeMap for &'a mut Serializer {
     where T: ?Sized + Serialize
   {
     debug!("SerializeMap: serialize_key");
-    let hint = key.serialize(&mut **self)?;
-    debug!("SerializeMap: serialize_key, hint: {:?}", hint);
-    Ok(())
+    unimplemented!();
   }
 
   fn serialize_value<T>(&mut self, value: &T) -> Result<()>
     where T: ?Sized + Serialize
   {
     debug!("SerializeMap: serialize_value");
-    let hint = value.serialize(&mut **self)?;
-    debug!("SerializeMap: serialize_value, hint: {:?}", hint);
-    Ok(())
+    unimplemented!();
   }
 
   fn end(self) -> Result<Self::Ok> {
