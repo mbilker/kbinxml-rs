@@ -218,7 +218,16 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
 
   implement_type!(deserialize_bytes);
   implement_type!(deserialize_byte_buf);
-  implement_type!(deserialize_option);
+
+  fn deserialize_option<V>(self, visitor: V) -> Result<V::Value>
+    where V: Visitor<'de>
+  {
+    trace!("Deserializer::deserialize_option()");
+
+    // A `None` value will not occur because it will not be present in the input data
+    visitor.visit_some(self)
+  }
+
   implement_type!(deserialize_unit);
 
   fn deserialize_unit_struct<V>(self, name: &'static str, _visitor: V) -> Result<V::Value>
@@ -297,21 +306,13 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
 
     let value = visitor.visit_map(Struct::new(self, fields))?;
 
-    /*
-    let node_type = self.read_node()?;
-    if node_type != StandardType::NodeEnd {
-      return Err(KbinErrorKind::TypeMismatch(*StandardType::NodeEnd, *node_type).into());
-    }
-    */
-
     Ok(value)
   }
 
   fn deserialize_enum<V>(self, name: &'static str, variants: &'static [&'static str], _visitor: V) -> Result<V::Value>
     where V: Visitor<'de>
   {
-    trace!("Deserializer::deserialize_enum(name: {:?})", name);
-    trace!("Deserializer::deserialize_enum() => variants: {:?}", variants);
+    trace!("Deserializer::deserialize_enum(name: {:?}, variants: {:?})", name, variants);
     unimplemented!();
   }
 
