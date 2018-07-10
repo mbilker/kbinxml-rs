@@ -10,7 +10,7 @@ pub struct Struct<'a, 'de: 'a> {
 }
 
 impl<'de, 'a> Struct<'a, 'de> {
-  pub fn new(de: &'a mut Deserializer<'de>, fields: &'static [&'static str]) -> Self {
+  pub fn new(de: &'a mut Deserializer<'de>, _fields: &'static [&'static str]) -> Self {
     Self {
       de,
       //fields,
