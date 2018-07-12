@@ -103,6 +103,9 @@ pub enum KbinErrorKind {
 
   #[fail(display = "Type mismatch, expected: {}, found: {}", _0, _1)]
   TypeMismatch(KbinType, KbinType),
+
+  #[fail(display = "Invalid state")]
+  InvalidState,
 }
 
 impl fmt::Display for KbinError {

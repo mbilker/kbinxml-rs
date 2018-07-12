@@ -24,25 +24,37 @@ impl<'de, 'a> MapAccess<'de> for Struct<'a, 'de> {
   fn next_key_seed<K>(&mut self, seed: K) -> Result<Option<K::Value>>
     where K: DeserializeSeed<'de>
   {
-    trace!("MapAccess::next_key_seed()");
+    trace!("--> <Struct as MapAccess>::next_key_seed()");
 
-    let node_type = self.de.read_node()?;
-    debug!("MapAccess::next_key_seed() => node_type: {:?}", node_type);
+    let (node_type, _is_array) = self.de.reader.read_node_type()?;
+    debug!("Struct::next_key_seed() => node_type: {:?}", node_type);
 
     if node_type == StandardType::NodeEnd {
-      trace!("MapAccess::next_key_seed() => end of map");
+      trace!("Struct::next_key_seed() => end of map");
       return Ok(None);
     }
 
     let value = seed.deserialize(&mut *self.de).map(Some)?;
 
-    if node_type != StandardType::NodeStart {
-      // Consume the end node and do a sanity check
-      let node_type = self.de.read_node()?;
-      if node_type != StandardType::NodeEnd {
-        return Err(KbinErrorKind::TypeMismatch(*StandardType::NodeEnd, *node_type).into());
-      }
+    match node_type {
+      StandardType::NodeStart => {
+        debug!("Struct::next_key_seed() => got a node start!");
+      },
+      StandardType::Attribute => {
+        debug!("Struct::next_key_seed() => got an attribute!");
+      },
+      _ => {
+        // Consume the end node and do a sanity check
+        let (node_type, _is_array) = self.de.reader.read_node_type()?;
+        if node_type != StandardType::NodeEnd {
+          return Err(KbinErrorKind::TypeMismatch(*StandardType::NodeEnd, *node_type).into());
+        }
+      },
     }
+
+    // Store the current node type on the stack for stateful handling based on
+    // the current node type
+    self.de.node_stack.push(node_type);
 
     Ok(value)
   }
@@ -50,7 +62,12 @@ impl<'de, 'a> MapAccess<'de> for Struct<'a, 'de> {
   fn next_value_seed<V>(&mut self, seed: V) -> Result<V::Value>
     where V: DeserializeSeed<'de>
   {
-    debug!("MapAccess::next_value_seed()");
-    seed.deserialize(&mut *self.de)
+    debug!("--> <Struct as MapAccess>::next_value_seed()");
+    let value = seed.deserialize(&mut *self.de)?;
+
+    let popped = self.de.node_stack.pop();
+    debug!("<Struct as MapAccess>::next_value_seed() => popped: {:?}, node_stack: {:?}", popped, self.de.node_stack);
+
+    Ok(value)
   }
 }
