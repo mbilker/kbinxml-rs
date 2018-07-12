@@ -139,6 +139,9 @@ fn main() -> std::io::Result<()> {
       let options = Options::default();
       let buf = KbinXml::to_binary_with_options(options, &element).map_err(display_err)?;
       eprintln!("data: {:02x?}", buf);
+
+      let mut stdout = stdout();
+      stdout.lock().write_all(&buf)?;
     }
 
     /*
