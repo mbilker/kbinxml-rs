@@ -146,10 +146,11 @@ impl KbinWrapperType<InvalidConverter> for InvalidConverter {
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub struct KbinType {
   pub id: u8,
+  pub konst: &'static str,
   pub name: &'static str,
   pub alt_name: Option<&'static str>,
-  pub size: i8,
-  pub count: i8
+  pub size: u8,
+  pub count: u8
 }
 
 impl KbinType {
@@ -190,23 +191,20 @@ impl KbinType {
 
     let mut result = String::new();
 
-    if self.count == -1 {
-      panic!("Tried to parse special type: {}", self.name);
-    } else if self.count == 0 {
-      // Do nothing
-    } else if self.count == 1 {
-      // May have a node (i.e. Ip4) that is only a single count, but it
-      // can be part of an array
-      if arr_count == 1 {
-        T::from_kbin_bytes(&mut result, input)?;
-      } else {
-        self.parse_array::<T>(&mut result, input, arr_count)?;
-      }
-    } else if self.count > 1 {
-      self.parse_array::<T>(&mut result, input, arr_count)?;
-    } else {
-      unimplemented!();
-    }
+    match self.count {
+      0 => panic!("Tried to parse special type: {}", self.name),
+      1 => {
+        // May have a node (i.e. Ip4) that is only a single count, but it
+        // can be part of an array
+        if arr_count == 1 {
+          T::from_kbin_bytes(&mut result, input)?;
+        } else {
+          self.parse_array::<T>(&mut result, input, arr_count)?;
+        }
+      },
+      count if count > 1 => self.parse_array::<T>(&mut result, input, arr_count)?,
+      _ => unimplemented!(),
+    };
 
     Ok(result)
   }
@@ -234,19 +232,20 @@ impl KbinType {
 
     let mut output = Vec::new();
 
-    if self.count == -1 {
-      panic!("Tried to write special type: {}", self.name);
-    } else if self.count == 1 {
-      // May have a node (i.e. Ip4) that is only a single count, but it
-      // can be part of an array
-      if arr_count == 1 {
-        T::to_kbin_bytes(&mut output, input)?;
-      } else {
-        self.to_array::<T>(&mut output, input, arr_count)?;
-      }
-    } else if self.count > 1 {
-      self.to_array::<T>(&mut output, input, arr_count)?;
-    }
+    match self.count {
+      0 => panic!("Tried to write special type: {}", self.name),
+      1 => {
+        // May have a node (i.e. Ip4) that is only a single count, but it
+        // can be part of an array
+        if arr_count == 1 {
+          T::to_kbin_bytes(&mut output, input)?;
+        } else {
+          self.to_array::<T>(&mut output, input, arr_count)?;
+        }
+      },
+      count if count > 1 => self.to_array::<T>(&mut output, input, arr_count)?,
+      _ => unimplemented!(),
+    };
 
     Ok(output)
   }
@@ -254,7 +253,7 @@ impl KbinType {
 
 impl fmt::Display for KbinType {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    write!(f, "{}", self.name)
+    write!(f, "{} ({})", self.konst, self.name)
   }
 }
 
@@ -274,6 +273,7 @@ macro_rules! construct_types {
     $(
       pub const $upcase: KbinType = KbinType {
         id: $id,
+        konst: stringify!($konst),
         name: $name,
         alt_name: $alt_name,
         size: $size,
@@ -340,8 +340,8 @@ construct_types! {
   ( 7, U32,      U32,      "u32",    None,           4, 1, u32);
   ( 8, S64,      S64,      "s64",    None,           8, 1, i64);
   ( 9, U64,      U64,      "u64",    None,           8, 1, u64);
-  (10, BINARY,   Binary,   "bin",    Some("binary"), 1, -1, DummyConverter);
-  (11, STRING,   String,   "str",    Some("string"), 1, -1, DummyConverter);
+  (10, BINARY,   Binary,   "bin",    Some("binary"), 1, 0, DummyConverter);
+  (11, STRING,   String,   "str",    Some("string"), 1, 0, DummyConverter);
   (12, IP4,      Ip4,      "ip4",    None,           4, 1, Ip4); // Using size of 4 rather than count of 4
   (13, TIME,     Time,     "time",   None,           4, 1, u32);
   (14, FLOAT,    Float,    "float",  Some("f"),      4, 1, f32);
