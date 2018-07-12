@@ -12,8 +12,8 @@ use super::{ARRAY_MASK, SIGNATURE, SIG_COMPRESSED};
 pub struct Reader<'buf> {
   encoding: EncodingType,
 
-  pub(crate) node_buf: ByteBufferRead<&'buf [u8]>,
-  pub(crate) data_buf: ByteBufferRead<&'buf [u8]>,
+  pub(crate) node_buf: ByteBufferRead<'buf>,
+  pub(crate) data_buf: ByteBufferRead<'buf>,
 
   data_buf_start: u64,
 }
@@ -81,19 +81,29 @@ impl<'buf> Reader<'buf> {
     self.data_buf_start
   }
 
-  pub fn read_node_type(&mut self) -> Result<(StandardType, bool)> {
-    let raw_node_type = self.node_buf.read_u8().context(KbinErrorKind::NodeTypeRead)?;
+  fn parse_node_type(&self, raw_node_type: u8) -> Result<(StandardType, bool)> {
     let is_array = raw_node_type & ARRAY_MASK == ARRAY_MASK;
     let node_type = raw_node_type & !ARRAY_MASK;
 
     let xml_type = StandardType::from_u8(node_type);
-    debug!("Reader::read_node_type() => raw_node_type: {}, node_type: {:?} ({}), is_array: {}",
+    debug!("Reader::parse_node_type() => raw_node_type: {}, node_type: {:?} ({}), is_array: {}",
       raw_node_type,
       xml_type,
       node_type,
       is_array);
 
     Ok((xml_type, is_array))
+  }
+
+  pub fn peek_node_type(&self) -> Result<(StandardType, bool)> {
+    let pos = self.node_buf.position();
+    let raw_node_type = self.node_buf.get_ref()[pos as usize];
+    self.parse_node_type(raw_node_type)
+  }
+
+  pub fn read_node_type(&mut self) -> Result<(StandardType, bool)> {
+    let raw_node_type = self.node_buf.read_u8().context(KbinErrorKind::NodeTypeRead)?;
+    self.parse_node_type(raw_node_type)
   }
 
   pub fn read_node_identifier(&mut self) -> Result<String> {
@@ -124,9 +134,8 @@ impl<'buf> Reader<'buf> {
     Ok(value)
   }
 
-  // TODO: make a more intelligent reader to avoid allocating the Vec
   #[inline]
-  pub fn read_bytes(&mut self) -> Result<Vec<u8>> {
+  pub fn read_bytes(&mut self) -> Result<&'buf [u8]> {
     self.data_buf.buf_read()
   }
 }

@@ -50,19 +50,19 @@ impl EncodingType {
   ///
   /// A `Some` value indicates an encoding should be used from the `encoding`
   /// crate. A `None` value indicates Rust's own UTF-8 handling should be used.
-  pub fn decode_bytes(&self, input: Vec<u8>) -> Result<String, KbinError> {
+  pub fn decode_bytes(&self, input: &[u8]) -> Result<String, KbinError> {
     let decoder_fail = |e| {
       format_err!("{}", e).context(KbinErrorKind::Encoding)
     };
 
     let result = match *self {
       EncodingType::None |
-      EncodingType::UTF_8 => String::from_utf8(input)?,
+      EncodingType::UTF_8 => String::from_utf8(input.to_vec())?,
 
-      EncodingType::ASCII      => ASCII.decode(&input, DecoderTrap::Strict).map_err(decoder_fail)?,
-      EncodingType::ISO_8859_1 => ISO_8859_1.decode(&input, DecoderTrap::Strict).map_err(decoder_fail)?,
-      EncodingType::EUC_JP     => EUC_JP.decode(&input, DecoderTrap::Strict).map_err(decoder_fail)?,
-      EncodingType::SHIFT_JIS  => WINDOWS_31J.decode(&input, DecoderTrap::Strict).map_err(decoder_fail)?,
+      EncodingType::ASCII      => ASCII.decode(input, DecoderTrap::Strict).map_err(decoder_fail)?,
+      EncodingType::ISO_8859_1 => ISO_8859_1.decode(input, DecoderTrap::Strict).map_err(decoder_fail)?,
+      EncodingType::EUC_JP     => EUC_JP.decode(input, DecoderTrap::Strict).map_err(decoder_fail)?,
+      EncodingType::SHIFT_JIS  => WINDOWS_31J.decode(input, DecoderTrap::Strict).map_err(decoder_fail)?,
     };
 
     Ok(result)

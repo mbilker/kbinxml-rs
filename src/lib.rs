@@ -17,7 +17,7 @@ extern crate serde;
 use std::fmt::Write as FmtWrite;
 use std::io::{Cursor, Write};
 
-use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
+use byteorder::{BigEndian, WriteBytesExt};
 use failure::ResultExt;
 use minidom::Element;
 use rustc_hex::FromHex;
