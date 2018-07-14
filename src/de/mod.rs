@@ -126,7 +126,10 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
 
     let value = match node_type {
       StandardType::Attribute |
-      StandardType::NodeStart => self.deserialize_identifier(visitor),
+      StandardType::NodeStart => {
+        let _ = self.reader.read_node_type()?;
+        self.deserialize_identifier(visitor)
+      },
       StandardType::Binary => self.deserialize_bytes(visitor),
       StandardType::String => self.deserialize_string(visitor),
       StandardType::U8 => self.deserialize_u8(visitor),
@@ -214,7 +217,7 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
   {
     trace!("Deserializer::deserialize_seq()");
 
-    let node_type = self.node_stack.last().ok_or(KbinErrorKind::InvalidState)?.clone();
+    let node_type = *self.node_stack.last().ok_or(KbinErrorKind::InvalidState)?;
 
     // If the last node type on the stack is a `NodeStart` then we are likely
     // collecting a list of structs

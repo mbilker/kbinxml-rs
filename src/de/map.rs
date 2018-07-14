@@ -30,19 +30,7 @@ impl<'de, 'a> MapAccess<'de> for Map<'a, 'de> {
       return Ok(None);
     }
 
-    let value = seed.deserialize(&mut *self.de).map(Some)?;
-
-    /*
-    if node_type != StandardType::NodeStart {
-      // Consume the end node and do a sanity check
-      let node_type = self.de.read_node()?;
-      if node_type != StandardType::NodeEnd {
-        return Err(KbinErrorKind::TypeMismatch(*StandardType::NodeEnd, *node_type).into());
-      }
-    }
-    */
-
-    Ok(value)
+    seed.deserialize(&mut *self.de).map(Some)
   }
 
   fn next_value_seed<V>(&mut self, seed: V) -> Result<V::Value>
