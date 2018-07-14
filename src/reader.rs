@@ -1,3 +1,5 @@
+use std::io::{Seek, SeekFrom};
+
 use byteorder::{BigEndian, ReadBytesExt};
 use failure::ResultExt;
 
@@ -16,6 +18,9 @@ pub struct Reader<'buf> {
   pub(crate) data_buf: ByteBufferRead<'buf>,
 
   data_buf_start: u64,
+
+  last_node_type: Option<(StandardType, bool)>,
+  last_node_identifier: Option<String>,
 }
 
 impl<'buf> Reader<'buf> {
@@ -68,6 +73,9 @@ impl<'buf> Reader<'buf> {
       data_buf,
 
       data_buf_start: data_buf_start as u64,
+
+      last_node_type: None,
+      last_node_identifier: None,
     })
   }
 
@@ -79,6 +87,16 @@ impl<'buf> Reader<'buf> {
   #[inline]
   pub fn data_buf_start(&self) -> u64 {
     self.data_buf_start
+  }
+
+  #[inline]
+  pub fn last_node_type(&self) -> Option<(StandardType, bool)> {
+    self.last_node_type
+  }
+
+  #[inline]
+  pub fn last_identifier(&self) -> Option<&str> {
+    self.last_node_identifier.as_ref().map(String::as_str)
   }
 
   fn parse_node_type(&self, raw_node_type: u8) -> Result<(StandardType, bool)> {
@@ -101,14 +119,30 @@ impl<'buf> Reader<'buf> {
     self.parse_node_type(raw_node_type)
   }
 
+  pub fn peek_node_identifier(&mut self) -> Result<String> {
+    let old_pos = self.node_buf.position();
+    let _raw_node_type = self.node_buf.read_u8().context(KbinErrorKind::NodeTypeRead)?;
+    let value = unpack_sixbit(&mut *self.node_buf)?;
+
+    let size = self.node_buf.position() - old_pos;
+    self.node_buf.seek(SeekFrom::Start(old_pos)).context(KbinErrorKind::DataRead(size as usize))?;
+
+    Ok(value)
+  }
+
   pub fn read_node_type(&mut self) -> Result<(StandardType, bool)> {
     let raw_node_type = self.node_buf.read_u8().context(KbinErrorKind::NodeTypeRead)?;
-    self.parse_node_type(raw_node_type)
+    let value = self.parse_node_type(raw_node_type)?;
+    self.last_node_type = Some(value);
+
+    Ok(value)
   }
 
   pub fn read_node_identifier(&mut self) -> Result<String> {
     let value = unpack_sixbit(&mut *self.node_buf)?;
     debug!("Reader::read_node_identifier() => value: {:?}", value);
+
+    self.last_node_identifier = Some(value.clone());
 
     Ok(value)
   }
