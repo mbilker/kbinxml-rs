@@ -74,12 +74,8 @@ pub fn unpack_sixbit<T>(reader: &mut T) -> Result<String, KbinError>
     let bits = bits.clone();
     let mask = mask.clone();
     let current = (bits >> shift) & mask;
-    //println!("current: 0b{:b} ({})", current, current);
 
-    let entry = CHAR_MAP[current.to_usize().unwrap()];
-    //println!("entry: {} ({})", entry, entry as char);
-
-    entry as char
+    CHAR_MAP[current.to_usize().unwrap()] as char
   }).collect();
 
   debug!("result: {}", result);
