@@ -12,11 +12,11 @@ pub struct Seq<'a, 'de: 'a> {
 }
 
 impl<'de, 'a> Seq<'a, 'de> {
-  pub fn new(de: &'a mut Deserializer<'de>, len: Option<usize>) -> Self {
+  pub fn new(de: &'a mut Deserializer<'de>, len: Option<usize>) -> Result<Self> {
     trace!("Seq::new(len: {:?})", len);
 
     let known_identifier = if len.is_none() {
-      let value = de.reader.last_identifier().expect("known identifier null").into();
+      let value = de.reader.last_identifier().ok_or(KbinErrorKind::InvalidState)?.into();
       debug!("Seq::new(len: {:?}) => known identifier: {:?}", len, value);
 
       Some(value)
@@ -24,12 +24,12 @@ impl<'de, 'a> Seq<'a, 'de> {
       None
     };
 
-    Self {
+    Ok(Self {
       de,
       index: 0,
       len,
       known_identifier,
-    }
+    })
   }
 
   fn is_end(&mut self) -> Result<bool> {

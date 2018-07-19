@@ -34,7 +34,7 @@ impl<'de, 'a> MapAccess<'de> for Struct<'a, 'de> {
       return Ok(None);
     }
 
-    let value = seed.deserialize(&mut *self.de).map(Some)?;
+    let key = seed.deserialize(&mut *self.de).map(Some)?;
 
     match node_type {
       StandardType::NodeStart => {
@@ -56,7 +56,7 @@ impl<'de, 'a> MapAccess<'de> for Struct<'a, 'de> {
     // the current node type
     self.de.node_stack.push(node_type);
 
-    Ok(value)
+    Ok(key)
   }
 
   fn next_value_seed<V>(&mut self, seed: V) -> Result<V::Value>

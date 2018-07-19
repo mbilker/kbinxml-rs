@@ -45,8 +45,8 @@ impl<'de> Deserializer<'de> {
 
     Ok(Self {
       read_mode: ReadMode::Single,
-      first_struct: true,
       node_stack: Vec::new(),
+      first_struct: true,
       reader,
     })
   }
@@ -217,12 +217,12 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
   {
     trace!("Deserializer::deserialize_seq()");
 
-    let node_type = *self.node_stack.last().ok_or(KbinErrorKind::InvalidState)?;
+    let (node_type, _) = self.reader.last_node_type().ok_or(KbinErrorKind::InvalidState)?;
 
     // If the last node type on the stack is a `NodeStart` then we are likely
     // collecting a list of structs
     let value = if node_type == StandardType::NodeStart {
-      visitor.visit_seq(Seq::new(self, None))?
+      visitor.visit_seq(Seq::new(self, None)?)?
     } else {
       // TODO: add size check against len
       let size = self.reader.read_u32().context(KbinErrorKind::ArrayLengthRead)?;
@@ -231,7 +231,7 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
       // Changes to `self.read_mode` must stay here as `next_element_seed` is not
       // called past the length of the array to reset the read mode
       self.read_mode = ReadMode::Array;
-      let value = visitor.visit_seq(Seq::new(self, Some(size as usize)))?;
+      let value = visitor.visit_seq(Seq::new(self, Some(size as usize))?)?;
       self.read_mode = ReadMode::Single;
       self.reader.data_buf.realign_reads(None)?;
 
@@ -255,7 +255,7 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     trace!("Deserializer::deserialize_tuple_struct(name: {:?}, len: {})", name, len);
 
     self.read_mode = ReadMode::Array;
-    let value = visitor.visit_seq(Seq::new(self, Some(len)))?;
+    let value = visitor.visit_seq(Seq::new(self, Some(len))?)?;
     self.read_mode = ReadMode::Single;
     self.reader.data_buf.realign_reads(None)?;
 
