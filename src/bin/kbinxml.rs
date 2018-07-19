@@ -15,7 +15,7 @@ use std::net::Ipv4Addr;
 use std::str;
 
 use failure::Fail;
-use kbinxml::{Ip4Addr, KbinXml, Options, from_bytes, to_bytes};
+use kbinxml::{Ip4Addr, KbinXml, Options, Printer, from_bytes, to_bytes};
 use minidom::Element;
 use quick_xml::Writer;
 
@@ -33,6 +33,7 @@ pub struct Testing2 {
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename = "test")]
 pub struct Testing {
+  #[serde(rename = "attr_the_attr")] the_attr: String,
   hi: u8,
   ok: [u8; 3],
   hhh: (u8, u8),
@@ -128,6 +129,7 @@ fn main() -> std::io::Result<()> {
       //println!("element: {:#?}", element);
       let text_original = to_text(&element)?;
       display_buf(&text_original)?;
+      Printer::run(&contents).unwrap();
 
       let options = Options::with_encoding(encoding_original);
       let buf = KbinXml::to_binary_with_options(options, &element).map_err(display_err)?;
@@ -139,6 +141,7 @@ fn main() -> std::io::Result<()> {
       let options = Options::default();
       let buf = KbinXml::to_binary_with_options(options, &element).map_err(display_err)?;
       eprintln!("data: {:02x?}", buf);
+      Printer::run(&buf).unwrap();
 
       let mut stdout = stdout();
       stdout.lock().write_all(&buf)?;
@@ -152,6 +155,7 @@ fn main() -> std::io::Result<()> {
     */
   } else {
     let obj = Testing {
+      the_attr: "the_value".to_string(),
       hi: 12,
       ok: [12, 24, 48],
       hhh: (55, 66),
@@ -172,8 +176,12 @@ fn main() -> std::io::Result<()> {
     let mut file = File::create("testing.kbin")?;
     file.write_all(&bytes)?;
 
-    let obj2: Testing = from_bytes(&bytes).unwrap();
-    eprintln!("obj2: {:#?}", obj2);
+    match from_bytes::<Testing>(&bytes) {
+      Ok(obj2) => eprintln!("obj2: {:#?}", obj2),
+      Err(e) => eprintln!("Unable to parse generated kbin back to struct: {:#?}", e),
+    };
+
+    Printer::run(&bytes).unwrap();
   }
   Ok(())
 }

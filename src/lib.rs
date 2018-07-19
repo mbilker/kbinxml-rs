@@ -29,6 +29,7 @@ mod error;
 mod ip4;
 mod node_types;
 mod options;
+mod printer;
 mod reader;
 mod sixbit;
 
@@ -42,6 +43,7 @@ use sixbit::pack_sixbit;
 
 // Public exports
 pub use encoding_type::EncodingType;
+pub use printer::Printer;
 pub use error::{KbinError, KbinErrorKind, Result};
 pub use options::Options;
 pub use de::from_bytes;
@@ -120,13 +122,7 @@ impl KbinXml {
           StandardType::Binary => {
             to.set_attr("__type", xml_type.name);
 
-            /*
-            let size = reader.data_buf.read_u32::<BigEndian>().context(KbinErrorKind::BinaryLengthRead)?;
-            let data = reader.data_buf.get(size)?;
-            reader.data_buf.realign_reads(None)?;
-            */
             let data = reader.read_bytes().context(KbinErrorKind::BinaryLengthRead)?;
-
             to.set_attr("__size", data.len());
 
             let len = data.len() * 2;
@@ -215,7 +211,7 @@ impl KbinXml {
 
     let (array_mask, count) = match input.attr("__count") {
       Some(count) => {
-        let count = count.parse::<i8>().context(KbinErrorKind::StringParse("array count"))?;
+        let count = count.parse::<u32>().context(KbinErrorKind::StringParse("array count"))?;
         debug!("write_node => __count = {}", count);
         (ARRAY_MASK, count)
       },
