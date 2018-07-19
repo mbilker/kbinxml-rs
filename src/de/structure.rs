@@ -10,11 +10,8 @@ pub struct Struct<'a, 'de: 'a> {
 }
 
 impl<'de, 'a> Struct<'a, 'de> {
-  pub fn new(de: &'a mut Deserializer<'de>, _fields: &'static [&'static str]) -> Self {
-    Self {
-      de,
-      //fields,
-    }
+  pub fn new(de: &'a mut Deserializer<'de>) -> Self {
+    Self { de }
   }
 }
 
@@ -30,7 +27,7 @@ impl<'de, 'a> MapAccess<'de> for Struct<'a, 'de> {
     debug!("Struct::next_key_seed() => node_type: {:?}", node_type);
 
     if node_type == StandardType::NodeEnd {
-      trace!("Struct::next_key_seed() => end of map");
+      debug!("<-- <Struct as MapAccess>::next_key_seed() => end of map");
       return Ok(None);
     }
 

@@ -8,11 +8,9 @@ use error::{Error, KbinErrorKind};
 use node_types::StandardType;
 use reader::Reader;
 
-mod map;
 mod seq;
 mod structure;
 
-use self::map::Map;
 use self::seq::Seq;
 use self::structure::Struct;
 
@@ -280,7 +278,7 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     let (node_type, _, name) = self.read_node_with_name()?;
     debug!("Deserializer::deserialize_map() => node_type: {:?}, name: {:?}", node_type, name);
 
-    visitor.visit_map(Map::new(self))
+    visitor.visit_map(Struct::new(self))
   }
 
   fn deserialize_struct<V>(self, name: &'static str, fields: &'static [&'static str], visitor: V) -> Result<V::Value>
@@ -301,7 +299,7 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     }
     self.first_struct = false;
 
-    let value = visitor.visit_map(Struct::new(self, fields))?;
+    let value = visitor.visit_map(Struct::new(self))?;
 
     Ok(value)
   }
