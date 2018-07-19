@@ -9,13 +9,16 @@ use byte_buffer::ByteBufferWrite;
 use encoding_type::EncodingType;
 use node_types::StandardType;
 use error::{Error, KbinError, KbinErrorKind};
+use sixbit::pack_sixbit;
 use super::{ARRAY_MASK, SIGNATURE, SIG_COMPRESSED};
 
 mod custom;
+mod map;
 mod structure;
 mod tuple;
 
 use self::custom::Custom;
+use self::map::Map;
 use self::structure::Struct;
 use self::tuple::Tuple;
 
@@ -27,6 +30,7 @@ pub type Result<T> = StdResult<T, Error>;
 pub(crate) enum WriteMode {
   Single,
   Array,
+  Identifier,
 }
 
 pub struct Serializer {
@@ -97,6 +101,19 @@ impl Serializer {
 
     Ok(output)
   }
+
+  fn write_node(&mut self, hint: TypeHint) -> Result<()> {
+    let node_type = hint.node_type;
+    let array_mask = if hint.is_array { ARRAY_MASK } else { 0 };
+    self.node_buf.write_u8(node_type.id | array_mask).context(KbinErrorKind::DataWrite(node_type.name))?;
+
+    Ok(())
+  }
+
+  fn write_identifier(&mut self, key: &str) -> Result<()> {
+    pack_sixbit(&mut *self.node_buf, key)?;
+    Ok(())
+  }
 }
 
 // `straight_impl` passes a single element array to `write_aligned` where
@@ -105,7 +122,7 @@ impl Serializer {
 macro_rules! ser_type {
   (byte; $inner_type:ident, $method:ident, $standard_type:ident $($cast:tt)*) => {
     fn $method(self, value: $inner_type) -> Result<Self::Ok> {
-      debug!(concat!(stringify!($method), " => value: {}"), value);
+      trace!(concat!("Serializer::", stringify!($method), " => value: {}"), value);
 
       let node_type = StandardType::$standard_type;
       match self.write_mode {
@@ -115,7 +132,8 @@ macro_rules! ser_type {
         },
         WriteMode::Array => {
           self.data_buf.write_u8(value $($cast)*).context(KbinErrorKind::DataWrite(node_type.name))?;
-        }
+        },
+        WriteMode::Identifier => return Err(KbinErrorKind::InvalidState.into()),
       };
 
       Ok(Some(TypeHint::from_type(node_type)))
@@ -123,7 +141,7 @@ macro_rules! ser_type {
   };
   (large; $inner_type:ident, $method:ident, $write_method:ident, $standard_type:ident $($cast:tt)*) => {
     fn $method(self, value: $inner_type) -> Result<Self::Ok> {
-      debug!(concat!(stringify!($method), " => value: {}"), value);
+      trace!(concat!("Serializer::", stringify!($method), " => value: {}"), value);
 
       let node_type = StandardType::$standard_type;
       match self.write_mode {
@@ -134,7 +152,8 @@ macro_rules! ser_type {
         },
         WriteMode::Array => {
           self.data_buf.$write_method::<BigEndian>(value $($cast)*).context(KbinErrorKind::DataWrite(node_type.name))?;
-        }
+        },
+        WriteMode::Identifier => return Err(KbinErrorKind::InvalidState.into()),
       };
 
       Ok(Some(TypeHint::from_type(node_type)))
@@ -150,7 +169,7 @@ impl<'a> ser::Serializer for &'a mut Serializer {
   type SerializeTuple = Tuple<'a>;
   type SerializeTupleStruct = Custom<'a>;
   type SerializeTupleVariant = Impossible<Self::Ok, Self::Error>;
-  type SerializeMap = Self;
+  type SerializeMap = Map<'a>;
   type SerializeStruct = Struct<'a>;
   type SerializeStructVariant = Impossible<Self::Ok, Self::Error>;
 
@@ -171,23 +190,39 @@ impl<'a> ser::Serializer for &'a mut Serializer {
   ser_type!(large; f64, serialize_f64, write_f64, Double);
 
   fn serialize_char(self, value: char) -> Result<Self::Ok> {
-    debug!("serialize_char => value: {}", value);
+    trace!("Serializer::serialize_char(value: {})", value);
     self.data_buf.write_str(self.encoding, &value.to_string())?;
 
     Ok(Some(TypeHint::from_type(StandardType::String)))
   }
 
   fn serialize_str(self, value: &str) -> Result<Self::Ok> {
-    debug!("serialize_str => value: {}", value);
-    self.data_buf.write_str(self.encoding, value)?;
+    trace!("Serializer::serialize_str(value: {})", value);
 
-    Ok(Some(TypeHint::from_type(StandardType::String)))
+    let hint = if value.starts_with("attr_") {
+      let key = &value["attr_".len()..];
+      debug!("Serializer::serialize_str(key: {}) => writing as attribute", key);
+
+      self.write_identifier(key)?;
+      Some(TypeHint::from_type(StandardType::Attribute))
+    } else if self.write_mode == WriteMode::Identifier {
+      debug!("Serializer::serialize_str(identifier: {}) => writing as identifier", value);
+
+      self.write_identifier(value)?;
+      Some(TypeHint::from_type(StandardType::String))
+    } else {
+      self.data_buf.write_str(self.encoding, value)?;
+
+      Some(TypeHint::from_type(StandardType::String))
+    };
+
+    Ok(hint)
   }
 
   // Binary data is handled separately from other array types.
   // Binary data should also be the only element of its node.
   fn serialize_bytes(self, value: &[u8]) -> Result<Self::Ok> {
-    debug!("serialize_bytes => value: {:02x?}", value);
+    trace!("Serializer::serialize_bytes(value: {:02x?})", value);
     let node_type = StandardType::Binary;
     let size = (value.len() as u32) * (node_type.size as u32);
     self.data_buf.write_u32::<BigEndian>(size).context(KbinErrorKind::DataWrite("binary node size"))?;
@@ -206,9 +241,8 @@ impl<'a> ser::Serializer for &'a mut Serializer {
   fn serialize_some<T>(self, v: &T) -> Result<Self::Ok>
     where T: ?Sized + Serialize
   {
-    debug!("serialize_some");
-    let hint = v.serialize(&mut *self)?;
-    Ok(hint)
+    trace!("Serializer::serialize_some()");
+    v.serialize(&mut *self)
   }
 
   // TODO: Figure out a good way to serialize this
@@ -269,8 +303,8 @@ impl<'a> ser::Serializer for &'a mut Serializer {
   }
 
   fn serialize_map(self, len: Option<usize>) -> Result<Self::SerializeMap> {
-    debug!("serialize_map => len: {:?}", len);
-    Ok(self)
+    trace!("Serializer::serialize_map(len: {:?})", len);
+    Map::new(self)
   }
 
   fn serialize_struct(self, name: &'static str, len: usize) -> Result<Self::SerializeStruct> {
@@ -282,29 +316,5 @@ impl<'a> ser::Serializer for &'a mut Serializer {
   fn serialize_struct_variant(self, name: &'static str, variant_index: u32, variant: &'static str, len: usize) -> Result<Self::SerializeStructVariant> {
     debug!("serialize_struct_variant => name: {}, variant_index: {}, variant: {}, len: {}", name, variant_index, variant, len);
     Err(Error::Message("struct variant not supported".to_string()))
-  }
-}
-
-impl<'a> ser::SerializeMap for &'a mut Serializer {
-  type Ok = Option<TypeHint>;
-  type Error = Error;
-
-  fn serialize_key<T>(&mut self, _key: &T) -> Result<()>
-    where T: ?Sized + Serialize
-  {
-    debug!("SerializeMap: serialize_key");
-    unimplemented!();
-  }
-
-  fn serialize_value<T>(&mut self, _value: &T) -> Result<()>
-    where T: ?Sized + Serialize
-  {
-    debug!("SerializeMap: serialize_value");
-    unimplemented!();
-  }
-
-  fn end(self) -> Result<Self::Ok> {
-    debug!("SerializeMap: end");
-    Ok(None)
   }
 }

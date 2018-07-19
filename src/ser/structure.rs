@@ -2,9 +2,9 @@ use byteorder::WriteBytesExt;
 use failure::ResultExt;
 use serde::ser::{Serialize, SerializeStruct};
 
+use error::{Error, KbinErrorKind};
 use node_types::StandardType;
-use error::KbinErrorKind;
-use ser::{Error, Result, Serializer, TypeHint, ARRAY_MASK};
+use ser::{Result, Serializer, TypeHint, ARRAY_MASK};
 use sixbit::pack_sixbit;
 
 pub struct Struct<'a> {
@@ -65,10 +65,24 @@ impl<'a> SerializeStruct for Struct<'a> {
 
       // Struct handler outputs the `NodeStart` event by itself. Avoid repeating it.
       if node_type != StandardType::NodeStart {
-        self.ser.node_buf.write_u8(node_type.id | array_mask).context(KbinErrorKind::DataWrite(node_type.name))?;
-        pack_sixbit(&mut *self.ser.node_buf, key)?;
+        // Serialize fields that start with "attr_" as Attribute nodes
+        let (node_type, key) = if key.starts_with("attr_") {
+          let key = &key["attr_".len()..];
+          debug!("SerializeStruct(name: {})::serialize_field(key: {}) => writing as attribute", self.name, key);
 
-        // TODO: Make sure this does not prematurely end nodes
+          // Attribute nodes are always strings
+          if node_type != StandardType::String {
+            return Err(KbinErrorKind::TypeMismatch(*StandardType::String, *node_type).into());
+          }
+
+          (StandardType::Attribute, key)
+        } else {
+          (node_type, key)
+        };
+
+        self.ser.node_buf.write_u8(node_type.id | array_mask).context(KbinErrorKind::DataWrite(node_type.name))?;
+        self.ser.write_identifier(key)?;
+
         if node_type != StandardType::Attribute {
           self.ser.node_buf.write_u8(StandardType::NodeEnd.id | ARRAY_MASK).context(KbinErrorKind::DataWrite("node end"))?;
         }
