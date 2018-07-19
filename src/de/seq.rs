@@ -76,6 +76,7 @@ impl<'de, 'a> SeqAccess<'de> for Seq<'a, 'de> {
       debug!("Seq::next_element_seed() => peeked type: {:?}, last type: {:?}", node_type, self.de.reader.last_node_type());
 
       if self.is_end()? {
+        debug!("<-- Seq::next_element_seed() => end of sequence");
         return Ok(None);
       }
 
