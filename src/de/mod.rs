@@ -121,17 +121,13 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
   {
     trace!("Deserializer::deserialize_any()");
 
-    let (node_type, _is_array) = self.reader.peek_node_type()?;
+    let (node_type, _is_array) = self.reader.last_node_type().ok_or(KbinErrorKind::InvalidState)?;
     debug!("Deserializer::deserialize_any() => node_type: {:?}", node_type);
 
     let value = match node_type {
       StandardType::Attribute |
-      StandardType::NodeStart => {
-        let _ = self.reader.read_node_type()?;
-        self.deserialize_identifier(visitor)
-      },
-      StandardType::Binary => self.deserialize_bytes(visitor),
       StandardType::String => self.deserialize_string(visitor),
+      StandardType::Binary => self.deserialize_bytes(visitor),
       StandardType::U8 => self.deserialize_u8(visitor),
       StandardType::U16 => self.deserialize_u16(visitor),
       StandardType::U32 => self.deserialize_u32(visitor),
@@ -140,6 +136,7 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
       StandardType::S16 => self.deserialize_i16(visitor),
       StandardType::S32 => self.deserialize_i32(visitor),
       StandardType::S64 => self.deserialize_i64(visitor),
+      StandardType::NodeStart => self.deserialize_identifier(visitor),
       StandardType::NodeEnd => visitor.visit_none(),
       _ => unimplemented!(),
     };
@@ -184,8 +181,21 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     visitor.visit_string(self.reader.read_string()?)
   }
 
-  implement_type!(deserialize_bytes);
-  implement_type!(deserialize_byte_buf);
+  fn deserialize_bytes<V>(self, visitor: V) -> Result<V::Value>
+    where V: Visitor<'de>
+  {
+    trace!("Deserializer::deserialize_bytes()");
+
+    visitor.visit_bytes(self.reader.read_bytes()?)
+  }
+
+  fn deserialize_byte_buf<V>(self, visitor: V) -> Result<V::Value>
+    where V: Visitor<'de>
+  {
+    trace!("Deserializer::deserialize_byte_buf()");
+
+    visitor.visit_byte_buf(self.reader.read_bytes()?.to_vec())
+  }
 
   fn deserialize_option<V>(self, visitor: V) -> Result<V::Value>
     where V: Visitor<'de>
