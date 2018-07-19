@@ -125,11 +125,11 @@ fn main() -> std::io::Result<()> {
     file.read_to_end(&mut contents)?;
 
     if KbinXml::is_binary_xml(&contents) {
+      Printer::run(&contents).unwrap();
+
       let (element, encoding_original) = KbinXml::from_binary(&contents).map_err(display_err)?;
-      //println!("element: {:#?}", element);
       let text_original = to_text(&element)?;
       display_buf(&text_original)?;
-      Printer::run(&contents).unwrap();
 
       let options = Options::with_encoding(encoding_original);
       let buf = KbinXml::to_binary_with_options(options, &element).map_err(display_err)?;
