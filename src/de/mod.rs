@@ -286,14 +286,13 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
   fn deserialize_struct<V>(self, name: &'static str, fields: &'static [&'static str], visitor: V) -> Result<V::Value>
     where V: Visitor<'de>
   {
-    trace!("Deserializer::deserialize_struct(name: {:?})", name);
-    trace!("Deserializer::deserialize_struct() => fields: {:?}", fields);
+    trace!("Deserializer::deserialize_struct(name: {:?}, fields: {:?})", name, fields);
 
     // The `NodeStart` event is consumed by `deserialize_identifier` when
     // reading the parent struct, don't consume the next event.
     if self.first_struct {
       let (node_type, _, name) = self.read_node_with_name()?;
-      debug!("Deserializer::deserialize_struct() => node_type: {:?}, name: {:?}", node_type, name);
+      debug!("Deserializer::deserialize_struct() => node_type: {:?}, name: {:?}, last identifier: {:?}", node_type, name, self.reader.last_identifier());
 
       // Sanity check
       if node_type != StandardType::NodeStart {
@@ -317,10 +316,19 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
   fn deserialize_identifier<V>(self, visitor: V) -> Result<V::Value>
     where V: Visitor<'de>
   {
-    trace!("Deserializer::deserialize_identifier()");
+    let (node_type, _) = self.reader.last_node_type().ok_or(KbinErrorKind::InvalidState)?;
+    trace!("Deserializer::deserialize_identifier() => last node type: {:?}", node_type);
 
-    let name = self.reader.read_node_identifier()?;
-    debug!("Deserializer::deserialize_identifier() => name: {}", name);
+    // Prefix Attribute node identifier's with "attr_" to help the serializer
+    let name = match (node_type, self.reader.read_node_identifier()?) {
+      (StandardType::Attribute, name) => format!("attr_{}", name),
+      (StandardType::NodeStart, name) => {
+        self.first_struct = false;
+        name
+      },
+      (_, name) => name,
+    };
+    debug!("Deserializer::deserialize_identifier() => name: '{}'", name);
 
     // Do not use `deserialize_string`! That reads from the data buffer and
     // this reads a sixbit string from the node buffer
