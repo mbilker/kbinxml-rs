@@ -149,31 +149,33 @@ pub struct KbinType {
   pub konst: &'static str,
   pub name: &'static str,
   pub alt_name: Option<&'static str>,
-  pub size: u8,
-  pub count: u8
+  pub size: usize,
+  pub count: usize
 }
 
 impl KbinType {
   fn parse_array<T>(&self, output: &mut String, input: &[u8], arr_count: usize) -> Result<(), KbinError>
     where T: KbinWrapperType<T>
   {
-    let size = self.size as usize;
-    let count = self.count as usize;
-    let total_nodes = count * arr_count;
-
-    let total_size = size * total_nodes;
+    let total_nodes = self.count * arr_count;
+    let total_size = self.size * total_nodes;
     if total_size != input.len() {
       return Err(KbinErrorKind::SizeMismatch(*self, total_size, input.len()).into());
     }
 
+    // Guard when the input is of zero elements
+    if arr_count == 0 {
+      return Ok(());
+    }
+
     {
-      let first = &input[..size];
+      let first = &input[..self.size];
       T::from_kbin_bytes(output, first)?;
     }
 
     for i in 1..total_nodes {
-      let offset = i * size;
-      let end = (i + 1) * size;
+      let offset = i * self.size;
+      let end = (i + 1) * self.size;
       let data = &input[offset..end];
       output.push(' ');
       T::from_kbin_bytes(output, data)?;
@@ -185,7 +187,7 @@ impl KbinType {
   fn parse_bytes_inner<T>(&self, input: &[u8]) -> Result<String, KbinError>
     where T: KbinWrapperType<T>
   {
-    let type_size = (self.size as usize) * (self.count as usize);
+    let type_size = self.size * self.count;
     let arr_count = input.len() / type_size;
     debug!("parse_bytes({}) => size: {}, count: {}, input_len: {}, arr_count: {}", self.name, self.size, self.count, input.len(), arr_count);
 
@@ -216,7 +218,7 @@ impl KbinType {
       T::to_kbin_bytes(output, part)?;
     }
 
-    let type_size = (self.size as usize) * (self.count as usize);
+    let type_size = self.size * self.count;
     let total_size = arr_count * type_size;
     if total_size != output.len() {
       return Err(KbinErrorKind::SizeMismatch(*self, total_size, output.len()).into());
@@ -237,11 +239,11 @@ impl KbinType {
       1 => {
         // May have a node (i.e. Ip4) that is only a single count, but it
         // can be part of an array
-        if arr_count == 1 {
-          T::to_kbin_bytes(&mut output, input)?;
-        } else {
-          self.to_array::<T>(&mut output, input, arr_count)?;
-        }
+        match arr_count {
+          0 => {},
+          1 => T::to_kbin_bytes(&mut output, input)?,
+          _ => self.to_array::<T>(&mut output, input, arr_count)?,
+        };
       },
       count if count > 1 => self.to_array::<T>(&mut output, input, arr_count)?,
       _ => unimplemented!(),
