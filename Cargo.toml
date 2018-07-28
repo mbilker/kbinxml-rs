@@ -1,6 +1,6 @@
 [package]
 name = "kbinxml"
-version = "0.5.1"
+version = "0.6.0"
 authors = ["Matt Bilker <me@mbilker.us>"]
 
 [dependencies]
@@ -10,7 +10,7 @@ failure = "0.1.1"
 lazy_static = "1.0.0"
 log = "0.4.1"
 minidom = "0.9.0"
-num = "0.1.42"
+num = "0.2.0"
 pretty_env_logger = "0.2.3"
 quick-xml = "0.12.1"
 rustc-hex = "1.0.0"
