@@ -7,7 +7,7 @@ use serde::ser::{Serialize, SerializeTupleStruct, Serializer};
 
 pub struct Ip4Addr(Ipv4Addr);
 
-struct Ip4Visitor;
+pub(crate) struct Ip4Visitor;
 
 impl Ip4Addr {
   pub fn new(addr: Ipv4Addr) -> Self {
