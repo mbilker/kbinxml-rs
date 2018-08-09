@@ -5,7 +5,6 @@ use serde::ser::{Serialize, SerializeStruct};
 use error::{Error, KbinErrorKind};
 use node_types::StandardType;
 use ser::{Result, Serializer, TypeHint, ARRAY_MASK};
-use sixbit::pack_sixbit;
 
 pub struct Struct<'a> {
   ser: &'a mut Serializer,
@@ -29,7 +28,7 @@ impl<'a> Struct<'a> {
 
       let node_type = StandardType::NodeStart;
       ser.node_buf.write_u8(node_type.id).context(KbinErrorKind::DataWrite(node_type.name))?;
-      pack_sixbit(&mut *ser.node_buf, name)?;
+      ser.write_identifier(name)?;
     }
 
     // The `Vec` cannot be borrowed as mutable in an `else` condition because
