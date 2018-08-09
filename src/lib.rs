@@ -2,6 +2,7 @@
 
 extern crate byteorder;
 extern crate encoding;
+extern crate indexmap;
 extern crate minidom;
 extern crate num;
 extern crate rustc_hex;
@@ -32,6 +33,7 @@ mod options;
 mod printer;
 mod reader;
 mod sixbit;
+mod value;
 
 mod de;
 mod ser;
@@ -49,6 +51,7 @@ pub use options::Options;
 pub use de::from_bytes;
 pub use ip4::Ip4Addr;
 pub use ser::to_bytes;
+pub use value::Value;
 
 const SIGNATURE: u8 = 0xA0;
 

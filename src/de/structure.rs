@@ -1,16 +1,17 @@
 use serde::de::{DeserializeSeed, MapAccess};
 
-use de::{Deserializer, Result};
+use de::{Deserializer, ReadMode, Result};
 use error::{Error, KbinErrorKind};
 use node_types::StandardType;
 
 pub struct Struct<'a, 'de: 'a> {
   de: &'a mut Deserializer<'de>,
-  //fields: &'static [&'static str],
 }
 
 impl<'de, 'a> Struct<'a, 'de> {
   pub fn new(de: &'a mut Deserializer<'de>) -> Self {
+    trace!("Struct::new()");
+
     Self { de }
   }
 }
@@ -23,15 +24,21 @@ impl<'de, 'a> MapAccess<'de> for Struct<'a, 'de> {
   {
     trace!("--> <Struct as MapAccess>::next_key_seed()");
 
-    let (node_type, _is_array) = self.de.reader.read_node_type()?;
+    let (node_type, is_array) = self.de.reader.read_node_type()?;
     debug!("Struct::next_key_seed() => node_type: {:?}", node_type);
 
-    if node_type == StandardType::NodeEnd {
-      debug!("<-- <Struct as MapAccess>::next_key_seed() => end of map");
-      return Ok(None);
-    }
+    match node_type {
+      StandardType::NodeEnd |
+      StandardType::FileEnd => {
+        debug!("<-- <Struct as MapAccess>::next_key_seed() => end of map");
+        return Ok(None);
+      },
+      _ => {},
+    };
 
+    let old_read_mode = self.de.set_read_mode(ReadMode::Key);
     let key = seed.deserialize(&mut *self.de).map(Some)?;
+    self.de.read_mode = old_read_mode;
 
     match node_type {
       StandardType::NodeStart => {
@@ -51,7 +58,7 @@ impl<'de, 'a> MapAccess<'de> for Struct<'a, 'de> {
 
     // Store the current node type on the stack for stateful handling based on
     // the current node type
-    self.de.node_stack.push(node_type);
+    self.de.node_stack.push((node_type, is_array));
 
     Ok(key)
   }

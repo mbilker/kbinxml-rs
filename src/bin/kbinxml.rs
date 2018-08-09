@@ -15,7 +15,7 @@ use std::net::Ipv4Addr;
 use std::str;
 
 use failure::Fail;
-use kbinxml::{Ip4Addr, KbinXml, Options, Printer, from_bytes, to_bytes};
+use kbinxml::{Ip4Addr, KbinXml, Options, Printer, Value, from_bytes, to_bytes};
 use minidom::Element;
 use quick_xml::Writer;
 
@@ -28,6 +28,9 @@ pub struct Testing2 {
   opt: Option<u8>,
   opt2: Option<u8>,
   ip: Ip4Addr,
+
+  //#[serde(flatten)]
+  //extra: Value,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -134,6 +137,12 @@ fn main() -> std::io::Result<()> {
       let options = Options::with_encoding(encoding_original);
       let buf = KbinXml::to_binary_with_options(options, &element).map_err(display_err)?;
       compare_slice(&buf, &contents);
+
+      let value = from_bytes::<Value>(&contents);
+      match &value {
+        Ok(obj2) => eprintln!("obj2: {:#?}", obj2),
+        Err(e) => eprintln!("Unable to parse generated kbin back to `Value`: {:#?}", e),
+      };
     } else {
       let contents = str::from_utf8(&contents).expect("Unable to interpret file contents as UTF-8");
       let element: Element = contents.parse().expect("Unable to construct DOM for input text XML");
@@ -168,6 +177,7 @@ fn main() -> std::io::Result<()> {
         opt: None,
         opt2: Some(111),
         ip: Ip4Addr::new(Ipv4Addr::new(127, 0, 0, 1)),
+        //extra: HashMap::new(),
       },
     };
     let bytes = to_bytes(&obj).unwrap();
@@ -176,12 +186,21 @@ fn main() -> std::io::Result<()> {
     let mut file = File::create("testing.kbin")?;
     file.write_all(&bytes)?;
 
-    match from_bytes::<Testing>(&bytes) {
+    let obj2 = from_bytes::<Testing>(&bytes);
+    match &obj2 {
       Ok(obj2) => eprintln!("obj2: {:#?}", obj2),
       Err(e) => eprintln!("Unable to parse generated kbin back to struct: {:#?}", e),
     };
 
-    Printer::run(&bytes).unwrap();
+    let value = from_bytes::<Value>(&bytes);
+    match &value {
+      Ok(obj2) => eprintln!("obj2: {:#?}", obj2),
+      Err(e) => eprintln!("Unable to parse generated kbin back to `Value`: {:#?}", e),
+    };
+
+    if obj2.is_ok() && value.is_ok() {
+      Printer::run(&bytes).unwrap();
+    }
   }
   Ok(())
 }

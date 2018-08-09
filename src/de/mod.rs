@@ -8,22 +8,26 @@ use error::{Error, KbinErrorKind};
 use node_types::StandardType;
 use reader::Reader;
 
+mod custom;
 mod seq;
 mod structure;
 
+use self::custom::Custom;
 use self::seq::Seq;
 use self::structure::Struct;
 
 pub type Result<T> = StdResult<T, Error>;
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum ReadMode {
+  Key,
   Single,
   Array,
 }
 
 pub struct Deserializer<'de> {
   read_mode: ReadMode,
-  node_stack: Vec<StandardType>,
+  node_stack: Vec<(StandardType, bool)>,
   first_struct: bool,
 
   reader: Reader<'de>,
@@ -49,12 +53,25 @@ impl<'de> Deserializer<'de> {
     })
   }
 
+  #[inline]
+  fn set_read_mode(&mut self, read_mode: ReadMode) -> ReadMode {
+    let old_read_mode = self.read_mode;
+    self.read_mode = read_mode;
+
+    old_read_mode
+  }
+
   fn read_node_with_name(&mut self) -> Result<(StandardType, bool, String)> {
     let (node_type, is_array) = self.reader.read_node_type()?;
     let name = self.reader.read_node_identifier()?;
     debug!("name: {}", name);
 
     Ok((node_type, is_array, name))
+  }
+
+  fn node_stack_last(&self) -> Result<&(StandardType, bool)> {
+    self.node_stack.last()
+      .ok_or(KbinErrorKind::InvalidState.into())
   }
 }
 
@@ -64,6 +81,7 @@ macro_rules! de_type {
       where V: Visitor<'de>
     {
       let value = match self.read_mode {
+        ReadMode::Key => return Err(KbinErrorKind::InvalidState.into()),
         ReadMode::Single => {
           self.reader.data_buf.get_aligned(*StandardType::$standard_type)?[0] $($cast)*
         },
@@ -81,6 +99,7 @@ macro_rules! de_type {
       where V: Visitor<'de>
     {
       let value = match self.read_mode {
+        ReadMode::Key => return Err(KbinErrorKind::InvalidState.into()),
         ReadMode::Single => {
           let value = self.reader.data_buf.get_aligned(*StandardType::$standard_type)?;
           BigEndian::$read_method(&value)
@@ -117,13 +136,26 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
   fn deserialize_any<V>(self, visitor: V) -> Result<V::Value>
     where V: Visitor<'de>
   {
-    trace!("Deserializer::deserialize_any()");
+    let (node_type, is_array) = self.node_stack_last()
+      .map(|x| *x)
+      .or_else(|_| -> Result<_> {
+        let node = self.reader.peek_node_type()?;
+        self.node_stack.push(node);
+        Ok(node)
+      })?;
+    trace!("Deserializer::deserialize_any(node_type: {:?}, is_array: {})", node_type, is_array);
 
-    let (node_type, _is_array) = self.reader.last_node_type().ok_or(KbinErrorKind::InvalidState)?;
-    debug!("Deserializer::deserialize_any() => node_type: {:?}", node_type);
+    // Handle arrays if we are not in array reading mode
+    if is_array {
+      // `Ip4` handling handled by `deserialize_seq`
+      match self.read_mode {
+        ReadMode::Array => {},
+        _ => return self.deserialize_seq(visitor),
+      };
+    }
 
     let value = match node_type {
-      StandardType::Attribute |
+      StandardType::Attribute => self.deserialize_string(visitor),
       StandardType::String => self.deserialize_string(visitor),
       StandardType::Binary => self.deserialize_bytes(visitor),
       StandardType::U8 => self.deserialize_u8(visitor),
@@ -134,9 +166,20 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
       StandardType::S16 => self.deserialize_i16(visitor),
       StandardType::S32 => self.deserialize_i32(visitor),
       StandardType::S64 => self.deserialize_i64(visitor),
-      StandardType::NodeStart => self.deserialize_identifier(visitor),
-      StandardType::NodeEnd => visitor.visit_none(),
-      _ => unimplemented!(),
+      StandardType::Ip4 => {
+        let old_read_mode = self.set_read_mode(ReadMode::Array);
+        let value = visitor.visit_enum(Custom::new(self, node_type))?;
+        self.read_mode = old_read_mode;
+        Ok(value)
+      },
+      StandardType::Boolean => self.deserialize_bool(visitor),
+      StandardType::NodeStart => self.deserialize_map(visitor),
+      StandardType::NodeEnd => {
+        // Move `deserialize_any` on to the next node
+        let _ = self.reader.read_node_type()?;
+        self.deserialize_any(visitor)
+      },
+      _ => visitor.visit_enum(Custom::new(self, node_type)),
     };
     value
   }
@@ -174,9 +217,11 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
   fn deserialize_string<V>(self, visitor: V) -> Result<V::Value>
     where V: Visitor<'de>
   {
-    trace!("Deserializer::deserialize_string()");
-
-    visitor.visit_string(self.reader.read_string()?)
+    trace!("Deserializer::deserialize_string() => read_mode: {:?}", self.read_mode);
+    match self.read_mode {
+      ReadMode::Key => self.deserialize_identifier(visitor),
+      _ => visitor.visit_string(self.reader.read_string()?),
+    }
   }
 
   fn deserialize_bytes<V>(self, visitor: V) -> Result<V::Value>
@@ -223,27 +268,35 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
   fn deserialize_seq<V>(self, visitor: V) -> Result<V::Value>
     where V: Visitor<'de>
   {
-    trace!("Deserializer::deserialize_seq()");
+    trace!("Deserializer::deserialize_seq(read_mode: {:?})", self.read_mode);
 
-    let (node_type, _) = self.reader.last_node_type().ok_or(KbinErrorKind::InvalidState)?;
+    let (node_type, _) = *self.node_stack_last()?;
 
-    // If the last node type on the stack is a `NodeStart` then we are likely
-    // collecting a list of structs
-    let value = if node_type == StandardType::NodeStart {
-      visitor.visit_seq(Seq::new(self, None)?)?
-    } else {
-      // TODO: add size check against len
-      let size = self.reader.read_u32().context(KbinErrorKind::ArrayLengthRead)?;
-      debug!("Deserializer::deserialize_seq() => read array size: {}", size);
+    let value = match node_type {
+      // If the last node type on the stack is a `NodeStart` then we are likely
+      // collecting a list of structs
+      StandardType::NodeStart => visitor.visit_seq(Seq::new(self, None)?)?,
 
-      // Changes to `self.read_mode` must stay here as `next_element_seed` is not
-      // called past the length of the array to reset the read mode
-      self.read_mode = ReadMode::Array;
-      let value = visitor.visit_seq(Seq::new(self, Some(size as usize))?)?;
-      self.read_mode = ReadMode::Single;
-      self.reader.data_buf.realign_reads(None)?;
+      _ => {
+        // TODO: add size check against len
+        let node_size = node_type.size * node_type.count;
+        let size = self.reader.read_u32().context(KbinErrorKind::ArrayLengthRead)?;
+        let arr_count = (size as usize) / node_size;
+        debug!("Deserializer::deserialize_seq() => read array size: {}, arr_count: {}", size, arr_count);
 
-      value
+        // Changes to `self.read_mode` must stay here as `next_element_seed` is not
+        // called past the length of the array to reset the read mode
+        let old_read_mode = self.set_read_mode(ReadMode::Array);
+        let value = visitor.visit_seq(Seq::new(self, Some(arr_count))?)?;
+        self.read_mode = old_read_mode;
+
+        // Only realign after the outermost array finishes reading
+        if self.read_mode == ReadMode::Single {
+          self.reader.data_buf.realign_reads(None)?;
+        }
+
+        value
+      },
     };
 
     Ok(value)
@@ -254,7 +307,26 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
   {
     trace!("Deserializer::deserialize_tuple(len: {})", len);
 
-    self.deserialize_seq(visitor)
+    let (node_type, is_array) = *self.node_stack_last()?;
+    debug!("Deserializer::deserialize_tuple(len: {}) => node_type: {:?}, is_array: {}", len, node_type, is_array);
+
+    // Handle case where kbin has an array but the Serde output is using a
+    // tuple
+    if is_array && self.read_mode == ReadMode::Single {
+      return self.deserialize_seq(visitor);
+    }
+
+    //self.deserialize_seq(visitor)
+    let old_read_mode = self.set_read_mode(ReadMode::Array);
+    let value = visitor.visit_seq(Seq::new(self, Some(len))?)?;
+    self.read_mode = old_read_mode;
+
+    // Only realign after the outermost array finishes reading
+    if self.read_mode == ReadMode::Single {
+      self.reader.data_buf.realign_reads(None)?;
+    }
+
+    Ok(value)
   }
 
   fn deserialize_tuple_struct<V>(self, name: &'static str, len: usize, visitor: V) -> Result<V::Value>
@@ -262,9 +334,9 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
   {
     trace!("Deserializer::deserialize_tuple_struct(name: {:?}, len: {})", name, len);
 
-    self.read_mode = ReadMode::Array;
+    let old_read_mode = self.set_read_mode(ReadMode::Array);
     let value = visitor.visit_seq(Seq::new(self, Some(len))?)?;
-    self.read_mode = ReadMode::Single;
+    self.read_mode = old_read_mode;
     self.reader.data_buf.realign_reads(None)?;
 
     Ok(value)
@@ -275,8 +347,18 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
   {
     trace!("Deserializer::deserialize_map()");
 
-    let (node_type, _, name) = self.read_node_with_name()?;
-    debug!("Deserializer::deserialize_map() => node_type: {:?}, name: {:?}", node_type, name);
+    // The `NodeStart` event is consumed by `deserialize_identifier` when
+    // reading the parent struct, don't consume the next event.
+    if self.first_struct {
+      let (node_type, _, name) = self.read_node_with_name()?;
+      debug!("Deserializer::deserialize_map() => node_type: {:?}, name: {:?}, last identifier: {:?}", node_type, name, self.reader.last_identifier());
+
+      // Sanity check
+      if node_type != StandardType::NodeStart {
+        return Err(KbinErrorKind::TypeMismatch(*StandardType::NodeStart, *node_type).into());
+      }
+    }
+    self.first_struct = false;
 
     visitor.visit_map(Struct::new(self))
   }
@@ -286,20 +368,8 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
   {
     trace!("Deserializer::deserialize_struct(name: {:?}, fields: {:?})", name, fields);
 
-    // The `NodeStart` event is consumed by `deserialize_identifier` when
-    // reading the parent struct, don't consume the next event.
-    if self.first_struct {
-      let (node_type, _, name) = self.read_node_with_name()?;
-      debug!("Deserializer::deserialize_struct() => node_type: {:?}, name: {:?}, last identifier: {:?}", node_type, name, self.reader.last_identifier());
-
-      // Sanity check
-      if node_type != StandardType::NodeStart {
-        return Err(KbinErrorKind::TypeMismatch(*StandardType::NodeStart, *node_type).into());
-      }
-    }
-    self.first_struct = false;
-
-    let value = visitor.visit_map(Struct::new(self))?;
+    let value = self.deserialize_map(visitor)?;
+    trace!("Deserializer::deserialize_struct(name: {:?}) => end", name);
 
     Ok(value)
   }
@@ -341,3 +411,5 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     self.deserialize_any(visitor)
   }
 }
+
+// TODO: Add test with array of two Ip4
