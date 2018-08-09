@@ -1,10 +1,10 @@
-use error::{KbinError, KbinErrorKind};
-
 use std::fmt::{self, Write};
 use std::ops::Deref;
 
 use byteorder::WriteBytesExt;
 use failure::ResultExt;
+
+use error::{KbinError, KbinErrorKind};
 
 trait KbinWrapperType<T> {
   fn from_kbin_bytes(output: &mut String, input: &[u8]) -> Result<(), KbinError>;
@@ -100,6 +100,9 @@ impl KbinWrapperType<bool> for bool {
 }
 
 struct Ip4;
+struct DummyConverter;
+struct InvalidConverter;
+
 impl KbinWrapperType<Ip4> for Ip4 {
   fn from_kbin_bytes(output: &mut String, input: &[u8]) -> Result<(), KbinError> {
     trace!("KbinWrapperType<Ip4> from bytes => input: {:02x?}", input);
@@ -126,13 +129,11 @@ impl KbinWrapperType<Ip4> for Ip4 {
   }
 }
 
-struct DummyConverter;
 impl KbinWrapperType<DummyConverter> for DummyConverter {
   fn from_kbin_bytes(_output: &mut String, _input: &[u8]) -> Result<(), KbinError> { Ok(()) }
   fn to_kbin_bytes(_output: &mut Vec<u8>, _input: &str) -> Result<(), KbinError> { Ok(()) }
 }
 
-struct InvalidConverter;
 impl KbinWrapperType<InvalidConverter> for InvalidConverter {
   fn from_kbin_bytes(_output: &mut String, input: &[u8]) -> Result<(), KbinError> {
     panic!("Invalid kbin type converter called for input: {:02x?}", input);
