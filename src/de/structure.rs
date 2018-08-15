@@ -1,3 +1,5 @@
+use std::marker::PhantomData;
+
 use serde::de::{DeserializeSeed, MapAccess};
 
 use de::{Deserializer, ReadMode, Result};
@@ -6,13 +8,17 @@ use node_types::StandardType;
 
 pub struct Struct<'a, 'de: 'a> {
   de: &'a mut Deserializer<'de>,
+  values_to_consume: usize,
 }
 
 impl<'de, 'a> Struct<'a, 'de> {
   pub fn new(de: &'a mut Deserializer<'de>) -> Self {
-    trace!("Struct::new()");
+    trace!("--> Struct::new()");
 
-    Self { de }
+    Self {
+      de,
+      values_to_consume: 0,
+    }
   }
 }
 
@@ -48,6 +54,21 @@ impl<'de, 'a> MapAccess<'de> for Struct<'a, 'de> {
         debug!("Struct::next_key_seed() => got an attribute!");
       },
       _ => {
+        // TODO(mbilker): Fix processing of `Attribute` nodes for non-NodeStart
+        // elements
+        loop {
+          let (node_type, _is_array) = self.de.reader.peek_node_type()?;
+          if node_type == StandardType::Attribute {
+            warn!("Struct::next_key_seed() => ignoring Attribute node");
+            let key: Option<String> = self.next_key_seed(PhantomData)?;
+            warn!("Struct::next_key_seed() => ignored Attribute key: {:?}", key);
+
+            self.values_to_consume += 1;
+          } else {
+            break;
+          }
+        }
+
         // Consume the end node and do a sanity check
         let (node_type, _is_array) = self.de.reader.read_node_type()?;
         if node_type != StandardType::NodeEnd {
@@ -68,6 +89,17 @@ impl<'de, 'a> MapAccess<'de> for Struct<'a, 'de> {
   {
     debug!("--> <Struct as MapAccess>::next_value_seed()");
     let value = seed.deserialize(&mut *self.de)?;
+
+    for _ in 0..self.values_to_consume {
+      warn!("Struct::next_value_seed() => ignoring Attribute node value");
+      let seed = PhantomData;
+      let value: String = seed.deserialize(&mut *self.de)?;
+      warn!("Struct::next_value_seed() => ignored Attribute value: {:?}", value);
+
+      let popped = self.de.node_stack.pop();
+      debug!("<Struct as MapAccess>::next_value_seed() => popped: {:?}, node_stack: {:?}", popped, self.de.node_stack);
+    }
+    self.values_to_consume = 0;
 
     let popped = self.de.node_stack.pop();
     debug!("<Struct as MapAccess>::next_value_seed() => popped: {:?}, node_stack: {:?}", popped, self.de.node_stack);
