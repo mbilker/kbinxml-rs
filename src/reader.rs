@@ -79,6 +79,20 @@ impl<'buf> Reader<'buf> {
     })
   }
 
+  fn parse_node_type(raw_node_type: u8) -> Result<(StandardType, bool)> {
+    let is_array = raw_node_type & ARRAY_MASK == ARRAY_MASK;
+    let node_type = raw_node_type & !ARRAY_MASK;
+
+    let xml_type = StandardType::from_u8(node_type);
+    debug!("Reader::parse_node_type() => raw_node_type: {}, node_type: {:?} ({}), is_array: {}",
+      raw_node_type,
+      xml_type,
+      node_type,
+      is_array);
+
+    Ok((xml_type, is_array))
+  }
+
   #[inline]
   pub fn encoding(&self) -> EncodingType {
     self.encoding
@@ -99,24 +113,10 @@ impl<'buf> Reader<'buf> {
     self.last_node_identifier.as_ref().map(String::as_str)
   }
 
-  fn parse_node_type(&self, raw_node_type: u8) -> Result<(StandardType, bool)> {
-    let is_array = raw_node_type & ARRAY_MASK == ARRAY_MASK;
-    let node_type = raw_node_type & !ARRAY_MASK;
-
-    let xml_type = StandardType::from_u8(node_type);
-    debug!("Reader::parse_node_type() => raw_node_type: {}, node_type: {:?} ({}), is_array: {}",
-      raw_node_type,
-      xml_type,
-      node_type,
-      is_array);
-
-    Ok((xml_type, is_array))
-  }
-
   pub fn peek_node_type(&self) -> Result<(StandardType, bool)> {
     let pos = self.node_buf.position();
     let raw_node_type = self.node_buf.get_ref()[pos as usize];
-    self.parse_node_type(raw_node_type)
+    Self::parse_node_type(raw_node_type)
   }
 
   pub fn peek_node_identifier(&mut self) -> Result<String> {
@@ -132,7 +132,7 @@ impl<'buf> Reader<'buf> {
 
   pub fn read_node_type(&mut self) -> Result<(StandardType, bool)> {
     let raw_node_type = self.node_buf.read_u8().context(KbinErrorKind::NodeTypeRead)?;
-    let value = self.parse_node_type(raw_node_type)?;
+    let value = Self::parse_node_type(raw_node_type)?;
     self.last_node_type = Some(value);
 
     Ok(value)
