@@ -24,8 +24,8 @@ impl<'de, 'a> EnumAccess<'de> for Custom<'a, 'de> {
   fn variant_seed<V>(self, seed: V) -> Result<(V::Value, Self::Variant)>
     where V: DeserializeSeed<'de>
   {
-    trace!("<Custom as EnumAccess>::variant_seed(node_type: {:?})", *self.node_type);
-    let variant = self.node_type.name.into_deserializer();
+    trace!("<Custom as EnumAccess>::variant_seed(node_type: {:?})", self.node_type);
+    let variant = self.node_type.id.into_deserializer();
     seed.deserialize(variant).map(|s| (s, self))
   }
 }
@@ -37,6 +37,7 @@ impl<'de, 'a> VariantAccess<'de> for Custom<'a, 'de> {
     Err(Error::Message("unit variant not supported".into()))
   }
 
+  // Used to get the value the `Visitor` wants through the `DeserializeSeed`
   fn newtype_variant_seed<T>(self, seed: T) -> Result<T::Value>
     where T: DeserializeSeed<'de>
   {
