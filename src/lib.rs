@@ -6,11 +6,11 @@ extern crate indexmap;
 extern crate minidom;
 extern crate num;
 extern crate rustc_hex;
-extern crate serde;
 
 #[macro_use] extern crate failure;
 #[macro_use] extern crate lazy_static;
 #[macro_use] extern crate log;
+#[macro_use] extern crate serde;
 
 #[cfg(test)]
 #[macro_use] extern crate serde_derive;
@@ -28,6 +28,7 @@ mod compression;
 mod encoding_type;
 mod error;
 mod ip4;
+mod node;
 mod node_types;
 mod options;
 mod printer;
@@ -47,6 +48,7 @@ use sixbit::pack_sixbit;
 pub use encoding_type::EncodingType;
 pub use printer::Printer;
 pub use error::{KbinError, KbinErrorKind, Result};
+pub use node::Node;
 pub use options::Options;
 pub use de::from_bytes;
 pub use ip4::Ip4Addr;

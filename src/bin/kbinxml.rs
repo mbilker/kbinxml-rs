@@ -15,7 +15,7 @@ use std::net::Ipv4Addr;
 use std::str;
 
 use failure::Fail;
-use kbinxml::{Ip4Addr, KbinXml, Options, Printer, Value, from_bytes, to_bytes};
+use kbinxml::{Ip4Addr, KbinXml, Node, Options, Printer, Value, from_bytes, to_bytes};
 use minidom::Element;
 use quick_xml::Writer;
 
@@ -29,8 +29,8 @@ pub struct Testing2 {
   opt2: Option<u8>,
   ip: Ip4Addr,
 
-  //#[serde(flatten)]
-  //extra: Value,
+  #[serde(flatten)]
+  extra: Value,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -138,7 +138,7 @@ fn main() -> std::io::Result<()> {
       let buf = KbinXml::to_binary_with_options(options, &element).map_err(display_err)?;
       compare_slice(&buf, &contents);
 
-      let value = from_bytes::<Value>(&contents);
+      let value = from_bytes::<Node>(&contents);
       match &value {
         Ok(obj2) => eprintln!("obj2: {:#?}", obj2),
         Err(e) => eprintln!("Unable to parse generated kbin back to `Value`: {:#?}", e),
@@ -155,13 +155,6 @@ fn main() -> std::io::Result<()> {
       let mut stdout = stdout();
       stdout.lock().write_all(&buf)?;
     }
-
-    /*
-    let (element, encoding_new) = KbinXml::from_binary(&buf).map_err(display_err)?;
-    let text_new = to_text(&element)?;
-    assert_eq!(encoding_original, encoding_new);
-    assert_eq!(text_original, text_new);
-    */
   } else {
     let obj = Testing {
       the_attr: "the_value".to_string(),
@@ -177,7 +170,7 @@ fn main() -> std::io::Result<()> {
         opt: None,
         opt2: Some(111),
         ip: Ip4Addr::new(Ipv4Addr::new(127, 0, 0, 1)),
-        //extra: HashMap::new(),
+        extra: Value::Map(Default::default()),
       },
     };
     let bytes = to_bytes(&obj).unwrap();
