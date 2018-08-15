@@ -1,7 +1,6 @@
 use std::fmt;
 
 use indexmap::IndexMap;
-use serde;
 use serde::de::{self, Deserialize, EnumAccess, Error, MapAccess, SeqAccess, VariantAccess, Visitor};
 
 use node_types::StandardType;
@@ -10,7 +9,7 @@ use value::Value;
 impl<'de> Deserialize<'de> for Value {
   #[inline]
   fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where D: serde::Deserializer<'de>
+    where D: de::Deserializer<'de>
   {
     trace!("<Value as Deserialize>::deserialize()");
 
@@ -59,7 +58,7 @@ impl<'de> Deserialize<'de> for Value {
 
       #[inline]
       fn visit_some<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
-        where D: serde::Deserializer<'de>
+        where D: de::Deserializer<'de>
       {
         trace!("ValueVisitor::visit_some()");
         Deserialize::deserialize(deserializer)
@@ -93,12 +92,12 @@ impl<'de> Deserialize<'de> for Value {
           // Check to see if this is an attribute
           let key: String = key;
           let (key, value) = if key.starts_with("attr_") {
-            let inner = match value {
-              Value::String(s) => s,
-              _ => return Err(A::Error::custom("Key that starts with 'attr_' must be a string")),
+            let value = match value {
+              Value::Attribute(_) => value,
+              _ => return Err(A::Error::custom("Key that starts with 'attr_' must be an `Attribute`")),
             };
 
-            (&key["attr_".len()..], Value::Attribute(inner))
+            (&key["attr_".len()..], value)
           } else {
             (key.as_str(), value)
           };
@@ -131,13 +130,9 @@ impl<'de> Deserialize<'de> for Value {
         where A: EnumAccess<'de>
       {
         trace!("ValueVisitor::visit_enum()");
-        let (variant, access): (Value, _) = data.variant()?;
-        debug!("ValueVisitor::visit_enum() => variant: {:?}", variant);
-        let name = match variant {
-          Value::String(s) => s,
-          _ => return Err(A::Error::custom("Enum variant must be a string")),
-        };
-        let node_type = StandardType::from_name(&name);
+        let (id, access): (u8, _) = data.variant()?;
+        let node_type = StandardType::from_u8(id);
+        debug!("ValueVisitor::visit_enum() => id: {}, node_type: {:?}", id, node_type);
         let value = access.newtype_variant_seed(node_type)?;
         debug!("ValueVisitor::visit_enum() => value: {:?}", value);
         Ok(value)
