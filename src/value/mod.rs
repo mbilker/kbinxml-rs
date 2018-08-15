@@ -20,7 +20,7 @@ macro_rules! construct_types {
       $(
         $konst($($value_type)*),
       )+
-      Time(i32),
+      Time(u32),
       Attribute(String),
 
       Array(Vec<Value>),
@@ -29,8 +29,8 @@ macro_rules! construct_types {
 
     $(
       impl From<$($value_type)*> for Value {
-        fn from(val: $($value_type)*) -> Value {
-          Value::$konst(val)
+        fn from(value: $($value_type)*) -> Value {
+          Value::$konst(value)
         }
       }
     )+
@@ -46,7 +46,7 @@ macro_rules! construct_types {
           $(
             StandardType::$konst => <$($value_type)*>::deserialize(deserializer).map(Value::from),
           )+
-          StandardType::Time => i32::deserialize(deserializer).map(Value::Time),
+          StandardType::Time => u32::deserialize(deserializer).map(Value::Time),
           StandardType::Attribute => String::deserialize(deserializer).map(|s| Value::Attribute(s)),
           StandardType::NodeStart => Value::deserialize(deserializer),
           StandardType::NodeEnd => unimplemented!(),
@@ -118,7 +118,7 @@ construct_types! {
   (Binary,   Vec<u8>);
   (String,   String);
   (Ip4,      Ipv4Addr);
-  //(Time,     i32);
+  //(Time,     u32);
   (Float,    f32);
   (Double,   f64);
   (S8_2,     [i8; 2]);
