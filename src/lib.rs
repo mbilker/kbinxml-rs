@@ -240,7 +240,7 @@ impl KbinXml {
       StandardType::NodeStart => {},
 
       StandardType::Binary => {
-        let data = text.from_hex().context(KbinErrorKind::HexError)?;
+        let data: Vec<u8> = text.from_hex().context(KbinErrorKind::HexError)?;
         trace!("data: 0x{:02x?}", data);
 
         let size = (data.len() as u32) * (node_type.size as u32);
