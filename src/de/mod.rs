@@ -9,13 +9,14 @@ use node_types::StandardType;
 use reader::Reader;
 
 mod custom;
-mod inner_types;
 mod seq;
 mod structure;
+mod tuple;
 
 use self::custom::Custom;
 use self::seq::Seq;
 use self::structure::Struct;
+use self::tuple::TupleBytesDeserializer;
 
 pub type Result<T> = StdResult<T, Error>;
 
@@ -170,13 +171,15 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
       StandardType::S64 => self.deserialize_i64(visitor),
       */
       StandardType::Binary => visitor.visit_bytes(self.reader.read_bytes()?),
+      /*
       StandardType::Ip4 => {
         let old_read_mode = self.set_read_mode(ReadMode::Array);
         let value = visitor.visit_enum(Custom::new(self, node_type))?;
         self.read_mode = old_read_mode;
         Ok(value)
       },
-      //StandardType::Boolean => self.deserialize_bool(visitor),
+      StandardType::Boolean => self.deserialize_bool(visitor),
+      */
       StandardType::NodeStart => self.deserialize_map(visitor),
       StandardType::NodeEnd => {
         // Move `deserialize_any` on to the next node
@@ -320,17 +323,24 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
       return self.deserialize_seq(visitor);
     }
 
-    //self.deserialize_seq(visitor)
-    let old_read_mode = self.set_read_mode(ReadMode::Array);
-    let value = visitor.visit_seq(Seq::new(self, Some(len))?)?;
-    self.read_mode = old_read_mode;
+    // Use `get_aligned` to avoid edge cases with the indexors
+    if is_array {
+      let old_read_mode = self.set_read_mode(ReadMode::Array);
+      let value = visitor.visit_seq(Seq::new(self, Some(len))?)?;
+      self.read_mode = old_read_mode;
 
-    // Only realign after the outermost array finishes reading
-    if self.read_mode == ReadMode::Single {
-      self.reader.data_buf.realign_reads(None)?;
+      // Only realign after the outermost array finishes reading
+      if self.read_mode == ReadMode::Single {
+        self.reader.data_buf.realign_reads(None)?;
+      }
+
+      Ok(value)
+    } else {
+      let data = self.reader.data_buf.get_aligned(*node_type)?;
+      debug!("Deserializer::deserialize_tuple(len: {}) => data: 0x{:02x?}", len, data);
+
+      visitor.visit_seq(TupleBytesDeserializer::new(node_type, data))
     }
-
-    Ok(value)
   }
 
   fn deserialize_tuple_struct<V>(self, name: &'static str, len: usize, visitor: V) -> Result<V::Value>

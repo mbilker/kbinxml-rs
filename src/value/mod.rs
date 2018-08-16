@@ -47,7 +47,7 @@ macro_rules! construct_types {
             StandardType::$konst => <$($value_type)*>::deserialize(deserializer).map(Value::from),
           )+
           StandardType::Time => u32::deserialize(deserializer).map(Value::Time),
-          StandardType::Attribute => String::deserialize(deserializer).map(|s| Value::Attribute(s)),
+          StandardType::Attribute => String::deserialize(deserializer).map(Value::Attribute),
           StandardType::NodeStart => Value::deserialize(deserializer),
           StandardType::NodeEnd => unimplemented!(),
           StandardType::FileEnd => unimplemented!(),

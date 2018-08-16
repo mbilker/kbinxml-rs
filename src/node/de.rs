@@ -22,6 +22,7 @@ impl<'de> Deserialize<'de> for Node {
         formatter.write_str("any valid kbin node")
       }
 
+      #[inline]
       fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
         where A: MapAccess<'de>
       {
@@ -33,7 +34,7 @@ impl<'de> Deserialize<'de> for Node {
           debug!("NodeVisitor::visit_map() => key: {:?}", key);
           let NodeStart { key, node_type } = key;
 
-          let value = map.next_value_seed(PhantomData);
+          let value = map.next_value();
           debug!("NodeVisitor::visit_map() => value: {:?}", value);
 
           let node = Node::new(key.clone(), value?);
@@ -92,6 +93,7 @@ impl<'de> DeserializeSeed<'de> for NodeSeed {
         formatter.write_str("valid node type")
       }
 
+      #[inline]
       fn visit_enum<A>(self, data: A) -> Result<Self::Value, A::Error>
         where A: EnumAccess<'de>
       {
