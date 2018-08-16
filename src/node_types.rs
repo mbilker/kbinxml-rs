@@ -12,7 +12,7 @@ trait KbinWrapperType<T> {
 }
 
 macro_rules! number_impl {
-  (integer; $($inner_type:ident),*) => {
+  (uint; $($inner_type:ident),*) => {
     $(
       impl KbinWrapperType<$inner_type> for $inner_type {
         fn from_kbin_bytes(output: &mut String, input: &[u8]) -> Result<(), KbinError> {
@@ -31,6 +31,32 @@ macro_rules! number_impl {
           trace!("KbinWrapperType<{}> to bytes => input: '{}', output: {}", stringify!($inner_type), input, num);
 
           let data = $inner_type::to_bytes($inner_type::to_be(num));
+          output.extend_from_slice(&data);
+
+          Ok(())
+        }
+      }
+    )*
+  };
+  (int; $($inner_type:ident),*) => {
+    $(
+      impl KbinWrapperType<$inner_type> for $inner_type {
+        fn from_kbin_bytes(output: &mut String, input: &[u8]) -> Result<(), KbinError> {
+          trace!("KbinWrapperType<{}> from bytes => input: {:02x?}", stringify!($inner_type), input);
+
+          let mut data = [0; ::std::mem::size_of::<$inner_type>()];
+          data.clone_from_slice(input);
+          write!(output, "{}", $inner_type::from_be_bytes(data))
+            .context(KbinErrorKind::ByteParse(stringify!($inner_type)))?;
+
+          Ok(())
+        }
+
+        fn to_kbin_bytes(output: &mut Vec<u8>, input: &str) -> Result<(), KbinError> {
+          let num = input.parse::<$inner_type>().context(KbinErrorKind::StringParse(stringify!($inner_type)))?;
+          trace!("KbinWrapperType<{}> to bytes => input: '{}', output: {}", stringify!($inner_type), input, num);
+
+          let data = $inner_type::to_be_bytes(num);
           output.extend_from_slice(&data);
 
           Ok(())
@@ -68,7 +94,8 @@ macro_rules! number_impl {
   };
 }
 
-number_impl!(integer; i8, u8, i16, u16, i32, u32, i64, u64);
+number_impl!(uint; u8, u16, u32, u64);
+number_impl!(int;  i8, i16, i32, i64);
 number_impl!(float; u32 => f32, u64 => f64);
 
 impl KbinWrapperType<bool> for bool {
@@ -395,5 +422,5 @@ construct_types! {
   (46, ATTRIBUTE,  Attribute, "attr", None, 0, 0, InvalidConverter);
 
   (190, NODE_END, NodeEnd, "nodeEnd", None, 0, 0, InvalidConverter);
-  (191, FILE_END,  FileEnd, "fileEnd", None, 0, 0, InvalidConverter);
+  (191, FILE_END, FileEnd, "fileEnd", None, 0, 0, InvalidConverter);
 }
