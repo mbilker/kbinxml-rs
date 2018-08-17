@@ -98,6 +98,9 @@ pub enum KbinErrorKind {
   #[fail(display = "Unable to convert from hexadecimal")]
   HexError,
 
+  #[fail(display = "Missing base kbin type where one is required")]
+  MissingBaseType,
+
   #[fail(display = "Missing type hint where one is required")]
   MissingTypeHint,
 
@@ -153,6 +156,7 @@ impl From<FromUtf8Error> for KbinError {
 #[derive(Clone, Debug)]
 pub enum Error {
   Message(String),
+  StaticMessage(&'static str),
 
   Wrapped(Compat<KbinError>),
 }
@@ -179,6 +183,7 @@ impl StdError for Error {
   fn description(&self) -> &str {
     match *self {
       Error::Message(ref msg) => msg,
+      Error::StaticMessage(ref msg) => msg,
       Error::Wrapped(ref err) => err.description(),
     }
   }

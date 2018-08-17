@@ -1,42 +1,47 @@
-use std::io::{Seek, SeekFrom};
-
-use byteorder::{BigEndian, WriteBytesExt};
-use failure::ResultExt;
-use serde::ser::{Serialize, SerializeSeq, SerializeTuple};
+use serde::ser::{Serialize, SerializeTuple};
 
 use error::KbinErrorKind;
 use node_types::StandardType;
-use ser::{Error, Result, Serializer, TypeHint, WriteMode};
+use ser::{Error, Result, Serializer, TypeHint};
+use ser::buffer::BufferSerializer;
 
+/// Tuple handler for serialization.
+///
+/// Kbin tuple types are monotype (all tuple elements have the same type)
+/// which differs from Rust's tuples that can have different types for each
+/// element.
+///
+/// This key difference is what makes it harder to seralize tuples, which is
+/// why the `BufferSerializer` is used to serialize tuple elements to an
+/// intermediate byte array before running the write logic. Kbin's write logic
+/// depends on the size of the type, which is taken care of by
+/// `ByteBuffer::write_aligned`.
 pub struct Tuple<'a> {
   ser: &'a mut Serializer,
+  buffer: BufferSerializer,
 
-  size_index: u64,
   node_type: Option<StandardType>,
   len: usize,
 }
 
 impl<'a> Tuple<'a> {
   pub fn new(ser: &'a mut Serializer, len: usize) -> Self {
-    debug!("Tuple::new(len: {})", len);
-
-    ser.write_mode = WriteMode::Array;
-
-    // Estimate u32 for the total size of the tuple
-    let size_index = ser.data_buf.position();
-    ser.data_buf.write_u32::<BigEndian>(len as u32).expect("Unable to write size placeholder");
+    trace!("Tuple::new(len: {})", len);
 
     Self {
       ser,
-      size_index,
+      buffer: BufferSerializer::new(),
       node_type: None,
       len,
     }
   }
 
-  fn find_standard_type(&self) -> StandardType {
-    debug!("find_standard_type => len: {}", self.len);
-    self.node_type.unwrap_or(StandardType::String)
+  fn find_standard_type(&self) -> Result<StandardType> {
+    let base = self.node_type.ok_or(KbinErrorKind::MissingBaseType)?;
+    let combined = StandardType::find_type(base, self.len);
+    debug!("find_standard_type => StandardType::find_type(base: {:?}, len: {}) = {:?}", base, self.len, combined);
+
+    Ok(combined)
   }
 }
 
@@ -47,58 +52,28 @@ impl<'a> SerializeTuple for Tuple<'a> {
   fn serialize_element<T>(&mut self, value: &T) -> Result<()>
     where T: ?Sized + Serialize
   {
-    debug!("SerializeTuple: serialize_element");
-    let hint = value.serialize(&mut *self.ser)?.ok_or(KbinErrorKind::MissingTypeHint)?;
-    debug!("SerializeTuple: serialize_element, hint: {:?}", hint);
+    let node_type = value.serialize(&mut self.buffer)?;
 
     // Rust tuple types can have different types per element, this is not
     // permitted by kbin
-    if let Some(node_type) = self.node_type {
-      if node_type != hint.node_type {
-        return Err(KbinErrorKind::TypeMismatch(*node_type, *hint.node_type).into());
+    if let Some(known) = self.node_type {
+      if known != node_type {
+        return Err(KbinErrorKind::TypeMismatch(*known, *node_type).into());
       }
     } else {
-      self.node_type = Some(hint.node_type);
+      self.node_type = Some(node_type);
     }
 
     Ok(())
   }
 
   fn end(self) -> Result<Self::Ok> {
-    debug!("SerializeTuple: end");
+    let node_type = self.find_standard_type()?;
+    let buffer = self.buffer.into_inner();
+    debug!("<Tuple as SerializeTuple>::end() => buffer: {:?}, node_type: {:?}", buffer, node_type);
 
-    self.ser.write_mode = WriteMode::Single;
-    self.ser.data_buf.realign_writes(None)?;
+    self.ser.data_buf.write_aligned(*node_type, &buffer)?;
 
-    let node_type = self.find_standard_type();
-    let size = (self.len as u32) * (node_type.size as u32);
-
-    // Update the size estimate from the constructor
-    if size as usize != self.len {
-      debug!("SerializeTuple: end, size correction: {}", size);
-
-      let current_pos = self.ser.data_buf.position();
-      self.ser.data_buf.seek(SeekFrom::Start(self.size_index)).context(KbinErrorKind::Seek)?;
-      self.ser.data_buf.write_u32::<BigEndian>(size).context(KbinErrorKind::DataWrite("node size"))?;
-      self.ser.data_buf.seek(SeekFrom::Start(current_pos)).context(KbinErrorKind::Seek)?;
-    }
-
-    Ok(Some(TypeHint { node_type, is_array: true, count: self.len }))
-  }
-}
-
-// kbin only supports sized arrays, coerce sequence types to tuple processing
-impl<'a> SerializeSeq for Tuple<'a> {
-  type Ok = Option<TypeHint>;
-  type Error = Error;
-
-  fn serialize_element<T>(&mut self, value: &T) -> Result<()>
-    where T: ?Sized + Serialize
-  {
-    <Self as SerializeTuple>::serialize_element(self, value)
-  }
-
-  fn end(self) -> Result<Self::Ok> {
-    <Self as SerializeTuple>::end(self)
+    Ok(Some(TypeHint::from_type(node_type)))
   }
 }

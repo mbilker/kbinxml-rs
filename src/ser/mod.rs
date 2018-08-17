@@ -12,14 +12,17 @@ use error::{Error, KbinError, KbinErrorKind};
 use sixbit::pack_sixbit;
 use super::{ARRAY_MASK, SIGNATURE, SIG_COMPRESSED};
 
+mod buffer;
 mod custom;
 mod map;
 mod structure;
+mod seq;
 mod tuple;
 
 use self::custom::Custom;
 use self::map::Map;
 use self::structure::Struct;
+use self::seq::Seq;
 use self::tuple::Tuple;
 
 pub type Result<T> = StdResult<T, Error>;
@@ -122,7 +125,7 @@ impl Serializer {
 macro_rules! ser_type {
   (byte; $inner_type:ident, $method:ident, $standard_type:ident $($cast:tt)*) => {
     fn $method(self, value: $inner_type) -> Result<Self::Ok> {
-      trace!(concat!("Serializer::", stringify!($method), " => value: {}"), value);
+      trace!(concat!("Serializer::", stringify!($method), "(value: {})"), value);
 
       let node_type = StandardType::$standard_type;
       match self.write_mode {
@@ -141,7 +144,7 @@ macro_rules! ser_type {
   };
   (large; $inner_type:ident, $method:ident, $write_method:ident, $standard_type:ident $($cast:tt)*) => {
     fn $method(self, value: $inner_type) -> Result<Self::Ok> {
-      trace!(concat!("Serializer::", stringify!($method), " => value: {}"), value);
+      trace!(concat!("Serializer::", stringify!($method), "(value: {})"), value);
 
       let node_type = StandardType::$standard_type;
       match self.write_mode {
@@ -165,7 +168,7 @@ impl<'a> ser::Serializer for &'a mut Serializer {
   type Ok = Option<TypeHint>;
   type Error = Error;
 
-  type SerializeSeq = Tuple<'a>;
+  type SerializeSeq = Seq<'a>;
   type SerializeTuple = Tuple<'a>;
   type SerializeTupleStruct = Custom<'a>;
   type SerializeTupleVariant = Impossible<Self::Ok, Self::Error>;
@@ -234,45 +237,44 @@ impl<'a> ser::Serializer for &'a mut Serializer {
 
   // TODO: Figure out a good way to serialize this
   fn serialize_none(self) -> Result<Self::Ok> {
-    debug!("serialize_none");
+    trace!("Serializer::serialize_none()");
     Ok(None)
   }
 
-  fn serialize_some<T>(self, v: &T) -> Result<Self::Ok>
+  fn serialize_some<T>(self, value: &T) -> Result<Self::Ok>
     where T: ?Sized + Serialize
   {
     trace!("Serializer::serialize_some()");
-    v.serialize(&mut *self)
+    value.serialize(&mut *self)
   }
 
   // TODO: Figure out a good way to serialize this
   fn serialize_unit(self) -> Result<Self::Ok> {
-    debug!("serialize_unit");
-    unimplemented!();
+    trace!("Serializer::serialize_unit()");
+    Err(Error::StaticMessage("unit not supported"))
   }
 
   fn serialize_unit_struct(self, name: &'static str) -> Result<Self::Ok> {
-    debug!("serialize_unit_struct => name: {}", name);
-    let hint = name.serialize(&mut *self)?;
-    Ok(hint)
+    trace!("Serializer::serialize_unit_struct(name: {})", name);
+    name.serialize(&mut *self)
   }
 
   fn serialize_unit_variant(self, name: &'static str, variant_index: u32, variant: &'static str) -> Result<Self::Ok> {
-    debug!("serialize_unit_variant => name: {}, variant_index: {}, variant: {}", name, variant_index, variant);
+    trace!("Serializer::serialize_unit_variant(name: {}, variant_index: {}, variant: {})", name, variant_index, variant);
     variant.serialize(&mut *self)
   }
 
   fn serialize_newtype_struct<T>(self, name: &'static str, value: &T) -> Result<Self::Ok>
     where T: ?Sized + Serialize
   {
-    debug!("serialize_newtype_struct => name: {}", name);
+    trace!("Serializer::serialize_newtype_struct(name: {})", name);
     value.serialize(&mut *self)
   }
 
   fn serialize_newtype_variant<T>(self, name: &'static str, variant_index: u32, variant: &'static str, value: &T) -> Result<Self::Ok>
     where T: ?Sized + Serialize
   {
-    debug!("serialize_newtype_variant => name: {}, variant_index: {}, variant: {}", name, variant_index, variant);
+    trace!("Serializer::serialize_newtype_variant(name: {}, variant_index: {}, variant: {})", name, variant_index, variant);
     variant.serialize(&mut *self)?;
     let hint = value.serialize(&mut *self)?.map(|mut hint| {
       hint.is_array = false;
@@ -282,24 +284,25 @@ impl<'a> ser::Serializer for &'a mut Serializer {
   }
 
   fn serialize_seq(self, len: Option<usize>) -> Result<Self::SerializeSeq> {
-    debug!("serialize_seq => len: {:?}", len);
-    let len = len.ok_or(Error::Message("unsized sequences not supported".to_string()))?;
-    Ok(Tuple::new(self, len))
+    trace!("Serializer::serialize_seq(len: {:?})", len);
+
+    let len = len.ok_or(Error::StaticMessage("unsized sequences not supported"))?;
+    Seq::new(self, len)
   }
 
   fn serialize_tuple(self, len: usize) -> Result<Self::SerializeTuple> {
-    debug!("serialize_tuple => len: {}", len);
+    trace!("Serializer::serialize_tuple(len: {})", len);
     Ok(Tuple::new(self, len))
   }
 
   fn serialize_tuple_struct(self, name: &'static str, len: usize) -> Result<Self::SerializeTupleStruct> {
-    debug!("serialize_tuple_struct => name: {}, len: {}", name, len);
+    trace!("Serializer::serialize_tuple_struct(name: {}, len: {})", name, len);
     Custom::new(self, name, len)
   }
 
   fn serialize_tuple_variant(self, name: &'static str, variant_index: u32, variant: &'static str, len: usize) -> Result<Self::SerializeTupleVariant> {
-    debug!("serialize_tuple_variant => name: {}, variant_index: {}, variant: {}, len: {}", name, variant_index, variant, len);
-    Err(Error::Message("tuple variant not supported".to_string()))
+    trace!("Serializer::serialize_tuple_variant(name: {}, variant_index: {}, variant: {}, len: {})", name, variant_index, variant, len);
+    Err(Error::StaticMessage("tuple variant not supported"))
   }
 
   fn serialize_map(self, len: Option<usize>) -> Result<Self::SerializeMap> {
@@ -308,13 +311,12 @@ impl<'a> ser::Serializer for &'a mut Serializer {
   }
 
   fn serialize_struct(self, name: &'static str, len: usize) -> Result<Self::SerializeStruct> {
-    debug!("serialize_struct => name: {}, len: {}", name, len);
-
+    trace!("Serializer::serialize_struct(name: {}, len: {})", name, len);
     Struct::new(self, name, len)
   }
 
   fn serialize_struct_variant(self, name: &'static str, variant_index: u32, variant: &'static str, len: usize) -> Result<Self::SerializeStructVariant> {
-    debug!("serialize_struct_variant => name: {}, variant_index: {}, variant: {}, len: {}", name, variant_index, variant, len);
-    Err(Error::Message("struct variant not supported".to_string()))
+    trace!("Serializer::serialize_struct_variant(name: {}, variant_index: {}, variant: {}, len: {})", name, variant_index, variant, len);
+    Err(Error::StaticMessage("struct variant not supported"))
   }
 }

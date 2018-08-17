@@ -287,6 +287,25 @@ impl fmt::Display for KbinType {
   }
 }
 
+macro_rules! find_type {
+  ($($base:ident => [$($size:tt $alternate:ident)+])+) => {
+    pub fn find_type(base: StandardType, len: usize) -> StandardType {
+      match base {
+        $(
+          StandardType::$base => match len {
+            1 => StandardType::$base,
+            $(
+              $size => StandardType::$alternate,
+            )+
+            _ => panic!("Unsupported len, base: {:?}, len: {}", base, len),
+          },
+        )*
+        _ => panic!("Unsupported base, base: {:?}, len: {}", base, len),
+      }
+    }
+  };
+}
+
 macro_rules! construct_types {
   (
     $(
@@ -344,6 +363,18 @@ macro_rules! construct_types {
             StandardType::$konst => self.to_bytes_inner::<$inner_type>(input, arr_count),
           )+
         }
+      }
+
+      find_type! {
+        S8 => [ 2 S8_2 3 S8_3 4 S8_4 ]
+        U8 => [ 2 U8_2 3 U8_3 4 U8_4 ]
+        S16 => [ 2 S16_2 3 S16_3 4 S16_4 ]
+        U16 => [ 2 U16_2 3 U16_3 4 U16_4 ]
+        S32 => [ 2 S32_2 3 S32_3 4 S32_4 ]
+        U32 => [ 2 U32_2 3 U32_3 4 U32_4 ]
+        Float => [ 2 Float2 3 Float3 4 Float4 ]
+        Double => [ 2 Double2 3 Double3 4 Double4 ]
+        Boolean => [ 2 Boolean2 3 Boolean3 4 Boolean4 ]
       }
     }
 
