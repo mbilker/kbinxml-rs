@@ -211,7 +211,7 @@ impl ByteBufferWrite {
 
     let old_pos = self.data_buf_offset();
     let size = data_type.size * data_type.count;
-    trace!("write_aligned => old_pos: {}, size: {}", old_pos, size);
+    trace!("write_aligned => old_pos: {}, size: {}, data: 0x{:02x?}", old_pos, size, data);
 
     if size != data.len() {
       return Err(KbinErrorKind::SizeMismatch(data_type, size, data.len()).into());
