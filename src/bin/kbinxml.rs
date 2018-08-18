@@ -112,8 +112,8 @@ fn compare_slice(left: &[u8], right: &[u8]) {
     }
 
     let (i, _, _) = first;
-    eprintln!(r#"  left: `{:?}`
- right: `{:?}`"#, &left[*i..], &right[*i..]);
+    eprintln!(r#"  left: `0x{:02x?}`
+ right: `0x{:02x?}`"#, &left[*i..], &right[*i..]);
   }
 }
 
@@ -185,7 +185,7 @@ fn main() -> std::io::Result<()> {
       Err(e) => eprintln!("Unable to parse generated kbin back to struct: {:#?}", e),
     };
 
-    let value = from_bytes::<Value>(&bytes);
+    let value = from_bytes::<Node>(&bytes);
     match &value {
       Ok(obj2) => eprintln!("obj2: {:#?}", obj2),
       Err(e) => eprintln!("Unable to parse generated kbin back to `Value`: {:#?}", e),
