@@ -35,6 +35,20 @@ macro_rules! construct_types {
       }
     )+
 
+    impl Value {
+      pub fn standard_type(&self) -> Option<StandardType> {
+        match *self {
+          $(
+            Value::$konst(_) => Some(StandardType::$konst),
+          )+
+          Value::Time(_) => Some(StandardType::Time),
+          Value::Attribute(_) => Some(StandardType::Attribute),
+          Value::Array(_) => None,
+          Value::Map(_) => Some(StandardType::NodeStart),
+        }
+      }
+    }
+
     impl<'de> DeserializeSeed<'de> for StandardType {
       type Value = Value;
 
@@ -44,18 +58,19 @@ macro_rules! construct_types {
         trace!("<StandardType as DeserializeSeed>::deserialize(self: {:?})", self);
         match self {
           $(
-            StandardType::$konst => <$($value_type)*>::deserialize(deserializer).map(Value::from),
+            StandardType::$konst => <$($value_type)*>::deserialize(deserializer).map(Value::$konst),
           )+
           StandardType::Time => u32::deserialize(deserializer).map(Value::Time),
           StandardType::Attribute => String::deserialize(deserializer).map(Value::Attribute),
           StandardType::NodeStart => Value::deserialize(deserializer),
-          StandardType::NodeEnd => unimplemented!(),
+          StandardType::NodeEnd |
           StandardType::FileEnd => unimplemented!(),
         }
       }
     }
   }
 }
+
 
 impl fmt::Debug for Value {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {

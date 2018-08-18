@@ -86,7 +86,7 @@ impl<'de> Deserialize<'de> for Value {
       {
         trace!("ValueVisitor::visit_map()");
 
-        let mut values: IndexMap<String, Self::Value> = IndexMap::new();
+        let mut values: IndexMap<String, Value> = IndexMap::new();
 
         while let Some((key, value)) = try!(map.next_entry()) {
           // Check to see if this is an attribute
