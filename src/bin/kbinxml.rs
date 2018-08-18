@@ -80,7 +80,7 @@ fn display_buf(buf: &[u8]) -> Result<(), IoError> {
 fn compare_slice(left: &[u8], right: &[u8]) {
   let mut buf = [0; 4];
   buf.clone_from_slice(&left[4..8]);
-  let node_buf_length = u32::from_be(u32::from_bytes(buf));
+  let node_buf_length = u32::from_be_bytes(buf);
   //println!("node_buf_length: {}", node_buf_length);
 
   let data_buf_start = 8 + node_buf_length as usize;
