@@ -2,42 +2,60 @@ use std::fmt::{self, Write};
 use std::marker::PhantomData;
 
 use indexmap::IndexMap;
-use serde::de::{self, Deserialize, DeserializeSeed, EnumAccess, MapAccess, VariantAccess, Visitor};
-use serde::de::Error as DeError;
+use serde::de::{self, Deserialize, DeserializeSeed, Error, EnumAccess, MapAccess, VariantAccess, Visitor};
 
 use node::Node;
 use node_types::StandardType;
+use value::Value;
 
-impl<'de> Deserialize<'de> for Node {
+struct NodeVisitor {
+  key: Option<String>,
+}
+
+impl<'de> Visitor<'de> for NodeVisitor {
+  type Value = Node;
+
+  fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+    formatter.write_str("any valid kbin node")
+  }
+
   #[inline]
-  fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where D: de::Deserializer<'de>
+  fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
+    where A: MapAccess<'de>
   {
-    struct NodeVisitor;
+    trace!("NodeVisitor::visit_map()");
 
-    impl<'de> Visitor<'de> for NodeVisitor {
-      type Value = Node;
+    let mut attributes = None;
+    let mut nodes = IndexMap::new();
 
-      fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-        formatter.write_str("any valid kbin node")
-      }
+    while let Some(key) = try!(map.next_key_seed(NodeSeed)) {
+      debug!("NodeVisitor::visit_map() => key: {:?}", key);
+      let NodeStart { key, node_type } = key;
 
-      #[inline]
-      fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
-        where A: MapAccess<'de>
-      {
-        trace!("NodeVisitor::visit_map()");
-
-        let mut nodes: IndexMap<String, Node> = IndexMap::new();
-
-        while let Some(key) = map.next_key_seed(NodeSeed)? {
-          debug!("NodeVisitor::visit_map() => key: {:?}", key);
-          let NodeStart { key, node_type } = key;
-
+      match node_type {
+        StandardType::Attribute => {
           let value = map.next_value();
           debug!("NodeVisitor::visit_map() => value: {:?}", value);
 
-          let node = Node::new(key.clone(), value?);
+          if let Value::Attribute(s) = try!(value) {
+            let key = String::from(&key["attr_".len()..]);
+            let attributes = attributes.get_or_insert_with(IndexMap::new);
+            attributes.insert(key, s);
+          } else {
+            return Err(A::Error::custom("`Attribute` node must have `Value::Attribute` value"));
+          }
+        },
+        StandardType::NodeStart => {
+          let value = map.next_value_seed(NodeValueSeed(key.clone()))?;
+          debug!("NodeVisitor::visit_map() => value: {:?}", value);
+
+          nodes.insert(key, value);
+        },
+        _ => {
+          let value = map.next_value();
+          debug!("NodeVisitor::visit_map() => value: {:?}", value);
+
+          let node = Node::new(key.clone(), Some(try!(value)));
           debug!("NodeVisitor::visit_map() => node_type: {:?}, node: {:?}", node_type, node);
 
           if !nodes.contains_key(&key) {
@@ -53,16 +71,42 @@ impl<'de> Deserialize<'de> for Node {
             debug!("Node::visit_map() => next open key: {:?}", new_key);
             nodes.insert(new_key, node);
           }
-        }
-
-        debug!("NodeVisitor::visit_map() => nodes: {:#?}", nodes);
-
-        Err(A::Error::custom("still finishing implementation"))
-        //Ok(nodes)
-      }
+        },
+      };
     }
 
-    deserializer.deserialize_map(NodeVisitor)
+    debug!("NodeVisitor::visit_map() => nodes: {:#?}", nodes);
+    let node = Node {
+      attributes,
+      key: self.key.unwrap_or_else(|| "".to_owned()),
+      children: Some(nodes),
+      value: None,
+    };
+
+    //Err(A::Error::custom("still finishing implementation"))
+    Ok(node)
+  }
+}
+
+impl<'de> Deserialize<'de> for Node {
+  #[inline]
+  fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where D: de::Deserializer<'de>
+  {
+    deserializer.deserialize_map(NodeVisitor { key: None })
+  }
+}
+
+struct NodeValueSeed(String);
+
+impl<'de> DeserializeSeed<'de> for NodeValueSeed {
+  type Value = Node;
+
+  #[inline]
+  fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+    where D: de::Deserializer<'de>
+  {
+    deserializer.deserialize_map(NodeVisitor { key: Some(self.0) })
   }
 }
 
