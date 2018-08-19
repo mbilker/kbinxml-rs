@@ -15,7 +15,7 @@ use std::net::Ipv4Addr;
 use std::str;
 
 use failure::Fail;
-use kbinxml::{Ip4Addr, KbinXml, Node, Options, Printer, Value, from_bytes, to_bytes};
+use kbinxml::{ExtraNodes, Ip4Addr, KbinXml, Node, Options, Printer, from_bytes, to_bytes};
 use minidom::Element;
 use quick_xml::Writer;
 
@@ -30,7 +30,7 @@ pub struct Testing2 {
   ip: Ip4Addr,
 
   #[serde(flatten)]
-  extra: Value,
+  extra: ExtraNodes,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -170,7 +170,7 @@ fn main() -> std::io::Result<()> {
         opt: None,
         opt2: Some(111),
         ip: Ip4Addr::new(Ipv4Addr::new(127, 0, 0, 1)),
-        extra: Value::Map(Default::default()),
+        extra: ExtraNodes::new(),
       },
     };
     let bytes = to_bytes(&obj).unwrap();

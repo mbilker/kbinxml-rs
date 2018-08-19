@@ -48,7 +48,7 @@ use sixbit::pack_sixbit;
 pub use encoding_type::EncodingType;
 pub use printer::Printer;
 pub use error::{KbinError, KbinErrorKind, Result};
-pub use node::Node;
+pub use node::{ExtraNodes, Node};
 pub use options::Options;
 pub use de::from_bytes;
 pub use ip4::Ip4Addr;
