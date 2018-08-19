@@ -90,6 +90,7 @@ impl<'de, 'a> MapAccess<'de> for Struct<'a, 'de> {
     debug!("--> <Struct as MapAccess>::next_value_seed()");
     let value = seed.deserialize(&mut *self.de)?;
 
+    // Cannot use `next_value_seed` recursively here as it would restart this for loop
     for _ in 0..self.values_to_consume {
       warn!("Struct::next_value_seed() => ignoring Attribute node value");
       let seed = PhantomData;
