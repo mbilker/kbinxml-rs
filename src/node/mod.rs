@@ -3,9 +3,12 @@ use indexmap::IndexMap;
 use value::Value;
 
 mod de;
+mod extra;
 mod ser;
 
-#[derive(Clone, Debug, PartialEq)]
+pub use self::extra::ExtraNodes;
+
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct Node {
   key: String,
   attributes: Option<IndexMap<String, String>>,
@@ -24,8 +27,23 @@ impl Node {
   }
 
   #[inline]
+  pub fn key(&self) -> &str {
+    &self.key
+  }
+
+  #[inline]
+  pub fn attributes(&self) -> Option<&IndexMap<String, String>> {
+    self.attributes.as_ref()
+  }
+
+  #[inline]
   pub fn children(&self) -> Option<&IndexMap<String, Node>> {
     self.children.as_ref()
+  }
+
+  #[inline]
+  pub fn value(&self) -> Option<&Value> {
+    self.value.as_ref()
   }
 
   pub fn set_attr(&mut self, key: String, value: String) -> Option<String> {

@@ -8,8 +8,34 @@ use node::Node;
 use node_types::StandardType;
 use value::Value;
 
-struct NodeVisitor {
+pub(crate) struct NodeVisitor {
   key: Option<String>,
+}
+
+impl<'de> NodeVisitor {
+  pub(crate) fn map_to_node<A>(node_type: StandardType, key: &str, map: &mut A) -> Result<Node, A::Error>
+    where A: MapAccess<'de>
+  {
+    match node_type {
+      StandardType::Attribute => Err(A::Error::custom("`Attribute` nodes must be handled elsewhere")),
+      StandardType::NodeStart => {
+        let value = try!(map.next_value_seed(NodeValueSeed(key.to_owned())));
+        debug!("NodeVisitor::map_to_node() => value: {:?}", value);
+
+        Ok(value)
+      },
+      // TODO: roll up `NodeStart` and everything else into a single map handler
+      _ => {
+        let value = try!(map.next_value());
+        debug!("NodeVisitor::map_to_node() => value: {:?}", value);
+
+        let node = Node::new(key.to_owned(), Some(value));
+        debug!("NodeVisitor::map_to_node() => node_type: {:?}, node: {:?}", node_type, node);
+
+        Ok(node)
+      },
+    }
+  }
 }
 
 impl<'de> Visitor<'de> for NodeVisitor {
@@ -45,18 +71,9 @@ impl<'de> Visitor<'de> for NodeVisitor {
             return Err(A::Error::custom("`Attribute` node must have `Value::Attribute` value"));
           }
         },
-        StandardType::NodeStart => {
-          let value = map.next_value_seed(NodeValueSeed(key.clone()))?;
-          debug!("NodeVisitor::visit_map() => value: {:?}", value);
-
-          nodes.insert(key, value);
-        },
         _ => {
-          let value = map.next_value();
-          debug!("NodeVisitor::visit_map() => value: {:?}", value);
-
-          let node = Node::new(key.clone(), Some(try!(value)));
-          debug!("NodeVisitor::visit_map() => node_type: {:?}, node: {:?}", node_type, node);
+          let node = NodeVisitor::map_to_node(node_type, &key, &mut map)?;
+          debug!("NodeVisitor::visit_map() => node: {:?}", node);
 
           if !nodes.contains_key(&key) {
             nodes.insert(key, node);
@@ -113,12 +130,12 @@ impl<'de> DeserializeSeed<'de> for NodeValueSeed {
 /// Node classifier that gets the key name and the type of the node before the
 /// main `Node` object handles getting the value based on the type and the
 /// attributes.
-struct NodeSeed;
+pub(crate) struct NodeSeed;
 
 #[derive(Debug)]
-struct NodeStart {
-  key: String,
-  node_type: StandardType,
+pub(crate) struct NodeStart {
+  pub(crate) key: String,
+  pub(crate) node_type: StandardType,
 }
 
 impl<'de> DeserializeSeed<'de> for NodeSeed {
