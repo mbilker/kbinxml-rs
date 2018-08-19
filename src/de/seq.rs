@@ -32,21 +32,20 @@ impl<'de, 'a> Seq<'a, 'de> {
     })
   }
 
-  fn is_end(&mut self) -> Result<bool> {
+  fn is_end(&mut self, node_type: StandardType) -> Result<bool> {
     // The struct sequence ends when the node identifier has a different name
     // and the current node type is not `NodeStart` or `NodeEnd` and the last
     // node was not a `NodeStart` event.
     //
     // The should not trigger for struct subfields because those would be
     // deserialized by the struct deserializer.
-    let (last_node_type, _is_array) = self.de.reader.last_node_type().ok_or(KbinErrorKind::InvalidState)?;
-    if last_node_type != StandardType::NodeStart &&
-       last_node_type != StandardType::NodeEnd
+    if node_type != StandardType::NodeStart &&
+       node_type != StandardType::NodeEnd
     {
       let node_identifier = self.de.reader.peek_node_identifier()?;
       let known_identifier = self.known_identifier.as_ref().ok_or(KbinErrorKind::InvalidState)?;
       if node_identifier.as_str() != known_identifier {
-        debug!("Seq::next_element_seed() => peeked identifier does not equal known identifier: {:?}", known_identifier);
+        debug!("Seq::is_end() => peeked identifier does not equal known identifier: {:?}", known_identifier);
         return Ok(true);
       }
     }
@@ -72,12 +71,22 @@ impl<'de, 'a> SeqAccess<'de> for Seq<'a, 'de> {
         return Ok(None);
       }
     } else {
-      let (node_type, _) = self.de.reader.peek_node_type()?;
+      let (node_type, _is_array) = self.de.reader.peek_node_type()?;
+      let (last_node_type, _is_array) = self.de.reader.last_node_type().ok_or(KbinErrorKind::InvalidState)?;
       debug!("Seq::next_element_seed() => peeked type: {:?}, last type: {:?}", node_type, self.de.reader.last_node_type());
 
-      if self.is_end()? {
-        debug!("<-- Seq::next_element_seed() => end of sequence");
+      if self.is_end(last_node_type)? {
+        debug!("<-- Seq::next_element_seed() => end of sequence (by last read node)");
         return Ok(None);
+      }
+
+      // If the peeked node is not a `NodeStart` and this isn't the first
+      // element in the list, check the identifier
+      if self.index > 0 {
+        if self.is_end(node_type)? {
+          debug!("<-- Seq::next_element_seed() => end of sequence (by peeked node)");
+          return Ok(None);
+        }
       }
 
       // `NodeEnd` signals the end of the sequence for a sequence of structs
