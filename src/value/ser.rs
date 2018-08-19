@@ -41,8 +41,8 @@ impl Serialize for Value {
           },
           Value::Attribute(ref s) => serializer.serialize_str(&format!("attr_{}", s)),
 
-          Value::Array(ref a) => a.serialize(serializer),
-          Value::Map(ref m) => m.serialize(serializer),
+          Value::Array(_, ref a) => a.serialize(serializer),
+          Value::Node(ref n) => n.serialize(serializer),
         }
       };
     }

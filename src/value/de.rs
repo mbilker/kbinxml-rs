@@ -1,7 +1,6 @@
 use std::fmt;
 
-use indexmap::IndexMap;
-use serde::de::{self, Deserialize, EnumAccess, Error, MapAccess, SeqAccess, VariantAccess, Visitor};
+use serde::de::{self, Deserialize, EnumAccess, Error, SeqAccess, VariantAccess, Visitor};
 
 use node_types::StandardType;
 use value::Value;
@@ -71,58 +70,27 @@ impl<'de> Deserialize<'de> for Value {
         trace!("ValueVisitor::visit_seq()");
 
         let mut vec = Vec::new();
+        let mut array_node_type = None;
 
         while let Some(elem) = try!(seq.next_element()) {
-          debug!("ValueVisitor::visit_seq() => elem: {:?}", elem);
+          let elem: Value = elem;
+          let node_type = elem.standard_type();
+
+          // Ensure that all elements in the `Vec` are of the same `Value` variant
+          if let Some(array_node_type) = array_node_type {
+            if array_node_type != node_type {
+              return Err(A::Error::custom("All values in `Value::Array` must be the same node type"));
+            }
+          } else {
+            array_node_type = Some(node_type);
+          }
+
+          debug!("ValueVisitor::visit_seq() => node_type: {:?}, elem: {:?}", node_type, elem);
           vec.push(elem);
         }
 
-        Ok(Value::Array(vec))
-      }
-
-      #[inline]
-      fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
-        where A: MapAccess<'de>
-      {
-        trace!("ValueVisitor::visit_map()");
-
-        let mut values: IndexMap<String, Value> = IndexMap::new();
-
-        while let Some((key, value)) = try!(map.next_entry()) {
-          // Check to see if this is an attribute
-          let key: String = key;
-          let (key, value) = if key.starts_with("attr_") {
-            let value = match value {
-              Value::Attribute(_) => value,
-              _ => return Err(A::Error::custom("Key that starts with 'attr_' must be an `Attribute`")),
-            };
-
-            (&key["attr_".len()..], value)
-          } else {
-            (key.as_str(), value)
-          };
-
-          debug!("ValueVisitor::visit_map() => key: {:?}, value: {:?}", key, value);
-          if values.contains_key(key) {
-            let replace = match values.get_mut(key).expect("Key must exist from `contains_key`") {
-              Value::Array(ref mut arr) => {
-                arr.push(value);
-                false
-              },
-              // Replace the `Value` with an array of `Value`s
-              _ => true,
-            };
-
-            if replace {
-              let entry = values.remove(key).expect("Key must exist from `contains_key`");
-              values.insert(key.to_owned(), Value::Array(vec![entry]));
-            }
-          } else {
-            values.insert(key.to_owned(), value);
-          }
-        }
-
-        Ok(Value::Map(values))
+        let array_node_type = array_node_type.ok_or_else(|| A::Error::custom("`Value::Array` must have node type"))?;
+        Ok(Value::Array(array_node_type, vec))
       }
 
       #[inline]

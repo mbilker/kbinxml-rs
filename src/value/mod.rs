@@ -1,9 +1,9 @@
 use std::fmt;
 use std::net::Ipv4Addr;
 
-use indexmap::IndexMap;
 use serde::de::{Deserialize, Deserializer, DeserializeSeed};
 
+use node::Node;
 use node_types::StandardType;
 
 mod de;
@@ -23,8 +23,8 @@ macro_rules! construct_types {
       Time(u32),
       Attribute(String),
 
-      Array(Vec<Value>),
-      Map(IndexMap<String, Value>),
+      Array(StandardType, Vec<Value>),
+      Node(Box<Node>),
     }
 
     $(
@@ -36,15 +36,15 @@ macro_rules! construct_types {
     )+
 
     impl Value {
-      pub fn standard_type(&self) -> Option<StandardType> {
+      pub fn standard_type(&self) -> StandardType {
         match *self {
           $(
-            Value::$konst(_) => Some(StandardType::$konst),
+            Value::$konst(_) => StandardType::$konst,
           )+
-          Value::Time(_) => Some(StandardType::Time),
-          Value::Attribute(_) => Some(StandardType::Attribute),
-          Value::Array(_) => None,
-          Value::Map(_) => Some(StandardType::NodeStart),
+          Value::Time(_) => StandardType::Time,
+          Value::Attribute(_) => StandardType::Attribute,
+          Value::Array(node_type, _) => node_type,
+          Value::Node(_) => StandardType::NodeStart,
         }
       }
     }
@@ -95,6 +95,11 @@ impl fmt::Debug for Value {
             Value::$konst_debug(ref v) => write!(f, concat!(stringify!($konst_debug), "({:?})"), v),
           )*
           Value::Binary(ref v) => write!(f, "Binary(0x{:02x?})", v),
+          Value::Array(ref node_type, ref a) => if f.alternate() {
+            write!(f, "Array({:?}, {:#?}", node_type, a)
+          } else {
+            write!(f, "Array({:?}, {:?}", node_type, a)
+          },
         }
       };
     }
@@ -106,7 +111,7 @@ impl fmt::Debug for Value {
         Float, Double, Boolean
       ],
       debug_alternate: [
-        Map, Array
+        Node
       ],
       debug: [
         String, Time, Ip4,
