@@ -50,6 +50,9 @@ impl EncodingType {
   ///
   /// A `Some` value indicates an encoding should be used from the `encoding`
   /// crate. A `None` value indicates Rust's own UTF-8 handling should be used.
+  ///
+  /// `EncodingType::SHIFT_JIS` will ignore invalid characters because Konami's
+  /// implementation will include invalid characters.
   pub fn decode_bytes(&self, input: &[u8]) -> Result<String, KbinError> {
     let decoder_fail = |e| {
       format_err!("{}", e).context(KbinErrorKind::Encoding)
@@ -62,7 +65,7 @@ impl EncodingType {
       EncodingType::ASCII      => ASCII.decode(input, DecoderTrap::Strict).map_err(decoder_fail)?,
       EncodingType::ISO_8859_1 => ISO_8859_1.decode(input, DecoderTrap::Strict).map_err(decoder_fail)?,
       EncodingType::EUC_JP     => EUC_JP.decode(input, DecoderTrap::Strict).map_err(decoder_fail)?,
-      EncodingType::SHIFT_JIS  => WINDOWS_31J.decode(input, DecoderTrap::Strict).map_err(decoder_fail)?,
+      EncodingType::SHIFT_JIS  => WINDOWS_31J.decode(input, DecoderTrap::Ignore).map_err(decoder_fail)?,
     };
 
     Ok(result)
