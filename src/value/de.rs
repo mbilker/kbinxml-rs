@@ -30,7 +30,20 @@ impl<'de> Deserialize<'de> for Value {
       type Value = Value;
 
       fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-        formatter.write_str("any valid kbin value")
+        formatter.write_str("any valid kbin value (for Value)")
+      }
+
+      #[inline]
+      fn visit_string<E>(self, value: String) -> Result<Self::Value, E>
+        where E: de::Error
+      {
+        trace!("ValueVisitor::visit_string(value: {:?})", value);
+
+        if value.starts_with("attr_") {
+          Ok(Value::Attribute(String::from(&value["attr_".len()..])))
+        } else {
+          Ok(Value::String(value))
+        }
       }
 
       #[inline]
@@ -38,7 +51,12 @@ impl<'de> Deserialize<'de> for Value {
         where E: de::Error
       {
         trace!("ValueVisitor::visit_str(value: {:?})", value);
-        self.visit_string(String::from(value))
+
+        if value.starts_with("attr_") {
+          Ok(Value::Attribute(String::from(&value["attr_".len()..])))
+        } else {
+          Ok(Value::String(String::from(value)))
+        }
       }
 
       #[inline]

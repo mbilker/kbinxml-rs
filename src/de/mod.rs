@@ -56,6 +56,12 @@ impl<'de> Deserializer<'de> {
   }
 
   #[inline]
+  fn node_stack_last(&self) -> Result<&(StandardType, bool)> {
+    self.node_stack.last()
+      .ok_or(KbinErrorKind::InvalidState.into())
+  }
+
+  #[inline]
   fn set_read_mode(&mut self, read_mode: ReadMode) -> ReadMode {
     let old_read_mode = self.read_mode;
     self.read_mode = read_mode;
@@ -69,11 +75,6 @@ impl<'de> Deserializer<'de> {
     debug!("name: {}", name);
 
     Ok((node_type, is_array, name))
-  }
-
-  fn node_stack_last(&self) -> Result<&(StandardType, bool)> {
-    self.node_stack.last()
-      .ok_or(KbinErrorKind::InvalidState.into())
   }
 }
 
@@ -397,7 +398,8 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     where V: Visitor<'de>
   {
     trace!("Deserializer::deserialize_enum(name: {:?}, variants: {:?})", name, variants);
-    unimplemented!();
+
+    Err(Error::StaticMessage("enum deserialization not supported"))
   }
 
   fn deserialize_identifier<V>(self, visitor: V) -> Result<V::Value>

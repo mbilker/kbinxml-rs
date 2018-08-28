@@ -47,6 +47,20 @@ macro_rules! construct_types {
           Value::Node(_) => StandardType::NodeStart,
         }
       }
+
+      pub fn as_i8(&self) -> Option<i8> {
+        match self {
+          Value::S8(ref n) => Some(*n),
+          _ => None,
+        }
+      }
+
+      pub fn as_u8(&self) -> Option<u8> {
+        match self {
+          Value::U8(ref n) => Some(*n),
+          _ => None,
+        }
+      }
     }
 
     impl<'de> DeserializeSeed<'de> for StandardType {

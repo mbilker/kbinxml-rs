@@ -1,3 +1,5 @@
+use std::fmt;
+
 use indexmap::IndexMap;
 
 use value::Value;
@@ -8,12 +10,31 @@ mod ser;
 
 pub use self::extra::ExtraNodes;
 
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq)]
 pub struct Node {
   key: String,
   attributes: Option<IndexMap<String, String>>,
   children: Option<IndexMap<String, Node>>,
   value: Option<Value>,
+}
+
+impl fmt::Debug for Node {
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    let mut d = f.debug_struct("Node");
+    d.field("key", &self.key);
+
+    if let Some(ref attributes) = self.attributes {
+      d.field("attributes", attributes);
+    }
+
+    if let Some(ref children) = self.children {
+      d.field("children", children);
+    } else if let Some(ref value) = self.value {
+      d.field("value", value);
+    }
+
+    d.finish()
+  }
 }
 
 impl Node {

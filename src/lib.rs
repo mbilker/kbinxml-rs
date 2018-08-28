@@ -28,6 +28,7 @@ mod compression;
 mod encoding_type;
 mod error;
 mod ip4;
+mod kbin_wrapper;
 mod node;
 mod node_types;
 mod options;
