@@ -135,8 +135,7 @@ impl<'de> Deserialize<'de> for Value {
         visit_u32 u32 U32,
         visit_u64 u64 U64,
         visit_f32 f32 Float,
-        visit_f64 f64 Double,
-        visit_string String String
+        visit_f64 f64 Double
       }
     }
 
