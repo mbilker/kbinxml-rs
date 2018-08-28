@@ -43,6 +43,9 @@ pub struct Testing {
   hhg: (u32, u32),
   foo: String,
   testing2: Testing2,
+
+  #[serde(flatten)]
+  extra: ExtraNodes,
 }
 
 fn display_err(err: impl Fail) -> IoError {
@@ -172,6 +175,7 @@ fn main() -> std::io::Result<()> {
         ip: Ip4Addr::new(Ipv4Addr::new(127, 0, 0, 1)),
         extra: ExtraNodes::new(),
       },
+      extra: ExtraNodes::new(),
     };
     let bytes = to_bytes(&obj).unwrap();
     eprintln!("bytes: {:02x?}", bytes);
