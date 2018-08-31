@@ -119,17 +119,6 @@ macro_rules! de_type {
   }
 }
 
-macro_rules! implement_type {
-  ($method:ident) => {
-    fn $method<V>(self, _visitor: V) -> Result<V::Value>
-      where V: Visitor<'de>
-    {
-      trace!("Deserializer::{}()", stringify!($method));
-      unimplemented!();
-    }
-  }
-}
-
 impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
   type Error = Error;
 
@@ -240,8 +229,20 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
   de_type!(large; deserialize_i64, visit_i64, read_i64, S64);
   de_type!(large; deserialize_f32, visit_f32, read_f32, Float);
   de_type!(large; deserialize_f64, visit_f64, read_f64, Double);
-  implement_type!(deserialize_char);
-  implement_type!(deserialize_str);
+
+  fn deserialize_char<V>(self, _visitor: V) -> Result<V::Value>
+    where V: Visitor<'de>
+  {
+    trace!("Deserializer::deserialize_char()");
+    Err(Error::StaticMessage("char deserialization is not supported"))
+  }
+
+  fn deserialize_str<V>(self, _visitor: V) -> Result<V::Value>
+    where V: Visitor<'de>
+  {
+    trace!("Deserializer::deserialize_str()");
+    Err(Error::StaticMessage("borrowed string deserialization is not supported"))
+  }
 
   fn deserialize_string<V>(self, visitor: V) -> Result<V::Value>
     where V: Visitor<'de>
@@ -257,7 +258,7 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     where V: Visitor<'de>
   {
     trace!("Deserializer::deserialize_bytes()");
-    visitor.visit_bytes(self.reader.read_bytes()?)
+    visitor.visit_borrowed_bytes(self.reader.read_bytes()?)
   }
 
   fn deserialize_byte_buf<V>(self, visitor: V) -> Result<V::Value>
@@ -276,20 +277,25 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     visitor.visit_some(self)
   }
 
-  implement_type!(deserialize_unit);
+  fn deserialize_unit<V>(self, _visitor: V) -> Result<V::Value>
+    where V: Visitor<'de>
+  {
+    trace!("Deserializer::deserialize_unit()");
+    Err(Error::StaticMessage("unit deserialization is not supported"))
+  }
 
   fn deserialize_unit_struct<V>(self, name: &'static str, _visitor: V) -> Result<V::Value>
     where V: Visitor<'de>
   {
     trace!("Deserializer::deserialize_unit_struct(name: {:?})", name);
-    unimplemented!();
+    Err(Error::StaticMessage("unit struct deserialization is not supported"))
   }
 
   fn deserialize_newtype_struct<V>(self, name: &'static str, _visitor: V) -> Result<V::Value>
     where V: Visitor<'de>
   {
     trace!("Deserializer::deserialize_newtype_struct(name: {:?})", name);
-    unimplemented!();
+    Err(Error::StaticMessage("newtype struct deserialization is not supported"))
   }
 
   fn deserialize_seq<V>(self, visitor: V) -> Result<V::Value>
@@ -303,6 +309,9 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
       // If the last node type on the stack is a `NodeStart` then we are likely
       // collecting a list of structs
       StandardType::NodeStart => visitor.visit_seq(Seq::new(self, None)?)?,
+
+      // Bytes should be deserialized by `deserialize_bytes`
+      StandardType::Binary => self.deserialize_bytes(visitor)?,
 
       _ => {
         // TODO: add size check against len

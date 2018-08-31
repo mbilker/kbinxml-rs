@@ -66,7 +66,7 @@ impl KbinType {
         }
       },
       count if count > 1 => self.parse_array::<T>(&mut result, input, arr_count)?,
-      _ => unimplemented!(),
+      _ => return Err(KbinErrorKind::InvalidState.into()),
     };
 
     Ok(result)
@@ -107,7 +107,7 @@ impl KbinType {
         };
       },
       count if count > 1 => self.to_array::<T>(&mut output, input, arr_count)?,
-      _ => unimplemented!(),
+      _ => return Err(KbinErrorKind::InvalidState.into()),
     };
 
     Ok(output)

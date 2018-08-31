@@ -6,6 +6,7 @@ extern crate indexmap;
 extern crate minidom;
 extern crate num;
 extern crate rustc_hex;
+extern crate serde_bytes;
 
 #[macro_use] extern crate failure;
 #[macro_use] extern crate lazy_static;

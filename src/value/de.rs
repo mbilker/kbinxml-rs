@@ -71,6 +71,14 @@ impl<'de> Deserialize<'de> for Value {
       }
 
       #[inline]
+      fn visit_borrowed_bytes<E>(self, value: &'de [u8]) -> Result<Self::Value, E>
+        where E: de::Error
+      {
+        trace!("ValueVisitor::visit_borrowed_bytes(value: 0x{:02x?})", value);
+        self.visit_byte_buf(value.to_vec())
+      }
+
+      #[inline]
       fn visit_byte_buf<E>(self, value: Vec<u8>) -> Result<Self::Value, E> {
         trace!("ValueVisitor::visit_byte_buf(value: 0x{:02x?})", value);
         Ok(Value::Binary(value))
@@ -206,7 +214,7 @@ impl<'de, E> de::Deserializer<'de> for ValueDeserializer<E>
           Value::Attribute(s) => visitor.visit_string(s),
 
           Value::Array(_, v) => SeqDeserializer::new(v.into_iter()).deserialize_any(visitor),
-          Value::Node(_) => unimplemented!(),
+          Value::Node(node) => node.into_deserializer().deserialize_any(visitor),
         }
       };
     }

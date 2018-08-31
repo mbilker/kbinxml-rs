@@ -2,6 +2,7 @@ use std::fmt;
 use std::net::Ipv4Addr;
 
 use serde::de::{Deserialize, Deserializer, DeserializeSeed};
+use serde_bytes::ByteBuf;
 
 use node::Node;
 use node_types::StandardType;
@@ -20,6 +21,7 @@ macro_rules! construct_types {
       $(
         $konst($($value_type)*),
       )+
+      Binary(Vec<u8>),
       Time(u32),
       Attribute(String),
 
@@ -41,6 +43,7 @@ macro_rules! construct_types {
           $(
             Value::$konst(_) => StandardType::$konst,
           )+
+          Value::Binary(_) => StandardType::Binary,
           Value::Time(_) => StandardType::Time,
           Value::Attribute(_) => StandardType::Attribute,
           Value::Array(node_type, _) => node_type,
@@ -74,6 +77,7 @@ macro_rules! construct_types {
           $(
             StandardType::$konst => <$($value_type)*>::deserialize(deserializer).map(Value::$konst),
           )+
+          StandardType::Binary => ByteBuf::deserialize(deserializer).map(Vec::from).map(Value::Binary),
           StandardType::Time => u32::deserialize(deserializer).map(Value::Time),
           StandardType::Attribute => String::deserialize(deserializer).map(Value::Attribute),
           StandardType::NodeStart => Node::deserialize(deserializer).map(Box::new).map(Value::Node),
@@ -85,6 +89,17 @@ macro_rules! construct_types {
   }
 }
 
+impl From<Vec<u8>> for Value {
+  fn from(value: Vec<u8>) -> Value {
+    Value::Binary(value)
+  }
+}
+
+impl From<ByteBuf> for Value {
+  fn from(value: ByteBuf) -> Value {
+    Value::Binary(value.into())
+  }
+}
 
 impl fmt::Debug for Value {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -149,7 +164,7 @@ construct_types! {
   (U32,      u32);
   (S64,      i64);
   (U64,      u64);
-  (Binary,   Vec<u8>);
+  //(Binary,   Vec<u8>);
   (String,   String);
   (Ip4,      Ipv4Addr);
   //(Time,     u32);
