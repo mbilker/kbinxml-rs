@@ -76,7 +76,7 @@ macro_rules! construct_types {
           )+
           StandardType::Time => u32::deserialize(deserializer).map(Value::Time),
           StandardType::Attribute => String::deserialize(deserializer).map(Value::Attribute),
-          StandardType::NodeStart => Value::deserialize(deserializer),
+          StandardType::NodeStart => Node::deserialize(deserializer).map(Box::new).map(Value::Node),
           StandardType::NodeEnd |
           StandardType::FileEnd => unimplemented!(),
         }

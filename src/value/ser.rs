@@ -27,6 +27,11 @@ impl Serialize for Value {
             custom.serialize_field(v)?;
             custom.end()
           },
+          Value::Time(ref n) => {
+            let mut custom = serializer.serialize_tuple_struct("time", 4)?;
+            custom.serialize_field(n)?;
+            custom.end()
+          },
           Value::Float(f) => serializer.serialize_f32(f),
           Value::Double(d) => serializer.serialize_f64(d),
           Value::Boolean(b) => serializer.serialize_bool(b),
@@ -34,11 +39,6 @@ impl Serialize for Value {
           $(
             Value::$type(ref v) => v.serialize(serializer),
           )*
-          Value::Time(ref n) => {
-            let mut custom = serializer.serialize_tuple_struct("time", 4)?;
-            custom.serialize_field(n)?;
-            custom.end()
-          },
           Value::Attribute(ref s) => serializer.serialize_str(&format!("attr_{}", s)),
 
           Value::Array(_, ref a) => a.serialize(serializer),
