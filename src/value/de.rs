@@ -4,6 +4,7 @@ use std::marker::PhantomData;
 use serde::de::{self, Deserialize, EnumAccess, Error, IntoDeserializer, SeqAccess, VariantAccess, Visitor};
 use serde::de::value::SeqDeserializer;
 
+use node::Marshal;
 use node_types::StandardType;
 use value::Value;
 
@@ -111,6 +112,18 @@ impl<'de> Deserialize<'de> for Value {
 
         let array_node_type = array_node_type.ok_or_else(|| A::Error::custom("`Value::Array` must have node type"))?;
         Ok(Value::Array(array_node_type, vec))
+      }
+
+      #[inline]
+      fn visit_newtype_struct<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+        where D: de::Deserializer<'de>
+      {
+        trace!("ValueVisitor::visit_newtype_struct()");
+
+        let marshal: Marshal = Marshal::deserialize(deserializer)?;
+        debug!("ValueVisitor::visit_newtype_struct() => marshal: {:?}", marshal);
+
+        marshal.into_inner().as_value().ok_or_else(|| D::Error::custom("`Marshal` must contain `Value` not `Node`"))
       }
 
       #[inline]

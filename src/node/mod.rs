@@ -6,9 +6,11 @@ use value::Value;
 
 mod de;
 mod extra;
+mod marshal;
 mod ser;
 
 pub use self::extra::ExtraNodes;
+pub use self::marshal::Marshal;
 
 #[derive(Clone, Default, PartialEq)]
 pub struct Node {
