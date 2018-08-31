@@ -38,12 +38,21 @@ impl fmt::Debug for Node {
 }
 
 impl Node {
-  pub fn new(key: String, value: Option<Value>) -> Self {
+  pub fn new(key: String) -> Self {
     Self {
       key,
       attributes: None,
       children: None,
-      value,
+      value: None,
+    }
+  }
+
+  pub fn with_value(key: String, value: Value) -> Self {
+    Self {
+      key,
+      attributes: None,
+      children: None,
+      value: Some(value),
     }
   }
 
