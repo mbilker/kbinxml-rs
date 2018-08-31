@@ -2,9 +2,10 @@ use std::result::Result as StdResult;
 
 use byteorder::{BigEndian, ByteOrder, ReadBytesExt};
 use failure::ResultExt;
-use serde::de::{self, Deserialize, Visitor};
+use serde::de::{self, Deserialize, DeserializeSeed, IntoDeserializer, Visitor};
 
 use error::{Error, KbinErrorKind};
+use node::{Marshal, Node};
 use node_types::StandardType;
 use reader::Reader;
 
@@ -157,6 +158,11 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
       };
     }
 
+    // Only deserialize identifiers in `Key` mode
+    if self.read_mode == ReadMode::Key {
+      return self.deserialize_identifier(visitor);
+    }
+
     let value = match node_type {
       /*
       StandardType::Attribute => self.deserialize_string(visitor),
@@ -170,9 +176,7 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
       StandardType::S16 => self.deserialize_i16(visitor),
       StandardType::S32 => self.deserialize_i32(visitor),
       StandardType::S64 => self.deserialize_i64(visitor),
-      */
       StandardType::Binary => visitor.visit_bytes(self.reader.read_bytes()?),
-      /*
       StandardType::Ip4 => {
         let old_read_mode = self.set_read_mode(ReadMode::Array);
         let value = visitor.visit_enum(Custom::new(self, node_type))?;
@@ -181,13 +185,26 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
       },
       StandardType::Boolean => self.deserialize_bool(visitor),
       */
-      StandardType::NodeStart => self.deserialize_map(visitor),
+      StandardType::NodeStart => {
+        debug!("Deserializer::deserialize_any(node_type: {:?}, is_array: {}) => deserializing node", node_type, is_array);
+        let node = Node::deserialize(self);
+        debug!("Deserializer::deserialize_any(node_type: {:?}, is_array: {}) => node: {:?}", node_type, is_array, node);
+        let marshal = Marshal::with_node(StandardType::NodeStart, node?);
+        visitor.visit_newtype_struct(marshal.into_deserializer())
+      },
+      /*
       StandardType::NodeEnd => {
         // Move `deserialize_any` on to the next node
         let _ = self.reader.read_node_type()?;
         self.deserialize_any(visitor)
       },
-      _ => visitor.visit_enum(Custom::new(self, node_type)),
+      */
+      _ => {
+        let value = node_type.deserialize(self)?;
+        debug!("Deserializer::deserialize_any(node_type: {:?}, is_array: {}) => value: {:?}", node_type, is_array, value);
+        let marshal = Marshal::with_value(node_type, value);
+        visitor.visit_newtype_struct(marshal.into_deserializer())
+      },
     };
     value
   }
@@ -236,15 +253,17 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     }
   }
 
-  forward_to_deserialize_any! {
-    bytes
+  fn deserialize_bytes<V>(self, visitor: V) -> Result<V::Value>
+    where V: Visitor<'de>
+  {
+    trace!("Deserializer::deserialize_bytes()");
+    visitor.visit_bytes(self.reader.read_bytes()?)
   }
 
   fn deserialize_byte_buf<V>(self, visitor: V) -> Result<V::Value>
     where V: Visitor<'de>
   {
     trace!("Deserializer::deserialize_byte_buf()");
-
     visitor.visit_byte_buf(self.reader.read_bytes()?.to_vec())
   }
 

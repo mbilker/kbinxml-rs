@@ -2,9 +2,9 @@ use std::fmt;
 
 use serde::de::{self, Deserialize, Error, MapAccess, Visitor};
 
-use node::ExtraNodes;
-use node::de::{NodeSeed, NodeStart, NodeVisitor};
-use node_types::StandardType;
+use node::Node;
+use node::extra::ExtraNodes;
+use node::marshal::{Marshal, MarshalValue};
 use value::Value;
 
 impl<'de> Deserialize<'de> for ExtraNodes {
@@ -18,7 +18,7 @@ impl<'de> Deserialize<'de> for ExtraNodes {
       type Value = ExtraNodes;
 
       fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-        formatter.write_str("any valid map of kbin nodes")
+        formatter.write_str("any valid map of kbin nodes (for ExtraNodes)")
       }
 
       #[inline]
@@ -29,26 +29,48 @@ impl<'de> Deserialize<'de> for ExtraNodes {
 
         let mut extra = ExtraNodes::new();
 
-        while let Some(NodeStart { key, node_type }) = try!(map.next_key_seed(NodeSeed)) {
-          debug!("ExtraNodesVisitor::visit_map() => key: {:?}, node_type: {:?}", key, node_type);
+        loop {
+          let key = match map.next_key::<String>() {
+            Ok(Some(s)) => s,
+            Ok(None) => break,
+            Err(e) => {
+              error!("ExtraNodesVisitor::visit_map() => error: {:?}", e);
+              return Err(e);
+            },
+          };
+          debug!("ExtraNodesVisitor::visit_map() => key: {:?}", key);
 
-          match node_type {
-            StandardType::Attribute => {
-              let value = try!(map.next_value());
-              debug!("ExtraNodesVisitor::visit_map() => value: {:?}", value);
+          let marshal: Marshal = try!(map.next_value());
+          debug!("ExtraNodesVisitor::visit_map() => marshal: {:?}", marshal);
 
+          let value = marshal.into_inner();
+
+          if key.starts_with("attr_") {
+            let key = String::from(&key["attr_".len()..]);
+            debug!("ExtraNodesVisitor::visit_map() => found attribute, key: {:?}, value: {:?}", key, value);
+
+            if let Some(value) = value.as_value() {
               if let Value::Attribute(s) = value {
-                let key = String::from(&key["attr_".len()..]);
-                extra.attributes.insert(key, s);
+                extra.set_attr(key, s);
               } else {
                 return Err(A::Error::custom("`Attribute` node must have `Value::Attribute` value"));
               }
-            },
-            _ => {
-              let node = NodeVisitor::map_to_node(node_type, &key, &mut map)?;
-              debug!("ExtraNodesVisitor::visit_map() => node: {:?}", node);
-            },
-          };
+            } else {
+              return Err(A::Error::custom("`Marshal` must contain `Value` for attribute"));
+            }
+          } else {
+            /*
+            let node = NodeVisitor::map_to_node(node_type, &key, &mut map)?;
+            debug!("ExtraNodesVisitor::visit_map() => node: {:?}", node);
+            */
+            match value {
+              MarshalValue::Value(value) => extra.insert(key.clone(), Node::with_value(key, value)),
+              MarshalValue::Node(mut node) => {
+                node.key = key.clone();
+                extra.insert(key, node)
+              },
+            };
+          }
         }
 
         Ok(extra)
