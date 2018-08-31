@@ -1,6 +1,8 @@
 use std::fmt;
+use std::marker::PhantomData;
 
-use serde::de::{self, Deserialize, EnumAccess, Error, SeqAccess, VariantAccess, Visitor};
+use serde::de::{self, Deserialize, EnumAccess, Error, IntoDeserializer, SeqAccess, VariantAccess, Visitor};
+use serde::de::value::SeqDeserializer;
 
 use node_types::StandardType;
 use value::Value;
@@ -140,5 +142,87 @@ impl<'de> Deserialize<'de> for Value {
     }
 
     deserializer.deserialize_any(ValueVisitor)
+  }
+}
+
+pub struct ValueDeserializer<E> {
+  value: Value,
+  marker: PhantomData<E>,
+}
+
+impl<'de, E> de::Deserializer<'de> for ValueDeserializer<E>
+  where E: de::Error
+{
+  type Error = E;
+
+  /// Trigger `Ipv4Addr`'s deserializer to use octets rather than a string for
+  /// deserialization
+  fn is_human_readable(&self) -> bool {
+    false
+  }
+
+  #[inline]
+  fn deserialize_any<V>(self, visitor: V) -> Result<V::Value, Self::Error>
+    where V: Visitor<'de>
+  {
+    trace!("ValueDeserializer::deserialize_any(value: {:?})", self.value);
+
+    macro_rules! tuple {
+      ($($type:ident),*) => {
+        match self.value {
+          Value::S8(n) => visitor.visit_i8(n),
+          Value::U8(n) => visitor.visit_u8(n),
+          Value::S16(n) => visitor.visit_i16(n),
+          Value::U16(n) => visitor.visit_u16(n),
+          Value::S32(n) => visitor.visit_i32(n),
+          Value::U32(n) => visitor.visit_u32(n),
+          Value::S64(n) => visitor.visit_i64(n),
+          Value::U64(n) => visitor.visit_u64(n),
+          Value::Binary(buf) => visitor.visit_byte_buf(buf),
+          Value::String(s) => visitor.visit_string(s),
+          Value::Ip4(n) => SeqDeserializer::new(n.octets().into_iter().cloned()).deserialize_any(visitor),
+          Value::Float(n) => visitor.visit_f32(n),
+          Value::Double(n) => visitor.visit_f64(n),
+          Value::Boolean(n) => visitor.visit_bool(n),
+
+          $(
+            Value::$type(n) => SeqDeserializer::new(n.into_iter().cloned()).deserialize_any(visitor),
+          )*
+
+          Value::Time(n) => visitor.visit_u32(n),
+          Value::Attribute(s) => visitor.visit_string(s),
+
+          Value::Array(_, v) => SeqDeserializer::new(v.into_iter()).deserialize_any(visitor),
+          Value::Node(_) => unimplemented!(),
+        }
+      };
+    }
+
+    tuple! {
+      S8_2, U8_2, S16_2, U16_2, S32_2, U32_2, S64_2, U64_2, Float2, Double2, Boolean2,
+      S8_3, U8_3, S16_3, U16_3, S32_3, U32_3, S64_3, U64_3, Float3, Double3, Boolean3,
+      S8_4, U8_4, S16_4, U16_4, S32_4, U32_4, S64_4, U64_4, Float4, Double4, Boolean4,
+      Vs16, Vu16,
+      Vs8, Vu8, Vb
+    }
+  }
+
+  forward_to_deserialize_any! {
+    bool i8 i16 i32 i64 i128 u8 u16 u32 u64 u128 f32 f64 char str
+    string bytes byte_buf option unit unit_struct newtype_struct seq
+    tuple tuple_struct map struct enum identifier ignored_any
+  }
+}
+
+impl<'de, E> IntoDeserializer<'de, E> for Value
+  where E: de::Error
+{
+  type Deserializer = ValueDeserializer<E>;
+
+  fn into_deserializer(self) -> Self::Deserializer {
+    ValueDeserializer {
+      value: self,
+      marker: PhantomData,
+    }
   }
 }
