@@ -74,7 +74,6 @@ impl<'de> Deserialize<'de> for Marshal {
       fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
         where A: SeqAccess<'de>
       {
-        trace!("NodeMarshalVisitor::visit_seq()");
         let node_type = StandardType::from_u8(seq.next_element()?.unwrap());
 
         trace!("NodeMarshalVisitor::visit_seq() => node_type: {:?}", node_type);
@@ -139,7 +138,8 @@ impl<'de, E> SeqAccess<'de> for MarshalDeserializer<E>
   fn next_element_seed<T>(&mut self, seed: T) -> Result<Option<T::Value>, Self::Error>
     where T: DeserializeSeed<'de>
   {
-    trace!("--> <MarshalDeserializer as SeqAccess>::next_element_seed(node_type: {:?}, value: {:?}, index: {})", self.node_type, self.value, self.index);
+    trace!("<MarshalDeserializer as SeqAccess>::next_element_seed(node_type: {:?}, value: {:?}, index: {})", self.node_type, self.value, self.index);
+
     let result = match self.index {
       0 => seed.deserialize(self.node_type.id.into_deserializer()).map(Some),
       1 => match self.value.take() {
