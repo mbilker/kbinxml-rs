@@ -9,7 +9,7 @@ use byte_buffer::ByteBufferWrite;
 use encoding_type::EncodingType;
 use node_types::StandardType;
 use error::{Error, KbinError, KbinErrorKind};
-use sixbit::pack_sixbit;
+use sixbit::Sixbit;
 use super::{ARRAY_MASK, SIGNATURE, SIG_COMPRESSED};
 
 mod buffer;
@@ -114,7 +114,7 @@ impl Serializer {
   }
 
   fn write_identifier(&mut self, key: &str) -> Result<()> {
-    pack_sixbit(&mut *self.node_buf, key)?;
+    Sixbit::pack(&mut *self.node_buf, key)?;
     Ok(())
   }
 }

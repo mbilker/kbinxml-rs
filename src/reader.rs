@@ -8,7 +8,7 @@ use compression::Compression;
 use encoding_type::EncodingType;
 use error::{KbinErrorKind, Result};
 use node_types::StandardType;
-use sixbit::unpack_sixbit;
+use sixbit::Sixbit;
 use super::{ARRAY_MASK, SIGNATURE, SIG_COMPRESSED};
 
 pub struct Reader<'buf> {
@@ -122,7 +122,7 @@ impl<'buf> Reader<'buf> {
   pub fn peek_node_identifier(&mut self) -> Result<String> {
     let old_pos = self.node_buf.position();
     let _raw_node_type = self.node_buf.read_u8().context(KbinErrorKind::NodeTypeRead)?;
-    let value = unpack_sixbit(&mut *self.node_buf)?;
+    let value = Sixbit::unpack(&mut *self.node_buf)?;
 
     let size = self.node_buf.position() - old_pos;
     self.node_buf.seek(SeekFrom::Start(old_pos)).context(KbinErrorKind::DataRead(size as usize))?;
@@ -139,7 +139,7 @@ impl<'buf> Reader<'buf> {
   }
 
   pub fn read_node_identifier(&mut self) -> Result<String> {
-    let value = unpack_sixbit(&mut *self.node_buf)?;
+    let value = Sixbit::unpack(&mut *self.node_buf)?;
     debug!("Reader::read_node_identifier() => value: {:?}", value);
 
     self.last_node_identifier = Some(value.clone());

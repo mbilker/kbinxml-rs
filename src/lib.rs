@@ -44,7 +44,7 @@ mod ser;
 use byte_buffer::ByteBufferWrite;
 use node_types::StandardType;
 use reader::Reader;
-use sixbit::pack_sixbit;
+use sixbit::Sixbit;
 
 // Public exports
 pub use encoding_type::EncodingType;
@@ -236,7 +236,7 @@ impl KbinXml {
       count);
 
     node_buf.write_u8(node_type.id | array_mask).context(KbinErrorKind::DataWrite(node_type.name))?;
-    pack_sixbit(&mut **node_buf, input.name())?;
+    Sixbit::pack(&mut **node_buf, input.name())?;
 
     match node_type {
       StandardType::NodeStart => {},
@@ -281,7 +281,7 @@ impl KbinXml {
 
       let node_type = StandardType::Attribute;
       node_buf.write_u8(node_type.id).context(KbinErrorKind::DataWrite(node_type.name))?;
-      pack_sixbit(&mut **node_buf, key)?;
+      Sixbit::pack(&mut **node_buf, key)?;
     }
 
     for child in input.children() {

@@ -21,63 +21,67 @@ lazy_static! {
   };
 }
 
-pub fn pack_sixbit<T>(writer: &mut T, input: &str) -> Result<(), KbinError>
-  where T: Write
-{
-  let sixbit_chars = input
-    .bytes()
-    .map(|ch| {
-      *BYTE_MAP.get(&ch).expect("Character must be a valid sixbit character")
-    });
-  let len = input.len() as usize;
-  let padding = 8 - len * 6 % 8;
-  let padding = if padding == 8 { 0 } else { padding };
-  let real_len = (len * 6 + padding) / 8;
-  debug!("sixbit_len: {}, real_len: {}, padding: {}", len, real_len, padding);
+pub struct Sixbit;
 
-  let mut bits = BigUint::new(vec![0; real_len]);
-  for ch in sixbit_chars {
-    bits <<= 6;
-    bits |= BigUint::from_u8(ch).unwrap();
+impl Sixbit {
+  pub fn pack<T>(writer: &mut T, input: &str) -> Result<(), KbinError>
+    where T: Write
+  {
+    let sixbit_chars = input
+      .bytes()
+      .map(|ch| {
+        *BYTE_MAP.get(&ch).expect("Character must be a valid sixbit character")
+      });
+    let len = input.len() as usize;
+    let padding = 8 - len * 6 % 8;
+    let padding = if padding == 8 { 0 } else { padding };
+    let real_len = (len * 6 + padding) / 8;
+    debug!("sixbit_len: {}, real_len: {}, padding: {}", len, real_len, padding);
+
+    let mut bits = BigUint::new(vec![0; real_len]);
+    for ch in sixbit_chars {
+      bits <<= 6;
+      bits |= BigUint::from_u8(ch).unwrap();
+    }
+    bits <<= padding;
+
+    let bytes = bits.to_bytes_be();
+    writer.write_u8(len as u8).context(KbinErrorKind::SixbitLengthWrite)?;
+    writer.write(&bytes).context(KbinErrorKind::SixbitWrite)?;
+
+    Ok(())
   }
-  bits <<= padding;
 
-  let bytes = bits.to_bytes_be();
-  writer.write_u8(len as u8).context(KbinErrorKind::SixbitLengthWrite)?;
-  writer.write(&bytes).context(KbinErrorKind::SixbitWrite)?;
+  pub fn unpack<T>(reader: &mut T) -> Result<String, KbinError>
+    where T: Read
+  {
+    let len = reader.read_u8().context(KbinErrorKind::SixbitLengthRead)?;
+    let real_len = (f32::from(len * 6) / 8f32).ceil();
+    let real_len = (real_len as u32) as usize;
+    let padding = (8 - ((len * 6) % 8)) as usize;
+    let padding = if padding == 8 { 0 } else { padding };
+    debug!("sixbit_len: {}, real_len: {}, padding: {}", len, real_len, padding);
 
-  Ok(())
-}
+    let mut buf = vec![0; real_len];
+    reader.read_exact(&mut buf).context(KbinErrorKind::SixbitRead)?;
 
-pub fn unpack_sixbit<T>(reader: &mut T) -> Result<String, KbinError>
-  where T: Read
-{
-  let len = reader.read_u8().context(KbinErrorKind::SixbitLengthRead)?;
-  let real_len = (f32::from(len * 6) / 8f32).ceil();
-  let real_len = (real_len as u32) as usize;
-  let padding = (8 - ((len * 6) % 8)) as usize;
-  let padding = if padding == 8 { 0 } else { padding };
-  debug!("sixbit_len: {}, real_len: {}, padding: {}", len, real_len, padding);
+    let bits = BigUint::from_bytes_be(&buf);
+    let bits = bits >> padding;
+    debug!("bits: 0b{:b}", bits);
 
-  let mut buf = vec![0; real_len];
-  reader.read_exact(&mut buf).context(KbinErrorKind::SixbitRead)?;
+    let mask = BigUint::from_u8(0b111111).unwrap();
+    let result = (1..=len).map(|i| {
+      // Get the current sixbit part starting from the the left most bit in
+      // big endian order
+      let shift = ((len - i) * 6) as usize;
+      let bits = bits.clone();
+      let mask = mask.clone();
+      let current = (bits >> shift) & mask;
 
-  let bits = BigUint::from_bytes_be(&buf);
-  let bits = bits >> padding;
-  debug!("bits: 0b{:b}", bits);
+      CHAR_MAP[current.to_usize().unwrap()] as char
+    }).collect();
 
-  let mask = BigUint::from_u8(0b111111).unwrap();
-  let result = (1..=len).map(|i| {
-    // Get the current sixbit part starting from the the left most bit in
-    // big endian order
-    let shift = ((len - i) * 6) as usize;
-    let bits = bits.clone();
-    let mask = mask.clone();
-    let current = (bits >> shift) & mask;
-
-    CHAR_MAP[current.to_usize().unwrap()] as char
-  }).collect();
-
-  debug!("result: {}", result);
-  Ok(result)
+    debug!("result: {}", result);
+    Ok(result)
+  }
 }

@@ -5,7 +5,7 @@ use serde::ser::{Serialize, SerializeMap};
 use error::{Error, KbinErrorKind};
 use node_types::StandardType;
 use ser::{Result, Serializer, TypeHint, WriteMode, ARRAY_MASK};
-use sixbit::pack_sixbit;
+use sixbit::Sixbit;
 
 pub struct Map<'a> {
   ser: &'a mut Serializer,
@@ -29,7 +29,7 @@ impl<'a> Map<'a> {
 
       let node_type = StandardType::NodeStart;
       ser.node_buf.write_u8(node_type.id).context(KbinErrorKind::DataWrite(node_type.name))?;
-      pack_sixbit(&mut *ser.node_buf, name)?;
+      Sixbit::pack(&mut *ser.node_buf, name)?;
     }
 
     Ok(Self { ser })
