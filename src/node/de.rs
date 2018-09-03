@@ -130,6 +130,50 @@ impl<'de> Deserialize<'de> for Node {
   }
 }
 
+/// A `DeserializeSeed` holder to deserialize a `Node` from `NodeDeserializer`
+pub(crate) struct NodeSeed;
+
+impl<'de> DeserializeSeed<'de> for NodeSeed {
+  type Value = Node;
+
+  #[inline]
+  fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+    where D: de::Deserializer<'de>
+  {
+    // `key` will be fixed in `deserialize_seq`
+    deserializer.deserialize_seq(NodeVisitor { key: None })
+  }
+}
+
+struct NodeValueSeed(String);
+
+impl<'de> DeserializeSeed<'de> for NodeValueSeed {
+  type Value = Node;
+
+  #[inline]
+  fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+    where D: de::Deserializer<'de>
+  {
+    deserializer.deserialize_map(NodeVisitor { key: Some(self.0) })
+  }
+}
+
+#[derive(Debug)]
+pub(crate) struct NodeWithValueSeed(String);
+
+impl<'de> DeserializeSeed<'de> for NodeWithValueSeed {
+  type Value = Node;
+
+  #[inline]
+  fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+    where D: de::Deserializer<'de>
+  {
+    trace!("NodeValue::deserialize()");
+
+    deserializer.deserialize_tuple_struct("__value", 0, NodeVisitor { key: Some(self.0) })
+  }
+}
+
 pub struct NodeDeserializer<E> {
   node: Node,
   marker: PhantomData<E>,
@@ -201,34 +245,6 @@ impl<'de, E: Error> IntoDeserializer<'de, E> for Node {
       marker: PhantomData,
       index: 0,
     }
-  }
-}
-
-/// A `DeserializeSeed` holder to deserialize a `Node` from `NodeDeserializer`
-pub(crate) struct NodeSeed;
-
-impl<'de> DeserializeSeed<'de> for NodeSeed {
-  type Value = Node;
-
-  #[inline]
-  fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
-    where D: de::Deserializer<'de>
-  {
-    // `key` will be fixed in `deserialize_seq`
-    deserializer.deserialize_seq(NodeVisitor { key: None })
-  }
-}
-
-struct NodeValueSeed(String);
-
-impl<'de> DeserializeSeed<'de> for NodeValueSeed {
-  type Value = Node;
-
-  #[inline]
-  fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
-    where D: de::Deserializer<'de>
-  {
-    deserializer.deserialize_map(NodeVisitor { key: Some(self.0) })
   }
 }
 

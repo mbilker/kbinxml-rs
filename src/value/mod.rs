@@ -5,6 +5,7 @@ use serde::de::{Deserialize, Deserializer, DeserializeSeed};
 use serde_bytes::ByteBuf;
 
 use node::Node;
+use node::de::NodeSeed;
 use node_types::StandardType;
 
 mod de;
@@ -80,7 +81,7 @@ macro_rules! construct_types {
           StandardType::Binary => ByteBuf::deserialize(deserializer).map(Vec::from).map(Value::Binary),
           StandardType::Time => u32::deserialize(deserializer).map(Value::Time),
           StandardType::Attribute => String::deserialize(deserializer).map(Value::Attribute),
-          StandardType::NodeStart => Node::deserialize(deserializer).map(Box::new).map(Value::Node),
+          StandardType::NodeStart => NodeSeed.deserialize(deserializer).map(Box::new).map(Value::Node),
           StandardType::NodeEnd |
           StandardType::FileEnd => unimplemented!(),
         }
