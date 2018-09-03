@@ -29,15 +29,7 @@ impl<'de> Deserialize<'de> for ExtraNodes {
 
         let mut extra = ExtraNodes::new();
 
-        loop {
-          let key = match map.next_key::<String>() {
-            Ok(Some(s)) => s,
-            Ok(None) => break,
-            Err(e) => {
-              error!("ExtraNodesVisitor::visit_map() => error: {:?}", e);
-              return Err(e);
-            },
-          };
+        while let Some(key) = try!(map.next_key::<String>()) {
           debug!("ExtraNodesVisitor::visit_map() => key: {:?}", key);
 
           let marshal: Marshal = try!(map.next_value());
@@ -59,15 +51,17 @@ impl<'de> Deserialize<'de> for ExtraNodes {
               return Err(A::Error::custom("`Marshal` must contain `Value` for attribute"));
             }
           } else {
-            /*
-            let node = NodeVisitor::map_to_node(node_type, &key, &mut map)?;
-            debug!("ExtraNodesVisitor::visit_map() => node: {:?}", node);
-            */
             match value {
-              MarshalValue::Value(value) => extra.insert(key.clone(), Node::with_value(key, value)),
               MarshalValue::Node(mut node) => {
                 node.key = key.clone();
                 extra.insert(key, node)
+              },
+              MarshalValue::Value(value) => match value {
+                Value::Node(mut node) => {
+                  node.key = key.clone();
+                  extra.insert(key, *node)
+                },
+                value => extra.insert(key.clone(), Node::with_value(key, value)),
               },
             };
           }
