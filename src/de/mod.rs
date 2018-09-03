@@ -10,11 +10,13 @@ use node_types::StandardType;
 use reader::Reader;
 
 mod custom;
+mod node_contents;
 mod seq;
 mod structure;
 mod tuple;
 
 use self::custom::Custom;
+use self::node_contents::NodeContents;
 use self::seq::Seq;
 use self::structure::Struct;
 use self::tuple::TupleBytesDeserializer;
@@ -32,6 +34,7 @@ pub struct Deserializer<'de> {
   read_mode: ReadMode,
   node_stack: Vec<(StandardType, bool)>,
   first_struct: bool,
+  ignore_attributes: bool,
 
   reader: Reader<'de>,
 }
@@ -52,6 +55,7 @@ impl<'de> Deserializer<'de> {
       read_mode: ReadMode::Single,
       node_stack: Vec::new(),
       first_struct: true,
+      ignore_attributes: true,
       reader,
     })
   }
@@ -377,16 +381,30 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
   {
     trace!("Deserializer::deserialize_tuple_struct(name: {:?}, len: {})", name, len);
 
-    if name == "__key" {
-      let (node_type, _is_array) = self.reader.last_node_type().ok_or(KbinErrorKind::InvalidState)?;
-      visitor.visit_enum(Custom::new(self, node_type))
-    } else {
-      let old_read_mode = self.set_read_mode(ReadMode::Array);
-      let value = visitor.visit_seq(Seq::new(self, Some(len))?)?;
-      self.read_mode = old_read_mode;
-      self.reader.data_buf.realign_reads(None)?;
+    match name {
+      "__key" => {
+        self.ignore_attributes = false;
 
-      Ok(value)
+        let (node_type, _is_array) = self.reader.last_node_type().ok_or(KbinErrorKind::InvalidState)?;
+        visitor.visit_enum(Custom::new(self, node_type))
+      },
+      "__value" => {
+        let (node_type, _is_array) = self.reader.last_node_type().ok_or(KbinErrorKind::InvalidState)?;
+        debug!("Deserializer::deserialize_tuple_struct(name: {:?}) => node_type: {:?}", name, node_type);
+
+        let value = visitor.visit_map(NodeContents::new(self, node_type))?;
+        self.ignore_attributes = true;
+
+        Ok(value)
+      },
+      _ => {
+        let old_read_mode = self.set_read_mode(ReadMode::Array);
+        let value = visitor.visit_seq(Seq::new(self, Some(len))?)?;
+        self.read_mode = old_read_mode;
+        self.reader.data_buf.realign_reads(None)?;
+
+        Ok(value)
+      },
     }
   }
 
@@ -460,5 +478,3 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     self.deserialize_any(visitor)
   }
 }
-
-// TODO: Add test with array of two Ip4

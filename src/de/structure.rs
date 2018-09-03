@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use serde::de::{DeserializeSeed, MapAccess};
+use serde::de::{Deserialize, DeserializeSeed, MapAccess};
 
 use de::{Deserializer, ReadMode, Result};
 use error::{Error, KbinErrorKind};
@@ -53,14 +53,18 @@ impl<'de, 'a> MapAccess<'de> for Struct<'a, 'de> {
       StandardType::Attribute => {
         debug!("Struct::next_key_seed() => got an attribute!");
       },
-      _ => {
+      _ if self.de.ignore_attributes => {
         // TODO(mbilker): Fix processing of `Attribute` nodes for non-NodeStart
         // elements
         loop {
           let (node_type, _is_array) = self.de.reader.peek_node_type()?;
           if node_type == StandardType::Attribute {
+            let _ = self.de.reader.read_node_type()?;
             warn!("Struct::next_key_seed() => ignoring Attribute node");
-            let key: Option<String> = self.next_key_seed(PhantomData)?;
+
+            let old_read_mode = self.de.set_read_mode(ReadMode::Key);
+            let key = String::deserialize(&mut *self.de).map(Some)?;
+            self.de.read_mode = old_read_mode;
             warn!("Struct::next_key_seed() => ignored Attribute key: {:?}", key);
 
             self.values_to_consume += 1;
@@ -75,6 +79,7 @@ impl<'de, 'a> MapAccess<'de> for Struct<'a, 'de> {
           return Err(KbinErrorKind::TypeMismatch(*StandardType::NodeEnd, *node_type).into());
         }
       },
+      _ => {},
     }
 
     // Store the current node type on the stack for stateful handling based on
@@ -90,17 +95,19 @@ impl<'de, 'a> MapAccess<'de> for Struct<'a, 'de> {
     debug!("--> <Struct as MapAccess>::next_value_seed()");
     let value = seed.deserialize(&mut *self.de)?;
 
-    // Cannot use `next_value_seed` recursively here as it would restart this for loop
-    for _ in 0..self.values_to_consume {
-      warn!("Struct::next_value_seed() => ignoring Attribute node value");
-      let seed = PhantomData;
-      let value: String = seed.deserialize(&mut *self.de)?;
-      warn!("Struct::next_value_seed() => ignored Attribute value: {:?}", value);
+    if self.de.ignore_attributes {
+      // Cannot use `next_value_seed` recursively here as it would restart this for loop
+      for _ in 0..self.values_to_consume {
+        warn!("Struct::next_value_seed() => ignoring Attribute node value");
+        let seed = PhantomData;
+        let value: String = seed.deserialize(&mut *self.de)?;
+        warn!("Struct::next_value_seed() => ignored Attribute value: {:?}", value);
 
-      let popped = self.de.node_stack.pop();
-      debug!("<Struct as MapAccess>::next_value_seed() => popped: {:?}, node_stack: {:?}", popped, self.de.node_stack);
+        let popped = self.de.node_stack.pop();
+        debug!("<Struct as MapAccess>::next_value_seed() => popped: {:?}, node_stack: {:?}", popped, self.de.node_stack);
+      }
+      self.values_to_consume = 0;
     }
-    self.values_to_consume = 0;
 
     let popped = self.de.node_stack.pop();
     debug!("<Struct as MapAccess>::next_value_seed() => popped: {:?}, node_stack: {:?}", popped, self.de.node_stack);

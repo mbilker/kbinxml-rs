@@ -14,7 +14,7 @@ pub(crate) struct NodeVisitor {
 }
 
 impl<'de> NodeVisitor {
-  pub(crate) fn map_to_node<A>(node_type: StandardType, key: &str, map: &mut A) -> Result<Node, A::Error>
+  fn map_to_node<A>(node_type: StandardType, key: &str, map: &mut A) -> Result<Node, A::Error>
     where A: MapAccess<'de>
   {
     trace!("NodeVisitor::map_to_node(node_type: {:?})", node_type);
@@ -29,10 +29,11 @@ impl<'de> NodeVisitor {
       },
       // TODO: roll up `NodeStart` and everything else into a single map handler
       node_type => {
-        let value = try!(map.next_value());
-        debug!("NodeVisitor::map_to_node(node_type: {:?}) => value: {:?}", node_type, value);
+        //let value = try!(map.next_value());
+        //debug!("NodeVisitor::map_to_node(node_type: {:?}) => value: {:?}", node_type, value);
 
-        let node = Node::with_value(key.to_owned(), value);
+        //let node = Node::with_value(key.to_owned(), value);
+        let node = try!(map.next_value_seed(NodeWithValueSeed(key.to_owned())));
         debug!("NodeVisitor::map_to_node(node_type: {:?}) => node: {:?}", node_type, node);
 
         Ok(node)
@@ -56,50 +57,65 @@ impl<'de> Visitor<'de> for NodeVisitor {
 
     let mut attributes = None;
     let mut nodes = IndexMap::new();
+    let mut value = None;
 
     while let Some(NodeStart { key, node_type }) = try!(map.next_key()) {
       debug!("NodeVisitor::visit_map() => node_type: {:?}, key: {:?}", node_type, key);
 
-      match node_type {
-        StandardType::Attribute => {
-          let value = map.next_value();
-          debug!("NodeVisitor::visit_map() => value: {:?}", value);
+      if key == "__value" {
+        trace!("NodeVisitor::visit_map() => got __value, getting node value");
 
-          if let Value::Attribute(s) = try!(value) {
-            let key = String::from(&key["attr_".len()..]);
-            let attributes = attributes.get_or_insert_with(IndexMap::new);
-            attributes.insert(key, s);
-          } else {
-            return Err(A::Error::custom("`Attribute` node must have `Value::Attribute` value"));
-          }
-        },
-        _ => {
-          let node = NodeVisitor::map_to_node(node_type, &key, &mut map)?;
-          debug!("NodeVisitor::visit_map() => node: {:?}", node);
+        let node_value = try!(map.next_value());
+        debug!("NodeVisitor::visit_map() => node value: {:?}", node_value);
 
-          if !nodes.contains_key(&key) {
-            nodes.insert(key, node);
-          } else {
-            let mut new_key = format!("{}1", key);
-            let mut i = 2;
-            while nodes.contains_key(&new_key) {
-              new_key.truncate(key.len());
-              write!(new_key, "{}", i);
-              i += 1;
+        value = Some(node_value);
+      } else {
+        match node_type {
+          StandardType::Attribute => {
+            let value = map.next_value();
+            debug!("NodeVisitor::visit_map() => value: {:?}", value);
+
+            if let Value::Attribute(s) = try!(value) {
+              let key = String::from(&key["attr_".len()..]);
+              let attributes = attributes.get_or_insert_with(IndexMap::new);
+              attributes.insert(key, s);
+            } else {
+              return Err(A::Error::custom("`Attribute` node must have `Value::Attribute` value"));
             }
-            debug!("Node::visit_map() => next open key: {:?}", new_key);
-            nodes.insert(new_key, node);
-          }
-        },
-      };
+          },
+          _ => {
+            let node = NodeVisitor::map_to_node(node_type, &key, &mut map)?;
+            debug!("NodeVisitor::visit_map() => node: {:?}", node);
+
+            if !nodes.contains_key(&key) {
+              nodes.insert(key, node);
+            } else {
+              let mut new_key = format!("{}1", key);
+              let mut i = 2;
+              while nodes.contains_key(&new_key) {
+                new_key.truncate(key.len());
+                write!(new_key, "{}", i);
+                i += 1;
+              }
+              debug!("Node::visit_map() => next open key: {:?}", new_key);
+              nodes.insert(new_key, node);
+            }
+          },
+        };
+      }
     }
 
-    debug!("NodeVisitor::visit_map() => nodes: {:#?}", nodes);
+    let children = match nodes.len() {
+      0 => None,
+      _ => Some(nodes),
+    };
+
+    //debug!("NodeVisitor::visit_map() => nodes: {:#?}", nodes);
     Ok(Node {
       key: self.key.unwrap_or_else(|| "".to_owned()),
       attributes,
-      children: Some(nodes),
-      value: None,
+      children,
+      value,
     })
   }
 
@@ -108,10 +124,10 @@ impl<'de> Visitor<'de> for NodeVisitor {
     where A: SeqAccess<'de>
   {
     trace!("NodeVisitor::visit_seq()");
-    let key = seq.next_element()?.unwrap();
-    let attributes = seq.next_element()?.unwrap();
-    let children = seq.next_element()?.unwrap();
-    let value = seq.next_element()?.unwrap();
+    let key = seq.next_element()?.ok_or_else(|| A::Error::custom("first element must be `key`"))?;
+    let attributes = seq.next_element()?.ok_or_else(|| A::Error::custom("second element must be `attributes`"))?;
+    let children = seq.next_element()?.ok_or_else(|| A::Error::custom("third element must be `children`"))?;
+    let value = seq.next_element()?.ok_or_else(|| A::Error::custom("fourth element must be `value`"))?;
     Ok(Node {
       key,
       attributes,
@@ -201,28 +217,28 @@ impl<'de, E: Error> de::Deserializer<'de> for NodeDeserializer<E> {
 impl<'de, E: Error> SeqAccess<'de> for NodeDeserializer<E> {
   type Error = E;
 
-  /// "Deserializes" the key, attributes as (key, string), and children as
-  /// (key, node)
+  /// "Deserializes" the key, attributes as (key, string), children as
+  /// (key, node), and value as itself
   fn next_element_seed<T>(&mut self, seed: T) -> Result<Option<T::Value>, Self::Error>
     where T: DeserializeSeed<'de>
   {
+    macro_rules! map_deserializer {
+      ($value:expr) => {
+        match $value.take() {
+          Some(value) => {
+            let deserializer = MapDeserializer::new(value.into_iter());
+            seed.deserialize(deserializer).map(Some)
+          },
+          None => seed.deserialize(().into_deserializer()).map(Some),
+        }
+      };
+    }
+
     trace!("--> <NodeDeserializer as SeqAccess>::next_element_seed(index: {})", self.index);
     let value = match self.index {
       0 => seed.deserialize(self.node.key.as_str().into_deserializer()).map(Some),
-      1 => match self.node.attributes.take() {
-        Some(attributes) => {
-          let deserializer = MapDeserializer::new(attributes.into_iter());
-          seed.deserialize(deserializer).map(Some)
-        },
-        None => seed.deserialize(().into_deserializer()).map(Some),
-      },
-      2 => match self.node.children.take() {
-        Some(children) => {
-          let deserializer = MapDeserializer::new(children.into_iter());
-          seed.deserialize(deserializer).map(Some)
-        },
-        None => seed.deserialize(().into_deserializer()).map(Some),
-      },
+      1 => map_deserializer!(self.node.attributes),
+      2 => map_deserializer!(self.node.children),
       3 => match self.node.value.take() {
         Some(value) => seed.deserialize(value.into_deserializer()).map(Some),
         None => seed.deserialize(().into_deserializer()).map(Some),
