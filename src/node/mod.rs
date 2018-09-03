@@ -4,7 +4,7 @@ use indexmap::IndexMap;
 
 use value::Value;
 
-mod de;
+pub(crate) mod de;
 mod extra;
 mod marshal;
 mod ser;
@@ -28,10 +28,10 @@ impl fmt::Debug for Node {
     if let Some(ref attributes) = self.attributes {
       d.field("attributes", attributes);
     }
-
     if let Some(ref children) = self.children {
       d.field("children", children);
-    } else if let Some(ref value) = self.value {
+    }
+    if let Some(ref value) = self.value {
       d.field("value", value);
     }
 
