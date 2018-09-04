@@ -10,6 +10,16 @@ use node_types::KbinType;
 pub use encoding_type::EncodingType;
 pub use error::{KbinError, KbinErrorKind, Result};
 
+/// Remove trailing null bytes, used for the `String` type
+pub(crate) fn strip_trailing_null_bytes<'a>(data: &'a [u8]) -> &'a [u8] {
+  let mut index = data.len() - 1;
+  let len = data.len();
+  while index > 0 && index < len && data[index] == 0x00 {
+    index -= 1;
+  }
+  &data[..=index]
+}
+
 pub struct ByteBufferRead<'buf> {
   cursor: Cursor<&'buf [u8]>,
   buffer: &'buf [u8],
@@ -77,14 +87,7 @@ impl<'buf> ByteBufferRead<'buf> {
 
   pub fn read_str(&mut self, encoding: EncodingType) -> Result<String> {
     let data = self.buf_read()?;
-
-    // Remove trailing null bytes
-    let mut index = data.len() - 1;
-    let len = data.len();
-    while index > 0 && index < len && data[index] == 0x00 {
-      index -= 1;
-    }
-    let data = &data[..=index];
+    let data = strip_trailing_null_bytes(data);
     trace!("read_str => size: {}, data: 0x{:02x?}", data.len(), data);
 
     encoding.decode_bytes(data)
