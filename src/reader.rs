@@ -7,6 +7,7 @@ use byte_buffer::ByteBufferRead;
 use compression::Compression;
 use encoding_type::EncodingType;
 use error::{KbinErrorKind, Result};
+use node_definition::{Key, NodeDefinition};
 use node_types::StandardType;
 use sixbit::Sixbit;
 use super::{ARRAY_MASK, SIGNATURE};
@@ -115,7 +116,8 @@ impl<'buf> Reader<'buf> {
   pub fn peek_node_identifier(&mut self) -> Result<String> {
     let old_pos = self.node_buf.position();
     let _raw_node_type = self.node_buf.read_u8().context(KbinErrorKind::NodeTypeRead)?;
-    let value = Sixbit::unpack(&mut *self.node_buf)?;
+    let size = Sixbit::size(&mut *self.node_buf)?;
+    let value = Sixbit::unpack(&mut *self.node_buf, size)?;
 
     let size = self.node_buf.position() - old_pos;
     self.node_buf.seek(SeekFrom::Start(old_pos)).context(KbinErrorKind::DataRead(size as usize))?;
@@ -133,7 +135,10 @@ impl<'buf> Reader<'buf> {
 
   pub fn read_node_identifier(&mut self) -> Result<String> {
     let value = match self.compression {
-      Compression::Compressed => Sixbit::unpack(&mut *self.node_buf)?,
+      Compression::Compressed => {
+        let size = Sixbit::size(&mut *self.node_buf)?;
+        Sixbit::unpack(&mut *self.node_buf, size)?
+      },
       Compression::Uncompressed => {
         let length = (self.node_buf.read_u8().context(KbinErrorKind::DataRead(1))? & !ARRAY_MASK) + 1;
         let bytes = self.node_buf.get(length as u32)?;
@@ -145,6 +150,20 @@ impl<'buf> Reader<'buf> {
     self.last_node_identifier = Some(value.clone());
 
     Ok(value)
+  }
+
+  pub fn read_node_definition(&mut self) -> Result<NodeDefinition<'buf>> {
+    let node_type = self.read_node_type()?;
+    let key = match node_type.0 {
+      StandardType::NodeEnd |
+      StandardType::FileEnd => Key::None,
+      _ => {
+        let size = Sixbit::size(&mut *self.node_buf)?;
+        let data = self.node_buf.get(size.1 as u32)?;
+        Key::Some { size, data }
+      },
+    };
+    Ok(NodeDefinition::with_key(node_type, key, None))
   }
 
   pub fn read_string(&mut self) -> Result<String> {

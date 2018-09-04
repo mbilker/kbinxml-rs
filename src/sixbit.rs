@@ -65,16 +65,17 @@ impl Sixbit {
     Ok(())
   }
 
-  pub fn unpack<T>(reader: &mut T) -> Result<String, KbinError>
+  pub fn unpack<T>(reader: &mut T, size: SixbitSize) -> Result<String, KbinError>
     where T: Read
   {
-    let (sixbit_len, len) = Sixbit::size(reader)?;
+    let (sixbit_len, len) = size;
 
     let mut buf = vec![0; len];
     reader.read_exact(&mut buf).context(KbinErrorKind::SixbitRead)?;
 
-    let mut result = String::with_capacity(sixbit_len as usize);
-    for i in 0..=len {
+    let sixbit_len = sixbit_len as usize;
+    let mut result = String::with_capacity(sixbit_len);
+    for i in 0..sixbit_len {
       let mut current = 0u8;
       for j in 0..6 {
         let k = (i * 6) + j;
@@ -113,7 +114,8 @@ mod tests {
     let _ = pretty_env_logger::try_init();
 
     let mut data = Cursor::new(&[5,182,172,113,208]);
-    let result = Sixbit::unpack(&mut data).expect("Failed to unpack 'hello' sixbit string");
+    let size = Sixbit::size(&mut data).expect("Failed to get size of 'hello' sixbit string");
+    let result = Sixbit::unpack(&mut data, size).expect("Failed to unpack 'hello' sixbit string");
     assert_eq!(result, "hello");
   }
 

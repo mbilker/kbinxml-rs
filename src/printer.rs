@@ -9,15 +9,19 @@ impl Printer {
     let mut reader = Reader::new(input)?;
     let mut nodes = Vec::new();
 
-    while let Ok((node_type, is_array)) = reader.read_node_type() {
-      let identifier = match node_type {
-        StandardType::NodeEnd |
-        StandardType::FileEnd => None,
-        _ => Some(reader.read_node_identifier()?),
-      };
-      nodes.push((node_type, is_array, identifier));
+    while let Ok(def) = reader.read_node_definition() {
+      eprintln!("definition: {:?}", def);
 
-      if node_type == StandardType::FileEnd {
+      let key = match def.key() {
+        Ok(v) => v,
+        Err(e) => {
+          error!("error processing key for definition {:?}: {}", def, e);
+          None
+        },
+      };
+      nodes.push((def.node_type, def.is_array, key));
+
+      if def.node_type == StandardType::FileEnd {
         break;
       }
     }
