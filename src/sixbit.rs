@@ -21,9 +21,24 @@ lazy_static! {
   };
 }
 
+pub type SixbitSize = (u8, usize, usize);
+
 pub struct Sixbit;
 
 impl Sixbit {
+  pub fn size<T>(reader: &mut T) -> Result<SixbitSize, KbinError>
+    where T: Read
+  {
+    let len = reader.read_u8().context(KbinErrorKind::SixbitLengthRead)?;
+    let real_len = (f32::from(len * 6) / 8f32).ceil();
+    let real_len = (real_len as u32) as usize;
+    let padding = (8 - ((len * 6) % 8)) as usize;
+    let padding = if padding == 8 { 0 } else { padding };
+    debug!("sixbit_len: {}, real_len: {}, padding: {}", len, real_len, padding);
+
+    Ok((len, real_len, padding))
+  }
+
   pub fn pack<T>(writer: &mut T, input: &str) -> Result<(), KbinError>
     where T: Write
   {
@@ -55,14 +70,9 @@ impl Sixbit {
   pub fn unpack<T>(reader: &mut T) -> Result<String, KbinError>
     where T: Read
   {
-    let len = reader.read_u8().context(KbinErrorKind::SixbitLengthRead)?;
-    let real_len = (f32::from(len * 6) / 8f32).ceil();
-    let real_len = (real_len as u32) as usize;
-    let padding = (8 - ((len * 6) % 8)) as usize;
-    let padding = if padding == 8 { 0 } else { padding };
-    debug!("sixbit_len: {}, real_len: {}, padding: {}", len, real_len, padding);
+    let (sixbit_len, len, padding) = Sixbit::size(reader)?;
 
-    let mut buf = vec![0; real_len];
+    let mut buf = vec![0; len];
     reader.read_exact(&mut buf).context(KbinErrorKind::SixbitRead)?;
 
     let bits = BigUint::from_bytes_be(&buf);
@@ -70,10 +80,10 @@ impl Sixbit {
     debug!("bits: 0b{:b}", bits);
 
     let mask = BigUint::from_u8(0b111111).unwrap();
-    let result = (1..=len).map(|i| {
+    let result = (1..=sixbit_len).map(|i| {
       // Get the current sixbit part starting from the the left most bit in
       // big endian order
-      let shift = ((len - i) * 6) as usize;
+      let shift = ((sixbit_len - i) * 6) as usize;
       let bits = bits.clone();
       let mask = mask.clone();
       let current = (bits >> shift) & mask;
