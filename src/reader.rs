@@ -9,9 +9,10 @@ use encoding_type::EncodingType;
 use error::{KbinErrorKind, Result};
 use node_types::StandardType;
 use sixbit::Sixbit;
-use super::{ARRAY_MASK, SIGNATURE, SIG_COMPRESSED};
+use super::{ARRAY_MASK, SIGNATURE};
 
 pub struct Reader<'buf> {
+  compression: Compression,
   encoding: EncodingType,
 
   pub(crate) node_buf: ByteBufferRead<'buf>,
@@ -34,13 +35,8 @@ impl<'buf> Reader<'buf> {
       return Err(KbinErrorKind::HeaderValue("signature").into());
     }
 
-    // TODO: support uncompressed
     let compress_byte = node_buf.read_u8().context(KbinErrorKind::HeaderRead("compression"))?;
-    if compress_byte != SIG_COMPRESSED {
-      return Err(KbinErrorKind::HeaderValue("compression").into());
-    }
-
-    let compressed = Compression::from_byte(compress_byte)?;
+    let compression = Compression::from_byte(compress_byte)?;
 
     let encoding_byte = node_buf.read_u8().context(KbinErrorKind::HeaderRead("encoding"))?;
     let encoding_negation = node_buf.read_u8().context(KbinErrorKind::HeaderRead("encoding negation"))?;
@@ -49,7 +45,7 @@ impl<'buf> Reader<'buf> {
       return Err(KbinErrorKind::HeaderValue("encoding negation").into());
     }
 
-    info!("signature: 0x{:X}, compression: 0x{:X} ({:?}), encoding: 0x{:X} ({:?})", signature, compress_byte, compressed, encoding_byte, encoding);
+    info!("signature: 0x{:X}, compression: 0x{:X} ({:?}), encoding: 0x{:X} ({:?})", signature, compress_byte, compression, encoding_byte, encoding);
 
     let len_node = node_buf.read_u32::<BigEndian>().context(KbinErrorKind::LenNodeRead)?;
     info!("len_node: {0} (0x{0:x})", len_node);
@@ -62,13 +58,10 @@ impl<'buf> Reader<'buf> {
     let len_data = data_buf.read_u32::<BigEndian>().context(KbinErrorKind::LenDataRead)?;
     info!("len_data: {0} (0x{0:x})", len_data);
 
-    //let node_buf_end = data_buf_start.into();
-
     Ok(Self {
+      compression,
       encoding,
-      //read_mode: ReadMode::Single,
-      //first_struct: true,
-      //node_buf_end,
+
       node_buf,
       data_buf,
 
@@ -139,7 +132,14 @@ impl<'buf> Reader<'buf> {
   }
 
   pub fn read_node_identifier(&mut self) -> Result<String> {
-    let value = Sixbit::unpack(&mut *self.node_buf)?;
+    let value = match self.compression {
+      Compression::Compressed => Sixbit::unpack(&mut *self.node_buf)?,
+      Compression::Uncompressed => {
+        let length = (self.node_buf.read_u8().context(KbinErrorKind::DataRead(1))? & !ARRAY_MASK) + 1;
+        let bytes = self.node_buf.get(length as u32)?;
+        self.encoding.decode_bytes(bytes)?
+      },
+    };
     debug!("Reader::read_node_identifier() => value: {:?}", value);
 
     self.last_node_identifier = Some(value.clone());

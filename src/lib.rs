@@ -1,5 +1,7 @@
 #![feature(int_to_from_bytes)]
 
+#![cfg_attr(test, feature(test))]
+
 extern crate byteorder;
 extern crate encoding;
 extern crate indexmap;
@@ -12,9 +14,6 @@ extern crate serde_bytes;
 #[macro_use] extern crate lazy_static;
 #[macro_use] extern crate log;
 #[macro_use] extern crate serde;
-
-#[cfg(test)]
-#[macro_use] extern crate serde_derive;
 
 use std::fmt::Write as FmtWrite;
 use std::io::{Cursor, Write};
@@ -60,6 +59,7 @@ pub use value::Value;
 const SIGNATURE: u8 = 0xA0;
 
 const SIG_COMPRESSED: u8 = 0x42;
+const SIG_UNCOMPRESSED: u8 = 0x45;
 
 const ARRAY_MASK: u8 = 1 << 6; // 1 << 6 = 64
 
@@ -81,7 +81,7 @@ impl KbinXml {
   }
 
   pub fn is_binary_xml(input: &[u8]) -> bool {
-    input.len() > 2 && input[0] == SIGNATURE && input[1] == SIG_COMPRESSED
+    input.len() > 2 && input[0] == SIGNATURE && (input[1] == SIG_COMPRESSED || input[1] == SIG_UNCOMPRESSED)
   }
 
   fn from_binary_internal(&mut self, stack: &mut Vec<Element>, input: &[u8]) -> Result<(Element, EncodingType)> {
@@ -235,6 +235,7 @@ impl KbinXml {
       array_mask,
       count);
 
+    // TODO: support uncompressed
     node_buf.write_u8(node_type.id | array_mask).context(KbinErrorKind::DataWrite(node_type.name))?;
     Sixbit::pack(&mut **node_buf, input.name())?;
 
