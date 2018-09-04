@@ -6,7 +6,6 @@ extern crate byteorder;
 extern crate encoding;
 extern crate indexmap;
 extern crate minidom;
-extern crate num;
 extern crate rustc_hex;
 extern crate serde_bytes;
 

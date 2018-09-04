@@ -3,7 +3,6 @@ use std::io::{Read, Write};
 
 use byteorder::{ReadBytesExt, WriteBytesExt};
 use failure::ResultExt;
-use num::{BigUint, FromPrimitive, ToPrimitive};
 
 use error::{KbinError, KbinErrorKind};
 
@@ -21,7 +20,7 @@ lazy_static! {
   };
 }
 
-pub type SixbitSize = (u8, usize, usize);
+pub type SixbitSize = (u8, usize);
 
 pub struct Sixbit;
 
@@ -32,11 +31,9 @@ impl Sixbit {
     let len = reader.read_u8().context(KbinErrorKind::SixbitLengthRead)?;
     let real_len = (f32::from(len * 6) / 8f32).ceil();
     let real_len = (real_len as u32) as usize;
-    let padding = (8 - ((len * 6) % 8)) as usize;
-    let padding = if padding == 8 { 0 } else { padding };
-    debug!("sixbit_len: {}, real_len: {}, padding: {}", len, real_len, padding);
+    debug!("sixbit_len: {}, real_len: {}", len, real_len);
 
-    Ok((len, real_len, padding))
+    Ok((len, real_len))
   }
 
   pub fn pack<T>(writer: &mut T, input: &str) -> Result<(), KbinError>
@@ -71,26 +68,20 @@ impl Sixbit {
   pub fn unpack<T>(reader: &mut T) -> Result<String, KbinError>
     where T: Read
   {
-    let (sixbit_len, len, padding) = Sixbit::size(reader)?;
+    let (sixbit_len, len) = Sixbit::size(reader)?;
 
     let mut buf = vec![0; len];
     reader.read_exact(&mut buf).context(KbinErrorKind::SixbitRead)?;
 
-    let bits = BigUint::from_bytes_be(&buf);
-    let bits = bits >> padding;
-    debug!("bits: 0b{:b}", bits);
-
-    let mask = BigUint::from_u8(0b111111).unwrap();
-    let result = (1..=sixbit_len).map(|i| {
-      // Get the current sixbit part starting from the the left most bit in
-      // big endian order
-      let shift = ((sixbit_len - i) * 6) as usize;
-      let bits = bits.clone();
-      let mask = mask.clone();
-      let current = (bits >> shift) & mask;
-
-      CHAR_MAP[current.to_usize().unwrap()] as char
-    }).collect();
+    let mut result = String::with_capacity(sixbit_len as usize);
+    for i in 0..=len {
+      let mut current = 0u8;
+      for j in 0..6 {
+        let k = (i * 6) + j;
+        current |= (buf[k / 8] >> (7 - (k % 8)) & 1) << (5 - (k % 6));
+      }
+      result.push(CHAR_MAP[current as usize] as char);
+    }
 
     debug!("result: {}", result);
     Ok(result)
