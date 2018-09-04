@@ -47,20 +47,21 @@ impl Sixbit {
       .map(|ch| {
         *BYTE_MAP.get(&ch).expect("Character must be a valid sixbit character")
       });
-    let len = input.len() as usize;
-    let padding = 8 - len * 6 % 8;
-    let padding = if padding == 8 { 0 } else { padding };
-    let real_len = (len * 6 + padding) / 8;
-    debug!("sixbit_len: {}, real_len: {}, padding: {}", len, real_len, padding);
+    let len = input.len();
+    let real_len = (f64::from(len as u32 * 6) / 8f64).ceil() as usize;
+    debug!("sixbit_len: {}, real_len: {}", len, real_len);
 
-    let mut bits = BigUint::new(vec![0; real_len]);
+    let mut i = 0;
+    let mut bytes = vec![0; real_len];
     for ch in sixbit_chars {
-      bits <<= 6;
-      bits |= BigUint::from_u8(ch).unwrap();
+      for _ in 0..6 {
+        // Some crazy math that works on a single bit at a time, but
+        // it still performs better than a `BigUint` calculation
+        bytes[i / 8] |= (ch >> (5 - (i % 6)) & 1) << (7 - (i % 8));
+        i += 1;
+      }
     }
-    bits <<= padding;
 
-    let bytes = bits.to_bytes_be();
     writer.write_u8(len as u8).context(KbinErrorKind::SixbitLengthWrite)?;
     writer.write(&bytes).context(KbinErrorKind::SixbitWrite)?;
 
