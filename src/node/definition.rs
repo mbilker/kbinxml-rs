@@ -85,10 +85,13 @@ impl<'buf> NodeDefinition<'buf> {
   pub fn into_node(self) -> Result<Node, KbinError> {
     trace!("parsing definition: {:?}", self);
     match (self.node_type, self.data) {
-      (StandardType::NodeStart, _) |
       (StandardType::NodeEnd, _) |
       (StandardType::FileEnd, _) => {
         return Err(KbinErrorKind::InvalidNodeType(self.node_type).into());
+      },
+      (StandardType::NodeStart, NodeData::Some { key, .. }) => {
+        let key = key.to_string()?;
+        Ok(Node::new(key))
       },
       (StandardType::Attribute, NodeData::Some { key, value_data }) => {
         let key = key.to_string()?;

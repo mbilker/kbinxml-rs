@@ -7,7 +7,7 @@ use byte_buffer::ByteBufferRead;
 use compression::Compression;
 use encoding_type::EncodingType;
 use error::{KbinErrorKind, Result};
-use node_definition::{Key, NodeData, NodeDefinition};
+use node::{Key, NodeData, NodeDefinition};
 use node_types::StandardType;
 use sixbit::Sixbit;
 
