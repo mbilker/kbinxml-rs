@@ -94,11 +94,6 @@ impl<'buf> Reader<'buf> {
   }
 
   #[inline]
-  pub fn data_buf_start(&self) -> u64 {
-    self.data_buf_start
-  }
-
-  #[inline]
   pub fn last_node_type(&self) -> Option<(StandardType, bool)> {
     self.last_node_type
   }
