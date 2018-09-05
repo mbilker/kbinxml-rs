@@ -292,6 +292,88 @@ impl fmt::Debug for Value {
   }
 }
 
+impl fmt::Display for Value {
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    macro_rules! display_value {
+      (
+        simple: [$($simple:ident),*],
+        tuple: [$($tuple:ident),*],
+        value: [$($parent:ident => [$($child:ident),*]),*]
+      ) => {
+        match self {
+          $(
+            Value::$simple(v) => fmt::Display::fmt(v, f),
+          )*
+          $(
+            Value::$tuple(values) => {
+              for (i, v) in values.iter().enumerate() {
+                if i > 0 {
+                  f.write_str(" ")?;
+                }
+                fmt::Display::fmt(v, f)?;
+              }
+              Ok(())
+            },
+          )*
+          $(
+            $(
+              Value::$child(values) => {
+                for (i, v) in values.iter().enumerate() {
+                  if i > 0 {
+                    f.write_str(" ")?;
+                  }
+                  fmt::Display::fmt(&Value::$parent(*v), f)?;
+                }
+                Ok(())
+              },
+            )*
+          )*
+          Value::Binary(buf) => {
+            for n in buf {
+              write!(f, "{:02x}", n)?;
+            }
+            Ok(())
+          },
+          Value::Float(n) => write!(f, "{:.6}", n),
+          Value::Double(n) => write!(f, "{:.6}", n),
+          Value::Boolean(b) => match b {
+            true => f.write_str("1"),
+            false => f.write_str("0"),
+          },
+          Value::Array(_, values) => {
+            for (i, v) in values.iter().enumerate() {
+              if i > 0 {
+                f.write_str(" ")?;
+              }
+              fmt::Display::fmt(v, f)?;
+            }
+            Ok(())
+          },
+          Value::Node(_) => Ok(()),
+        }
+      };
+    }
+
+    display_value! {
+      simple: [
+        S8, U8, S16, U16, S32, U32, S64, U64,
+        String, Ip4, Time, Attribute
+      ],
+      tuple: [
+        S8_2, U8_2, S16_2, U16_2, S32_2, U32_2, S64_2, U64_2,
+        S8_3, U8_3, S16_3, U16_3, S32_3, U32_3, S64_3, U64_3,
+        S8_4, U8_4, S16_4, U16_4, S32_4, U32_4, S64_4, U64_4,
+        Vs8, Vu8, Vs16, Vu16
+      ],
+      value: [
+        Float => [Float2, Float3, Float4],
+        Double => [Double2, Double3, Double4],
+        Boolean => [Boolean2, Boolean3, Boolean4, Vb]
+      ]
+    }
+  }
+}
+
 construct_types! {
   (S8,       i8);
   (U8,       u8);

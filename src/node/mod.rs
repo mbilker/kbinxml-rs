@@ -82,6 +82,10 @@ impl Node {
     self.value.as_ref()
   }
 
+  pub fn into_key_and_value(self) -> (String, Option<Value>) {
+    (self.key, self.value)
+  }
+
   pub fn set_attr(&mut self, key: String, value: String) -> Option<String> {
     let attributes = self.attributes.get_or_insert_with(Default::default);
     attributes.insert(key, value)
