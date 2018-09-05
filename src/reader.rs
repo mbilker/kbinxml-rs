@@ -108,13 +108,25 @@ impl<'buf> Reader<'buf> {
     self.last_node_identifier.as_ref().map(String::as_str)
   }
 
+  pub fn check_if_node_buffer_end(&self) -> Result<()> {
+    if self.node_buf.position() >= self.data_buf_start {
+      Err(KbinErrorKind::EndOfNodeBuffer.into())
+    } else {
+      Ok(())
+    }
+  }
+
   pub fn peek_node_type(&self) -> Result<(StandardType, bool)> {
+    self.check_if_node_buffer_end()?;
+
     let pos = self.node_buf.position();
     let raw_node_type = self.node_buf.get_ref()[pos as usize];
     Self::parse_node_type(raw_node_type)
   }
 
   pub fn peek_node_identifier(&mut self) -> Result<String> {
+    self.check_if_node_buffer_end()?;
+
     let old_pos = self.node_buf.position();
     let _raw_node_type = self.node_buf.read_u8().context(KbinErrorKind::NodeTypeRead)?;
     let value = match self.compression {
@@ -136,6 +148,8 @@ impl<'buf> Reader<'buf> {
   }
 
   pub fn read_node_type(&mut self) -> Result<(StandardType, bool)> {
+    self.check_if_node_buffer_end()?;
+
     let raw_node_type = self.node_buf.read_u8().context(KbinErrorKind::NodeTypeRead)?;
     let value = Self::parse_node_type(raw_node_type)?;
     self.last_node_type = Some(value);

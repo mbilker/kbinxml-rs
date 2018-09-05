@@ -47,6 +47,9 @@ pub enum KbinErrorKind {
   #[fail(display = "Unable to seek data buffer")]
   Seek,
 
+  #[fail(display = "Reached the end of the node buffer")]
+  EndOfNodeBuffer,
+
   #[fail(display = "Unable to read len_node")]
   LenNodeRead,
 
