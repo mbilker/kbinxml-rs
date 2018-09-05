@@ -1,4 +1,5 @@
 use error::Result;
+use node::NodeCollection;
 use node_types::StandardType;
 use reader::Reader;
 
@@ -44,17 +45,8 @@ impl Printer {
       };
     }
 
-    for def in definitions.into_iter() {
-      match def.node_type {
-        StandardType::NodeStart |
-        StandardType::NodeEnd |
-        StandardType::FileEnd => {},
-        _ => {
-          let node = def.into_node();
-          eprintln!("node: {:?}", node);
-        },
-      }
-    }
+    let collection = NodeCollection::from_iter(definitions.into_iter());
+    eprintln!("collection: {:#?}", collection);
 
     Ok(())
   }
