@@ -8,7 +8,7 @@ use node_types::StandardType;
 use sixbit::{Sixbit, SixbitSize};
 use value::Value;
 
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug)]
 pub enum Key<'buf> {
   Compressed {
     size: SixbitSize,
@@ -20,7 +20,7 @@ pub enum Key<'buf> {
   },
 }
 
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug)]
 pub enum NodeData<'buf> {
   Some {
     key: Key<'buf>,
@@ -29,7 +29,7 @@ pub enum NodeData<'buf> {
   None,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct NodeDefinition<'buf> {
   encoding: EncodingType,
   pub node_type: StandardType,
@@ -82,37 +82,48 @@ impl<'buf> NodeDefinition<'buf> {
     }
   }
 
-  pub fn into_node(self) -> Result<Node, KbinError> {
+  pub fn value(&self) -> Result<Value, KbinError> {
+    match (self.node_type, self.data) {
+      (StandardType::Attribute, NodeData::Some { ref value_data, .. }) => {
+        let data = strip_trailing_null_bytes(value_data);
+        let value = self.encoding.decode_bytes(data)?;
+        Ok(Value::Attribute(value))
+      },
+      (StandardType::String, NodeData::Some { ref value_data, .. }) => {
+        let data = strip_trailing_null_bytes(value_data);
+        let value = self.encoding.decode_bytes(data)?;
+        Ok(Value::String(value))
+      },
+      (node_type, NodeData::Some { ref value_data, .. }) => {
+        let value = Value::from_standard_type(node_type, self.is_array, value_data)?;
+        debug!("value: {:?}", value);
+        match value {
+          Some(value) => Ok(value),
+          None => Err(KbinErrorKind::InvalidNodeType(node_type).into()),
+        }
+      },
+      (node_type, NodeData::None) => {
+        Err(KbinErrorKind::InvalidNodeType(node_type).into())
+      },
+    }
+  }
+
+  pub fn as_node(&self) -> Result<Node, KbinError> {
     trace!("parsing definition: {:?}", self);
     match (self.node_type, self.data) {
       (StandardType::NodeEnd, _) |
       (StandardType::FileEnd, _) => {
-        return Err(KbinErrorKind::InvalidNodeType(self.node_type).into());
+        Err(KbinErrorKind::InvalidNodeType(self.node_type).into())
       },
       (StandardType::NodeStart, NodeData::Some { key, .. }) => {
         let key = key.to_string()?;
         Ok(Node::new(key))
       },
-      (StandardType::Attribute, NodeData::Some { key, value_data }) => {
+      (_, NodeData::Some { key, .. }) => {
         let key = key.to_string()?;
-        let data = strip_trailing_null_bytes(value_data);
-        let value = self.encoding.decode_bytes(data)?;
-        Ok(Node::with_value(key, Value::Attribute(value)))
-      },
-      (StandardType::String, NodeData::Some { key, value_data }) => {
-        let key = key.to_string()?;
-        let data = strip_trailing_null_bytes(value_data);
-        let value = self.encoding.decode_bytes(data)?;
-        Ok(Node::with_value(key, Value::String(value)))
-      },
-      (node_type, NodeData::Some { key, value_data }) => {
-        let key = key.to_string()?;
-        let value = Value::from_standard_type(node_type, self.is_array, value_data)?;
+        let value = self.value()?;
         debug!("value: {:?}", value);
-        match value {
-          Some(value) => Ok(Node::with_value(key, value)),
-          None => Ok(Node::new(key)),
-        }
+        Ok(Node::with_value(key, value))
       },
       (node_type, NodeData::None) => {
         Err(KbinErrorKind::InvalidNodeType(node_type).into())

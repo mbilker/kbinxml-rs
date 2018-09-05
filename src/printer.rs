@@ -45,6 +45,16 @@ impl Printer {
       };
     }
 
+    for def in &definitions {
+      match def.node_type {
+        StandardType::NodeEnd |
+        StandardType::FileEnd => {},
+        _ => {
+          eprintln!("node: {:?}", def.as_node());
+        },
+      }
+    }
+
     let collection = NodeCollection::from_iter(definitions.into_iter());
     eprintln!("collection: {:#?}", collection);
 
