@@ -1,15 +1,133 @@
 use std::fmt;
 use std::net::Ipv4Addr;
 
+use byteorder::{BigEndian, ByteOrder};
+use error::{KbinError, KbinErrorKind};
 use serde::de::{Deserialize, Deserializer, DeserializeSeed};
 use serde_bytes::ByteBuf;
 
 use node::Node;
 use node::de::NodeSeed;
-use node_types::StandardType;
+use node_types::{self, StandardType};
 
 mod de;
 mod ser;
+
+macro_rules! tuple {
+  (
+    byte: [
+      s8: [$($s8_konst:ident),*],
+      u8: [$($u8_konst:ident),*],
+      bool: [$($bool_konst:ident),*]
+    ],
+    multi: [
+      $($read_method:ident => [$($multi_konst:ident),*]),*
+    ]
+  ) => {
+    pub fn from_standard_type(node_type: StandardType, is_array: bool, input: &[u8]) -> Result<Option<Value>, KbinError> {
+      let node_size = node_type.size * node_type.count;
+
+      if is_array {
+        let mut values = Vec::new();
+
+        for chunk in input.chunks(node_size) {
+          trace!("chunk: {:?}", chunk);
+          match Value::from_standard_type(node_type, false, chunk)? {
+            Some(value) => values.push(value),
+            None => return Err(KbinErrorKind::InvalidState.into()),
+          }
+        }
+        debug!("values: {:?}", values);
+        return Ok(Some(Value::Array(node_type, values)));
+      }
+
+      match node_type {
+        StandardType::String |
+        StandardType::Binary => {},
+        _ => {
+          if input.len() != node_size {
+            return Err(KbinErrorKind::SizeMismatch(*node_type, node_size, input.len()).into());
+          }
+        },
+      };
+
+      let value = match node_type {
+        StandardType::NodeStart |
+        StandardType::NodeEnd |
+        StandardType::FileEnd => return Ok(None),
+        StandardType::S8 => Value::S8(input[0] as i8),
+        StandardType::U8 => Value::U8(input[0]),
+        StandardType::S16 => Value::S16(BigEndian::read_i16(input)),
+        StandardType::U16 => Value::U16(BigEndian::read_u16(input)),
+        StandardType::S32 => Value::S32(BigEndian::read_i32(input)),
+        StandardType::U32 => Value::U32(BigEndian::read_u32(input)),
+        StandardType::S64 => Value::S64(BigEndian::read_i64(input)),
+        StandardType::U64 => Value::U64(BigEndian::read_u64(input)),
+        StandardType::Attribute |
+        StandardType::String => unimplemented!(),
+        StandardType::Binary => Value::Binary(input.to_vec()),
+        StandardType::Time => Value::Time(BigEndian::read_u32(input)),
+        StandardType::Ip4 => {
+          let mut octets = [0; 4];
+          octets[0..4].copy_from_slice(&input[0..4]);
+          Value::Ip4(Ipv4Addr::from(octets))
+        },
+        StandardType::Float => Value::Float(BigEndian::read_f32(input)),
+        StandardType::Double => Value::Double(BigEndian::read_f64(input)),
+        StandardType::Boolean => Value::Boolean(match input[0] {
+          0x00 => false,
+          0x01 => true,
+          input => return Err(KbinErrorKind::InvalidBooleanInput(input).into()),
+        }),
+        $(
+          StandardType::$s8_konst => {
+            const COUNT: usize = node_types::$s8_konst.count;
+            let mut value = [0; COUNT];
+            for i in 0..COUNT {
+              value[i] = input[i] as i8;
+            }
+            Value::$s8_konst(value)
+          },
+        )*
+        $(
+          StandardType::$u8_konst => {
+            const COUNT: usize = node_types::$u8_konst.count;
+            let mut value = [0; COUNT];
+            value[0..COUNT].copy_from_slice(&input[0..COUNT]);
+            Value::$u8_konst(value)
+          },
+        )*
+        $(
+          StandardType::$bool_konst => {
+            const COUNT: usize = node_types::$bool_konst.count;
+            let mut value: [_; COUNT] = Default::default();
+            for i in 0..COUNT {
+              value[i] = match input[i] {
+                0x00 => false,
+                0x01 => true,
+                input => return Err(KbinErrorKind::InvalidBooleanInput(input).into()),
+              };
+            }
+            Value::$bool_konst(value)
+          },
+        )*
+        $(
+          $(
+            StandardType::$multi_konst => {
+              const COUNT: usize = node_types::$multi_konst.count;
+              const SIZE: usize = node_types::$multi_konst.size * COUNT;
+              let mut value: [_; COUNT] = Default::default();
+              BigEndian::$read_method(&input[0..SIZE], &mut value);
+              Value::$multi_konst(value)
+            },
+          )*
+        )*
+      };
+
+      Ok(Some(value))
+    }
+  };
+}
 
 macro_rules! construct_types {
   (
@@ -39,6 +157,24 @@ macro_rules! construct_types {
     )+
 
     impl Value {
+      tuple! {
+        byte: [
+          s8: [S8_2, S8_3, S8_4, Vs8],
+          u8: [U8_2, U8_3, U8_4, Vu8],
+          bool: [Boolean2, Boolean3, Boolean4, Vb]
+        ],
+        multi: [
+          read_i16_into => [S16_2, S16_3, S16_4, Vs16],
+          read_i32_into => [S32_2, S32_3, S32_4],
+          read_i64_into => [S64_2, S64_3, S64_4],
+          read_u16_into => [U16_2, U16_3, U16_4, Vu16],
+          read_u32_into => [U32_2, U32_3, U32_4],
+          read_u64_into => [U64_2, U64_3, U64_4],
+          read_f32_into_unchecked => [Float2, Float3, Float4],
+          read_f64_into_unchecked => [Double2, Double3, Double4]
+        ]
+      }
+
       pub fn standard_type(&self) -> StandardType {
         match *self {
           $(

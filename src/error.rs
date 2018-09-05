@@ -6,7 +6,7 @@ use std::string::FromUtf8Error;
 use failure::{Backtrace, Compat, Context, Fail};
 use serde::{de, ser};
 
-use node_types::KbinType;
+use node_types::{KbinType, StandardType};
 
 pub type Result<T> = StdResult<T, KbinError>;
 
@@ -106,6 +106,12 @@ pub enum KbinErrorKind {
 
   #[fail(display = "Type mismatch, expected: {}, found: {}", _0, _1)]
   TypeMismatch(KbinType, KbinType),
+
+  #[fail(display = "Invalid input for boolean: {}", _0)]
+  InvalidBooleanInput(u8),
+
+  #[fail(display = "Invalid node type to create `Node` object from, node_type: {:?}", _0)]
+  InvalidNodeType(StandardType),
 
   #[fail(display = "Invalid state")]
   InvalidState,

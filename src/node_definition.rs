@@ -1,72 +1,119 @@
 use std::io::Cursor;
 
-use error::KbinError;
+use byte_buffer::strip_trailing_null_bytes;
+use encoding_type::EncodingType;
+use error::{KbinError, KbinErrorKind};
 use node::Node;
 use node_types::StandardType;
 use sixbit::{Sixbit, SixbitSize};
+use value::Value;
 
 #[derive(Debug)]
 pub enum Key<'buf> {
-  Some {
+  Compressed {
     size: SixbitSize,
     data: &'buf [u8],
+  },
+  Uncompressed {
+    encoding: EncodingType,
+    data: &'buf [u8],
+  },
+}
+
+#[derive(Debug)]
+pub enum NodeData<'buf> {
+  Some {
+    key: Key<'buf>,
+    value_data: &'buf [u8],
   },
   None,
 }
 
 #[derive(Debug)]
 pub struct NodeDefinition<'buf> {
+  encoding: EncodingType,
   pub node_type: StandardType,
   pub is_array: bool,
 
-  pub key: Key<'buf>,
+  data: NodeData<'buf>,
+}
 
-  pub value_data: Option<&'buf [u8]>,
+impl<'buf> Key<'buf> {
+  fn to_string(&self) -> Result<String, KbinError> {
+    match self {
+      Key::Compressed { ref size, ref data } => {
+        let mut data = Cursor::new(data);
+        Ok(Sixbit::unpack(&mut data, *size)?)
+      },
+      Key::Uncompressed { encoding, ref data } => {
+        Ok(encoding.decode_bytes(data)?)
+      },
+    }
+  }
 }
 
 impl<'buf> NodeDefinition<'buf> {
-  /*
-  pub fn new(
-    node_type: (StandardType, bool),
-    value_data: Option<&'buf [u8]>,
-  ) -> Self {
-    Self::with_key(node_type, Key::None, value_data)
-  }
-  */
-
-  pub fn with_key(
-    node_type: (StandardType, bool),
-    key: Key<'buf>,
-    value_data: Option<&'buf [u8]>,
-  ) -> Self {
+  pub fn new(encoding: EncodingType, node_type: (StandardType, bool)) -> Self {
     let (node_type, is_array) = node_type;
 
     Self {
+      encoding,
       node_type,
       is_array,
-      key,
-      value_data,
+      data: NodeData::None,
+    }
+  }
+
+  pub fn with_data(encoding: EncodingType, node_type: (StandardType, bool), data: NodeData<'buf>) -> Self {
+    let (node_type, is_array) = node_type;
+
+    Self {
+      encoding,
+      node_type,
+      is_array,
+      data,
     }
   }
 
   pub fn key(&self) -> Result<Option<String>, KbinError> {
-    match self.key {
-      Key::Some { ref size, ref data } => {
-        let mut data = Cursor::new(data);
-        Ok(Some(Sixbit::unpack(&mut data, *size)?))
-      },
-      Key::None => Ok(None),
+    match self.data {
+      NodeData::Some { ref key, .. } => key.to_string().map(Some),
+      NodeData::None => Ok(None),
     }
   }
 
   pub fn into_node(self) -> Result<Node, KbinError> {
-    let key = self.key()?.unwrap_or_else(|| String::new());
-
-    if let Some(_value_data) = self.value_data {
-      //Ok(Node::with_value(key, value))
-      unimplemented!();
-    } else {
-      Ok(Node::new(key))
+    trace!("parsing definition: {:?}", self);
+    match (self.node_type, self.data) {
+      (StandardType::NodeStart, _) |
+      (StandardType::NodeEnd, _) |
+      (StandardType::FileEnd, _) => {
+        return Err(KbinErrorKind::InvalidNodeType(self.node_type).into());
+      },
+      (StandardType::Attribute, NodeData::Some { key, value_data }) => {
+        let key = key.to_string()?;
+        let data = strip_trailing_null_bytes(value_data);
+        let value = self.encoding.decode_bytes(data)?;
+        Ok(Node::with_value(key, Value::Attribute(value)))
+      },
+      (StandardType::String, NodeData::Some { key, value_data }) => {
+        let key = key.to_string()?;
+        let data = strip_trailing_null_bytes(value_data);
+        let value = self.encoding.decode_bytes(data)?;
+        Ok(Node::with_value(key, Value::String(value)))
+      },
+      (node_type, NodeData::Some { key, value_data }) => {
+        let key = key.to_string()?;
+        let value = Value::from_standard_type(node_type, self.is_array, value_data)?;
+        debug!("value: {:?}", value);
+        match value {
+          Some(value) => Ok(Node::with_value(key, value)),
+          None => Ok(Node::new(key)),
+        }
+      },
+      (node_type, NodeData::None) => {
+        Err(KbinErrorKind::InvalidNodeType(node_type).into())
+      },
     }
   }
 }

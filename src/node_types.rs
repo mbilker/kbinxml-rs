@@ -153,7 +153,8 @@ macro_rules! construct_types {
     }
 
     $(
-      pub const $upcase: KbinType = KbinType {
+      #[allow(non_upper_case_globals)]
+      pub const $konst: KbinType = KbinType {
         id: $id,
         konst: stringify!($konst),
         name: $name,
@@ -217,7 +218,7 @@ macro_rules! construct_types {
       fn deref(&self) -> &KbinType {
         match *self {
           $(
-            StandardType::$konst => &$upcase,
+            StandardType::$konst => &$konst,
           )+
         }
       }

@@ -7,9 +7,10 @@ use byte_buffer::ByteBufferRead;
 use compression::Compression;
 use encoding_type::EncodingType;
 use error::{KbinErrorKind, Result};
-use node_definition::{Key, NodeDefinition};
+use node_definition::{Key, NodeData, NodeDefinition};
 use node_types::StandardType;
 use sixbit::Sixbit;
+
 use super::{ARRAY_MASK, SIGNATURE};
 
 pub struct Reader<'buf> {
@@ -116,8 +117,17 @@ impl<'buf> Reader<'buf> {
   pub fn peek_node_identifier(&mut self) -> Result<String> {
     let old_pos = self.node_buf.position();
     let _raw_node_type = self.node_buf.read_u8().context(KbinErrorKind::NodeTypeRead)?;
-    let size = Sixbit::size(&mut *self.node_buf)?;
-    let value = Sixbit::unpack(&mut *self.node_buf, size)?;
+    let value = match self.compression {
+      Compression::Compressed => {
+        let size = Sixbit::size(&mut *self.node_buf)?;
+        Sixbit::unpack(&mut *self.node_buf, size)?
+      },
+      Compression::Uncompressed => {
+        let length = (self.node_buf.read_u8().context(KbinErrorKind::DataRead(1))? & !ARRAY_MASK) + 1;
+        let bytes = self.node_buf.get(length as u32)?;
+        self.encoding.decode_bytes(bytes)?
+      },
+    };
 
     let size = self.node_buf.position() - old_pos;
     self.node_buf.seek(SeekFrom::Start(old_pos)).context(KbinErrorKind::DataRead(size as usize))?;
@@ -141,8 +151,8 @@ impl<'buf> Reader<'buf> {
       },
       Compression::Uncompressed => {
         let length = (self.node_buf.read_u8().context(KbinErrorKind::DataRead(1))? & !ARRAY_MASK) + 1;
-        let bytes = self.node_buf.get(length as u32)?;
-        self.encoding.decode_bytes(bytes)?
+        let data = self.node_buf.get(length as u32)?;
+        self.encoding.decode_bytes(data)?
       },
     };
     debug!("Reader::read_node_identifier() => value: {:?}", value);
@@ -152,18 +162,55 @@ impl<'buf> Reader<'buf> {
     Ok(value)
   }
 
+  pub fn read_node_data(&mut self, node_type: (StandardType, bool)) -> Result<&'buf [u8]> {
+    let (node_type, is_array) = node_type;
+    trace!("Reader::read_node_data(node_type: {:?}, is_array: {})", node_type, is_array);
+
+    let value = match node_type {
+      StandardType::Attribute |
+      StandardType::String => self.data_buf.buf_read()?,
+      StandardType::Binary => self.read_bytes()?,
+
+      _ if is_array => {
+        let arr_size = self.read_u32().context(KbinErrorKind::ArrayLengthRead)?;
+        let data = self.data_buf.get(arr_size)?;
+        self.data_buf.realign_reads(None)?;
+
+        data
+      },
+      node_type => self.data_buf.get_aligned(*node_type)?,
+    };
+    debug!("Reader::read_node_data(node_type: {:?}, is_array: {}) => value: {:?}", node_type, is_array, value);
+
+    Ok(value)
+  }
+
   pub fn read_node_definition(&mut self) -> Result<NodeDefinition<'buf>> {
     let node_type = self.read_node_type()?;
-    let key = match node_type.0 {
+    match node_type.0 {
       StandardType::NodeEnd |
-      StandardType::FileEnd => Key::None,
+      StandardType::FileEnd => {
+        Ok(NodeDefinition::new(self.encoding, node_type))
+      }
       _ => {
-        let size = Sixbit::size(&mut *self.node_buf)?;
-        let data = self.node_buf.get(size.1 as u32)?;
-        Key::Some { size, data }
+        let key = match self.compression {
+          Compression::Compressed => {
+            let size = Sixbit::size(&mut *self.node_buf)?;
+            let data = self.node_buf.get(size.1 as u32)?;
+            Key::Compressed { size, data }
+          },
+          Compression::Uncompressed => {
+            let encoding = self.encoding;
+            let length = (self.node_buf.read_u8().context(KbinErrorKind::DataRead(1))? & !ARRAY_MASK) + 1;
+            let data = self.node_buf.get(length as u32)?;
+            Key::Uncompressed { encoding, data }
+          },
+        };
+        let value_data = self.read_node_data(node_type)?;
+        let node_data = NodeData::Some { key, value_data };
+        Ok(NodeDefinition::with_data(self.encoding, node_type, node_data))
       },
-    };
-    Ok(NodeDefinition::with_key(node_type, key, None))
+    }
   }
 
   pub fn read_string(&mut self) -> Result<String> {
