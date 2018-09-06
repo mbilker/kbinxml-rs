@@ -89,6 +89,8 @@ impl KbinXml {
     let key = def.key()?.ok_or(KbinErrorKind::InvalidNodeType(def.node_type))?;
     let mut elem = Element::bare(key);
 
+    // Don't make the assumption that there cannot be a sub-node when a node has a value.
+    // Example: `netlog` module
     if def.node_type != StandardType::NodeStart {
       elem.set_attr("__type", def.node_type.name);
 

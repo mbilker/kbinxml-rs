@@ -42,10 +42,10 @@ impl<'a> SerializeSeq for Seq<'a> {
   fn serialize_element<T>(&mut self, value: &T) -> Result<()>
     where T: ?Sized + Serialize
   {
-    trace!("<Seq as SerializeSeq>::serialize_element()");
+    trace!("--> <Seq as SerializeSeq>::serialize_element()");
 
     let hint = value.serialize(&mut *self.ser)?.ok_or(KbinErrorKind::MissingTypeHint)?;
-    debug!("<Seq as SerializeSeq>::serialize_element() => hint: {:?}", hint);
+    debug!("<-- <Seq as SerializeSeq>::serialize_element() => hint: {:?}", hint);
 
     // Rust tuple types can have different types per element, this is not
     // permitted by kbin
@@ -61,7 +61,7 @@ impl<'a> SerializeSeq for Seq<'a> {
   }
 
   fn end(self) -> Result<Self::Ok> {
-    trace!("<Seq as SerializeSeq>::end()");
+    trace!("<-- <Seq as SerializeSeq>::end()");
 
     self.ser.write_mode = WriteMode::Single;
     self.ser.data_buf.realign_writes(None)?;
