@@ -5,6 +5,7 @@ use node_types::StandardType;
 
 /// A collection of node definitions (`NodeDefinition`)
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct NodeCollection<'buf> {
   base: NodeDefinition<'buf>,
   attributes: Vec<NodeDefinition<'buf>>,
@@ -12,6 +13,7 @@ pub struct NodeCollection<'buf> {
 }
 
 impl<'buf> NodeCollection<'buf> {
+  #[allow(dead_code)]
   pub fn from_iter<I>(mut iter: I) -> Option<NodeCollection<'buf>>
     where I: Iterator<Item = NodeDefinition<'buf>>
   {
@@ -24,6 +26,7 @@ impl<'buf> NodeCollection<'buf> {
     NodeCollection::with_base(base, &mut iter)
   }
 
+  #[allow(dead_code)]
   fn with_base<I>(base: NodeDefinition<'buf>, iter: &mut I) -> Option<NodeCollection<'buf>>
     where I: Iterator<Item = NodeDefinition<'buf>>
   {
