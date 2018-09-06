@@ -171,7 +171,14 @@ macro_rules! tuple {
             i += 1;
 
             // If the space counter is equal to count, then split
-            i == count
+            let res = i == count;
+
+            // If splitting, reset the counter
+            if res {
+              i = 0;
+            }
+
+            res
           } else {
             false
           }
