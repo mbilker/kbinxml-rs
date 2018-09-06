@@ -1,5 +1,3 @@
-#![feature(int_to_from_bytes)]
-
 #![cfg_attr(test, feature(test))]
 
 extern crate byteorder;
@@ -27,7 +25,6 @@ mod compression;
 mod encoding_type;
 mod error;
 mod ip4;
-mod kbin_wrapper;
 mod node;
 mod node_types;
 mod options;
@@ -227,7 +224,9 @@ impl KbinXml {
       },
 
       _ => {
-        let data = node_type.to_bytes(&text, count as usize)?;
+        let value = Value::from_string(node_type, &text, array_mask > 0, count as usize)?;
+        let data = value.to_bytes()?;
+
         if array_mask > 0 {
           let total_size = (count as u32) * (node_type.count as u32) * (node_type.size as u32);
           trace!("write_node data_buf array => total_size: {}, data: 0x{:02x?}", total_size, data);

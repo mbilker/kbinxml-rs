@@ -1,11 +1,14 @@
 use std::fmt;
 use std::net::Ipv4Addr;
+use std::str::FromStr;
 
-use byteorder::{BigEndian, ByteOrder};
-use error::{KbinError, KbinErrorKind};
+use byteorder::{BigEndian, ByteOrder, WriteBytesExt};
+use failure::{Fail, ResultExt};
+use rustc_hex::FromHex;
 use serde::de::{Deserialize, Deserializer, DeserializeSeed};
 use serde_bytes::ByteBuf;
 
+use error::{KbinError, KbinErrorKind};
 use node::Node;
 use node::de::NodeSeed;
 use node_types::{self, StandardType};
@@ -21,7 +24,7 @@ macro_rules! tuple {
       bool: [$($bool_konst:ident),*]
     ],
     multi: [
-      $($read_method:ident => [$($multi_konst:ident),*]),*
+      $($read_method:ident $write_method:ident $inner_type:ty => [$($multi_konst:ident),*]),*
     ]
   ) => {
     pub fn from_standard_type(node_type: StandardType, is_array: bool, input: &[u8]) -> Result<Option<Value>, KbinError> {
@@ -31,14 +34,15 @@ macro_rules! tuple {
         let mut values = Vec::new();
 
         for chunk in input.chunks(node_size) {
-          trace!("chunk: {:?}", chunk);
           match Value::from_standard_type(node_type, false, chunk)? {
             Some(value) => values.push(value),
             None => return Err(KbinErrorKind::InvalidState.into()),
           }
         }
-        debug!("values: {:?}", values);
-        return Ok(Some(Value::Array(node_type, values)));
+        let value = Value::Array(node_type, values);
+        debug!("Value::from_standard_type({:?}) input: 0x{:02x?} => {:?}", node_type, input, value);
+
+        return Ok(Some(value));
       }
 
       match node_type {
@@ -54,7 +58,9 @@ macro_rules! tuple {
       let value = match node_type {
         StandardType::NodeStart |
         StandardType::NodeEnd |
-        StandardType::FileEnd => return Ok(None),
+        StandardType::FileEnd |
+        StandardType::Attribute |
+        StandardType::String => return Ok(None),
         StandardType::S8 => Value::S8(input[0] as i8),
         StandardType::U8 => Value::U8(input[0]),
         StandardType::S16 => Value::S16(BigEndian::read_i16(input)),
@@ -63,8 +69,6 @@ macro_rules! tuple {
         StandardType::U32 => Value::U32(BigEndian::read_u32(input)),
         StandardType::S64 => Value::S64(BigEndian::read_i64(input)),
         StandardType::U64 => Value::U64(BigEndian::read_u64(input)),
-        StandardType::Attribute |
-        StandardType::String => unimplemented!(),
         StandardType::Binary => Value::Binary(input.to_vec()),
         StandardType::Time => Value::Time(BigEndian::read_u32(input)),
         StandardType::Ip4 => {
@@ -123,8 +127,250 @@ macro_rules! tuple {
           )*
         )*
       };
+      debug!("Value::from_standard_type({:?}) input: 0x{:02x?} => {:?}", node_type, input, value);
 
       Ok(Some(value))
+    }
+
+    pub fn from_string(node_type: StandardType, input: &str, is_array: bool, arr_count: usize) -> Result<Value, KbinError> {
+      #[inline]
+      fn parse<T>(node_type: StandardType, input: &str) -> Result<T, KbinError>
+        where T: FromStr,
+              T::Err: Fail
+      {
+        // TODO(mbilker): Add string check for spaces
+        let n = input.parse::<T>().context(KbinErrorKind::StringParse(node_type.name))?;
+        Ok(n)
+      }
+
+      #[inline]
+      fn parse_tuple<T>(node_type: StandardType, input: &str, output: &mut [T]) -> Result<(), KbinError>
+        where T: FromStr,
+              T::Err: Fail
+      {
+
+        let mut i = 0;
+        for part in input.split(' ') {
+          output[i] = part.parse::<T>().context(KbinErrorKind::StringParse(node_type.name))?;
+          i += 1;
+        }
+
+        if i != node_type.count {
+          return Err(KbinErrorKind::SizeMismatch(*node_type, node_type.count, i).into());
+        }
+
+        Ok(())
+      }
+
+      fn to_array(node_type: StandardType, count: usize, input: &str, arr_count: usize) -> Result<Value, KbinError> {
+        let mut i = 0;
+        trace!("to_array(count: {}, input: {:?}, arr_count: {})", count, input, arr_count);
+        let iter = input.split(|c| {
+          if c == ' ' {
+            // Increment the space counter
+            i += 1;
+
+            // If the space counter is equal to count, then split
+            i == count
+          } else {
+            false
+          }
+        });
+
+        let mut values = Vec::new();
+
+        for part in iter {
+          debug!("part: {:?}", part);
+          values.push(Value::from_string(node_type, part, false, 1)?);
+        }
+
+        Ok(Value::Array(node_type, values))
+      }
+
+      if is_array {
+        let value = match node_type.count {
+          //0 => return Err(KbinErrorKind::InvalidState.into()),
+          1 => {
+            // May have a node (i.e. `Ip4`) that is only a single count, but it
+            // can be part of an array
+            match arr_count {
+              0 => return Err(KbinErrorKind::InvalidState.into()),
+              1 => Value::from_string(node_type, input, false, arr_count)?,
+              _ => to_array(node_type, node_type.count, input, arr_count)?,
+            }
+          },
+          count if count > 1 => to_array(node_type, count, input, arr_count)?,
+          _ => return Err(KbinErrorKind::InvalidState.into()),
+        };
+        debug!("Value::from_string({:?}) input: {:?} => {:?}", node_type, input, value);
+
+        return Ok(value);
+      }
+
+      let value = match node_type {
+        StandardType::S8 => Value::S8(parse::<i8>(node_type, input)?),
+        StandardType::U8 => Value::U8(parse::<u8>(node_type, input)?),
+        StandardType::S16 => Value::S16(parse::<i16>(node_type, input)?),
+        StandardType::U16 => Value::U16(parse::<u16>(node_type, input)?),
+        StandardType::S32 => Value::S32(parse::<i32>(node_type, input)?),
+        StandardType::U32 => Value::U32(parse::<u32>(node_type, input)?),
+        StandardType::S64 => Value::S64(parse::<i64>(node_type, input)?),
+        StandardType::U64 => Value::U64(parse::<u64>(node_type, input)?),
+        StandardType::Binary => {
+          let data: Vec<u8> = input.from_hex().context(KbinErrorKind::HexError)?;
+          Value::Binary(data)
+        },
+        StandardType::String => Value::String(input.to_owned()),
+        StandardType::Attribute => Value::Attribute(input.to_owned()),
+        StandardType::Ip4 => {
+          let mut i = 0;
+          let mut octets = [0; 4];
+
+          // IP Addresses are split by a period, don't use `parse_tuple`
+          for part in input.split('.') {
+            octets[i] = parse::<u8>(node_type, part)?;
+            i += 1;
+          }
+
+          if i != 4 {
+            return Err(KbinErrorKind::SizeMismatch(*node_type, 4, i).into());
+          }
+
+          Value::Ip4(Ipv4Addr::from(octets))
+        },
+        StandardType::Time => Value::Time(parse::<u32>(node_type, input)?),
+        StandardType::Float => Value::Float(parse::<f32>(node_type, input)?),
+        StandardType::Double => Value::Double(parse::<f64>(node_type, input)?),
+        StandardType::Boolean => Value::Boolean(match input {
+          "0" => false,
+          "1" => true,
+          v => return Err(KbinErrorKind::InvalidBooleanInput(parse::<u8>(node_type, v)?).into()),
+        }),
+        StandardType::NodeEnd |
+        StandardType::FileEnd |
+        StandardType::NodeStart => return Err(KbinErrorKind::InvalidNodeType(node_type).into()),
+        $(
+          StandardType::$s8_konst => {
+            const COUNT: usize = node_types::$s8_konst.count;
+            let mut value = [0; COUNT];
+            parse_tuple::<i8>(node_type, input, &mut value)?;
+            Value::$s8_konst(value)
+          },
+        )*
+        $(
+          StandardType::$u8_konst => {
+            const COUNT: usize = node_types::$u8_konst.count;
+            let mut value = [0; COUNT];
+            parse_tuple::<u8>(node_type, input, &mut value)?;
+            Value::$u8_konst(value)
+          },
+        )*
+        $(
+          StandardType::$bool_konst => {
+            const COUNT: usize = node_types::$bool_konst.count;
+            let mut i = 0;
+            let mut value: [_; COUNT] = Default::default();
+            for part in input.split(' ') {
+              value[i] = match part {
+                "0" => false,
+                "1" => true,
+                v => return Err(KbinErrorKind::InvalidBooleanInput(parse::<u8>(node_type, v)?).into()),
+              };
+              i += 1;
+            }
+
+            if i != COUNT {
+              return Err(KbinErrorKind::SizeMismatch(*node_type, COUNT, i).into());
+            }
+
+            Value::$bool_konst(value)
+          },
+        )*
+        $(
+          $(
+            StandardType::$multi_konst => {
+              const COUNT: usize = node_types::$multi_konst.count;
+              let mut value: [_; COUNT] = Default::default();
+              parse_tuple::<$inner_type>(node_type, input, &mut value)?;
+              Value::$multi_konst(value)
+            },
+          )*
+        )*
+      };
+      debug!("Value::from_string({:?}) input: {:?} => {:?}", node_type, input, value);
+
+      Ok(value)
+    }
+
+    fn to_bytes_inner(self, output: &mut Vec<u8>) -> Result<(), KbinError> {
+      debug!("Value::to_bytes_inner(self: {:?})", self);
+
+      macro_rules! gen_error {
+        ($konst:ident) => {
+          KbinErrorKind::DataWrite(StandardType::$konst.name)
+        };
+      }
+
+      match self {
+        Value::S8(n) => output.push(n as u8),
+        Value::U8(n) => output.push(n),
+        Value::S16(n) => output.write_i16::<BigEndian>(n).context(gen_error!(S16))?,
+        Value::U16(n) => output.write_u16::<BigEndian>(n).context(gen_error!(U16))?,
+        Value::S32(n) => output.write_i32::<BigEndian>(n).context(gen_error!(S32))?,
+        Value::U32(n) => output.write_u32::<BigEndian>(n).context(gen_error!(U32))?,
+        Value::S64(n) => output.write_i64::<BigEndian>(n).context(gen_error!(S64))?,
+        Value::U64(n) => output.write_u64::<BigEndian>(n).context(gen_error!(U64))?,
+        Value::Binary(data) => output.extend_from_slice(&data),
+        Value::Time(n) => output.write_u32::<BigEndian>(n).context(gen_error!(Time))?,
+        Value::Ip4(addr) => output.extend_from_slice(&addr.octets()),
+        Value::Float(n) => output.write_f32::<BigEndian>(n).context(gen_error!(Float))?,
+        Value::Double(n) => output.write_f64::<BigEndian>(n).context(gen_error!(Double))?,
+        Value::Boolean(v) => output.push(if v { 0x01 } else { 0x00 }),
+        Value::Array(_, values) => {
+          for value in values {
+            value.to_bytes_inner(output)?;
+          }
+        },
+        Value::Attribute(_) |
+        Value::String(_) |
+        Value::Node(_) => return Err(KbinErrorKind::InvalidNodeType(self.standard_type()).into()),
+        $(
+          Value::$s8_konst(value) => {
+            output.reserve(value.len());
+            for n in value.into_iter() {
+              output.push(*n as u8);
+            }
+          },
+        )*
+        $(
+          Value::$u8_konst(value) => {
+            output.reserve(value.len());
+            for n in value.into_iter() {
+              output.push(*n);
+            }
+          },
+        )*
+        $(
+          Value::$bool_konst(value) => {
+            output.reserve(value.len());
+            for v in value.into_iter() {
+              output.push(if *v { 0x01 } else { 0x00 });
+            }
+          },
+        )*
+        $(
+          $(
+            Value::$multi_konst(value) => {
+              output.reserve(value.len() * StandardType::$multi_konst.size);
+              for v in value.into_iter() {
+                output.$write_method::<BigEndian>(*v).context(gen_error!($multi_konst))?;
+              }
+            },
+          )*
+        )*
+      };
+
+      Ok(())
     }
   };
 }
@@ -164,15 +410,22 @@ macro_rules! construct_types {
           bool: [Boolean2, Boolean3, Boolean4, Vb]
         ],
         multi: [
-          read_i16_into => [S16_2, S16_3, S16_4, Vs16],
-          read_i32_into => [S32_2, S32_3, S32_4],
-          read_i64_into => [S64_2, S64_3, S64_4],
-          read_u16_into => [U16_2, U16_3, U16_4, Vu16],
-          read_u32_into => [U32_2, U32_3, U32_4],
-          read_u64_into => [U64_2, U64_3, U64_4],
-          read_f32_into_unchecked => [Float2, Float3, Float4],
-          read_f64_into_unchecked => [Double2, Double3, Double4]
+          read_i16_into write_i16 i16 => [S16_2, S16_3, S16_4, Vs16],
+          read_i32_into write_i32 i32 => [S32_2, S32_3, S32_4],
+          read_i64_into write_i64 i64 => [S64_2, S64_3, S64_4],
+          read_u16_into write_u16 u16 => [U16_2, U16_3, U16_4, Vu16],
+          read_u32_into write_u32 u32 => [U32_2, U32_3, U32_4],
+          read_u64_into write_u64 u64 => [U64_2, U64_3, U64_4],
+          read_f32_into_unchecked write_f32 f32 => [Float2, Float3, Float4],
+          read_f64_into_unchecked write_f64 f64 => [Double2, Double3, Double4]
         ]
+      }
+
+      pub fn to_bytes(self) -> Result<Vec<u8>, KbinError> {
+        let mut output = Vec::new();
+        self.to_bytes_inner(&mut output)?;
+
+        Ok(output)
       }
 
       pub fn standard_type(&self) -> StandardType {

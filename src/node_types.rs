@@ -1,9 +1,6 @@
 use std::fmt;
 use std::ops::Deref;
 
-use error::{KbinError, KbinErrorKind};
-use kbin_wrapper::*;
-
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub struct KbinType {
   pub id: u8,
@@ -12,106 +9,6 @@ pub struct KbinType {
   pub alt_name: Option<&'static str>,
   pub size: usize,
   pub count: usize
-}
-
-impl KbinType {
-  fn parse_array<T>(&self, output: &mut String, input: &[u8], arr_count: usize) -> Result<(), KbinError>
-    where T: KbinWrapperType<T>
-  {
-    let total_nodes = self.count * arr_count;
-    let total_size = self.size * total_nodes;
-    if total_size != input.len() {
-      return Err(KbinErrorKind::SizeMismatch(*self, total_size, input.len()).into());
-    }
-
-    // Guard when the input is of zero elements
-    if arr_count == 0 {
-      return Ok(());
-    }
-
-    {
-      let first = &input[..self.size];
-      T::from_kbin_bytes(output, first)?;
-    }
-
-    for i in 1..total_nodes {
-      let offset = i * self.size;
-      let end = (i + 1) * self.size;
-      let data = &input[offset..end];
-      output.push(' ');
-      T::from_kbin_bytes(output, data)?;
-    }
-
-    Ok(())
-  }
-
-  fn parse_bytes_inner<T>(&self, input: &[u8]) -> Result<String, KbinError>
-    where T: KbinWrapperType<T>
-  {
-    let type_size = self.size * self.count;
-    let arr_count = input.len() / type_size;
-    debug!("parse_bytes({}) => size: {}, count: {}, input_len: {}, arr_count: {}", self.name, self.size, self.count, input.len(), arr_count);
-
-    let mut result = String::new();
-
-    match self.count {
-      0 => panic!("Tried to parse special type: {}", self.name),
-      1 => {
-        // May have a node (i.e. Ip4) that is only a single count, but it
-        // can be part of an array
-        if arr_count == 1 {
-          T::from_kbin_bytes(&mut result, input)?;
-        } else {
-          self.parse_array::<T>(&mut result, input, arr_count)?;
-        }
-      },
-      count if count > 1 => self.parse_array::<T>(&mut result, input, arr_count)?,
-      _ => return Err(KbinErrorKind::InvalidState.into()),
-    };
-
-    Ok(result)
-  }
-
-  fn to_array<T>(&self, output: &mut Vec<u8>, input: &str, arr_count: usize) -> Result<(), KbinError>
-    where T: KbinWrapperType<T>
-  {
-    for part in input.split(' ') {
-      T::to_kbin_bytes(output, part)?;
-    }
-
-    let type_size = self.size * self.count;
-    let total_size = arr_count * type_size;
-    if total_size != output.len() {
-      return Err(KbinErrorKind::SizeMismatch(*self, total_size, output.len()).into());
-    }
-
-    Ok(())
-  }
-
-  fn to_bytes_inner<T>(&self, input: &str, arr_count: usize) -> Result<Vec<u8>, KbinError>
-    where T: KbinWrapperType<T>
-  {
-    debug!("to_bytes_inner({}) => size: {}, count: {}, input_len: {}, arr_count: {}", self.name, self.size, self.count, input.len(), arr_count);
-
-    let mut output = Vec::new();
-
-    match self.count {
-      0 => panic!("Tried to write special type: {}", self.name),
-      1 => {
-        // May have a node (i.e. Ip4) that is only a single count, but it
-        // can be part of an array
-        match arr_count {
-          0 => {},
-          1 => T::to_kbin_bytes(&mut output, input)?,
-          _ => self.to_array::<T>(&mut output, input, arr_count)?,
-        };
-      },
-      count if count > 1 => self.to_array::<T>(&mut output, input, arr_count)?,
-      _ => return Err(KbinErrorKind::InvalidState.into()),
-    };
-
-    Ok(output)
-  }
 }
 
 impl fmt::Display for KbinType {
@@ -180,22 +77,6 @@ macro_rules! construct_types {
             $name => StandardType::$konst,
           )+
           _ => panic!("Node name {} not implemented", input),
-        }
-      }
-
-      pub fn parse_bytes(&self, input: &[u8]) -> Result<String, KbinError> {
-        match *self {
-          $(
-            StandardType::$konst => self.parse_bytes_inner::<$inner_type>(input),
-          )+
-        }
-      }
-
-      pub fn to_bytes(&self, input: &str, arr_count: usize) -> Result<Vec<u8>, KbinError> {
-        match *self {
-          $(
-            StandardType::$konst => self.to_bytes_inner::<$inner_type>(input, arr_count),
-          )+
         }
       }
 

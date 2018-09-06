@@ -65,9 +65,6 @@ pub enum KbinErrorKind {
   #[fail(display = "Unable to read array node length")]
   ArrayLengthRead,
 
-  #[fail(display = "Failed to write {} to output string", _0)]
-  ByteParse(&'static str),
-
   #[fail(display = "Unable to read sixbit string length")]
   SixbitLengthRead,
 
