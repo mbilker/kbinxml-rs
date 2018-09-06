@@ -23,3 +23,9 @@ impl Compression {
     }
   }
 }
+
+impl Default for Compression {
+  fn default() -> Self {
+    Compression::Compressed
+  }
+}
