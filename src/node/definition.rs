@@ -1,5 +1,3 @@
-use std::io::Cursor;
-
 use byte_buffer::strip_trailing_null_bytes;
 use encoding_type::EncodingType;
 use error::{KbinError, KbinErrorKind};
@@ -42,8 +40,7 @@ impl<'buf> Key<'buf> {
   fn to_string(&self) -> Result<String, KbinError> {
     match self {
       Key::Compressed { ref size, ref data } => {
-        let mut data = Cursor::new(data);
-        Ok(Sixbit::unpack(&mut data, *size)?)
+        Ok(Sixbit::unpack(data, *size)?)
       },
       Key::Uncompressed { encoding, ref data } => {
         Ok(encoding.decode_bytes(data)?)
@@ -96,7 +93,6 @@ impl<'buf> NodeDefinition<'buf> {
       },
       (node_type, NodeData::Some { ref value_data, .. }) => {
         let value = Value::from_standard_type(node_type, self.is_array, value_data)?;
-        debug!("value: {:?}", value);
         match value {
           Some(value) => Ok(value),
           None => Err(KbinErrorKind::InvalidNodeType(node_type).into()),
@@ -122,7 +118,6 @@ impl<'buf> NodeDefinition<'buf> {
       (_, NodeData::Some { key, .. }) => {
         let key = key.to_string()?;
         let value = self.value()?;
-        debug!("value: {:?}", value);
         Ok(Node::with_value(key, value))
       },
       (node_type, NodeData::None) => {

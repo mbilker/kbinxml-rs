@@ -46,6 +46,7 @@ use reader::Reader;
 use sixbit::Sixbit;
 
 // Public exports
+pub use compression::Compression;
 pub use encoding_type::EncodingType;
 pub use printer::Printer;
 pub use error::{KbinError, KbinErrorKind, Result};
@@ -195,9 +196,17 @@ impl KbinXml {
       array_mask,
       count);
 
-    // TODO: support uncompressed
     node_buf.write_u8(node_type.id | array_mask).context(KbinErrorKind::DataWrite(node_type.name))?;
-    Sixbit::pack(&mut **node_buf, input.name())?;
+
+    match self.options.compression {
+      Compression::Compressed => Sixbit::pack(&mut **node_buf, input.name())?,
+      Compression::Uncompressed => {
+        let data = self.options.encoding.encode_bytes(input.name())?;
+        let len = (data.len() - 1) as u8;
+        node_buf.write_u8(len | ARRAY_MASK).context(KbinErrorKind::DataWrite("node name length"))?;
+        node_buf.write_all(&data).context(KbinErrorKind::DataWrite("node name bytes"))?;
+      },
+    };
 
     match node_type {
       StandardType::NodeStart => {},
@@ -258,7 +267,9 @@ impl KbinXml {
   fn to_binary_internal(&mut self, input: &Element) -> Result<Vec<u8>> {
     let mut header = Cursor::new(Vec::with_capacity(8));
     header.write_u8(SIGNATURE).context(KbinErrorKind::HeaderWrite("signature"))?;
-    header.write_u8(SIG_COMPRESSED).context(KbinErrorKind::HeaderWrite("compression"))?;
+
+    let compression = self.options.compression.to_byte();
+    header.write_u8(compression).context(KbinErrorKind::HeaderWrite("compression"))?;
 
     let encoding = self.options.encoding.to_byte();
     header.write_u8(encoding).context(KbinErrorKind::HeaderWrite("encoding"))?;

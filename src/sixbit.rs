@@ -20,7 +20,11 @@ lazy_static! {
   };
 }
 
-pub type SixbitSize = (u8, usize);
+#[derive(Clone, Copy, Debug)]
+pub struct SixbitSize {
+  pub sixbit_len: u8,
+  pub real_len: usize,
+}
 
 pub struct Sixbit;
 
@@ -28,12 +32,12 @@ impl Sixbit {
   pub fn size<T>(reader: &mut T) -> Result<SixbitSize, KbinError>
     where T: Read
   {
-    let len = reader.read_u8().context(KbinErrorKind::SixbitLengthRead)?;
-    let real_len = (f32::from(len * 6) / 8f32).ceil();
+    let sixbit_len = reader.read_u8().context(KbinErrorKind::SixbitLengthRead)?;
+    let real_len = (f32::from(sixbit_len * 6) / 8f32).ceil();
     let real_len = (real_len as u32) as usize;
-    debug!("sixbit_len: {}, real_len: {}", len, real_len);
+    debug!("sixbit_len: {}, real_len: {}", sixbit_len, real_len);
 
-    Ok((len, real_len))
+    Ok(SixbitSize { sixbit_len, real_len })
   }
 
   pub fn pack<T>(writer: &mut T, input: &str) -> Result<(), KbinError>
@@ -44,6 +48,7 @@ impl Sixbit {
       .map(|ch| {
         *BYTE_MAP.get(&ch).expect("Character must be a valid sixbit character")
       });
+
     let len = input.len();
     let real_len = (f64::from(len as u32 * 6) / 8f64).ceil() as usize;
     debug!("sixbit_len: {}, real_len: {}", len, real_len);
@@ -60,18 +65,17 @@ impl Sixbit {
     }
 
     writer.write_u8(len as u8).context(KbinErrorKind::SixbitLengthWrite)?;
-    writer.write(&bytes).context(KbinErrorKind::SixbitWrite)?;
+    writer.write_all(&bytes).context(KbinErrorKind::SixbitWrite)?;
 
     Ok(())
   }
 
-  pub fn unpack<T>(reader: &mut T, size: SixbitSize) -> Result<String, KbinError>
-    where T: Read
-  {
-    let (sixbit_len, len) = size;
+  pub fn unpack(buf: &[u8], size: SixbitSize) -> Result<String, KbinError> {
+    let SixbitSize { sixbit_len, real_len } = size;
 
-    let mut buf = vec![0; len];
-    reader.read_exact(&mut buf).context(KbinErrorKind::SixbitRead)?;
+    if buf.len() < real_len {
+      return Err(KbinErrorKind::SixbitRead.into());
+    }
 
     let sixbit_len = sixbit_len as usize;
     let mut result = String::with_capacity(sixbit_len);
@@ -100,23 +104,25 @@ mod tests {
 
   use super::Sixbit;
 
+  const TEST1_STR: &str = "hello";
+  const TEST1_BYTES: &[u8] = &[5,182,172,113,208];
+
   #[test]
   fn test_pack() {
     let _ = pretty_env_logger::try_init();
 
     let mut data: Cursor<Vec<u8>> = Cursor::new(Vec::new());
-    Sixbit::pack(&mut data, "hello").expect("Failed to pack 'hello' as sixbit");
-    assert_eq!(data.into_inner(), &[5,182,172,113,208]);
+    Sixbit::pack(&mut data, TEST1_STR).expect("Failed to pack sixbit");
+    assert_eq!(data.into_inner(), TEST1_BYTES);
   }
 
   #[test]
   fn test_unpack() {
     let _ = pretty_env_logger::try_init();
 
-    let mut data = Cursor::new(&[5,182,172,113,208]);
-    let size = Sixbit::size(&mut data).expect("Failed to get size of 'hello' sixbit string");
-    let result = Sixbit::unpack(&mut data, size).expect("Failed to unpack 'hello' sixbit string");
-    assert_eq!(result, "hello");
+    let size = Sixbit::size(&mut Cursor::new(TEST1_BYTES)).expect("Failed to get size of sixbit string");
+    let result = Sixbit::unpack(&TEST1_BYTES[1..], size).expect("Failed to unpack sixbit string");
+    assert_eq!(result, TEST1_STR);
   }
 
   #[bench]
@@ -126,10 +132,21 @@ mod tests {
     b.iter(|| {
       for _ in 0..100 {
         data.seek(SeekFrom::Start(0)).unwrap();
-        black_box(Sixbit::pack(&mut data, "hello").unwrap());
+        black_box(Sixbit::pack(&mut data, TEST1_STR).unwrap());
       }
     });
 
-    assert_eq!(data.into_inner(), &[5,182,172,113,208]);
+    assert_eq!(data.into_inner(), TEST1_BYTES);
+  }
+
+  #[bench]
+  fn bench_unpack(b: &mut Bencher) {
+    b.iter(|| {
+      for _ in 0..100 {
+        let size = Sixbit::size(&mut Cursor::new(TEST1_BYTES)).expect("Failed to get size of sixbit string");
+        let result = Sixbit::unpack(&TEST1_BYTES[1..], size).expect("Failed to unpack sixbit string");
+        black_box(result);
+      }
+    });
   }
 }

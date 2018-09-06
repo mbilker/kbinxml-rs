@@ -127,7 +127,8 @@ impl<'buf> Reader<'buf> {
     let value = match self.compression {
       Compression::Compressed => {
         let size = Sixbit::size(&mut *self.node_buf)?;
-        Sixbit::unpack(&mut *self.node_buf, size)?
+        let data = self.node_buf.get(size.real_len as u32)?;
+        Sixbit::unpack(data, size)?
       },
       Compression::Uncompressed => {
         let length = (self.node_buf.read_u8().context(KbinErrorKind::DataRead(1))? & !ARRAY_MASK) + 1;
@@ -156,7 +157,8 @@ impl<'buf> Reader<'buf> {
     let value = match self.compression {
       Compression::Compressed => {
         let size = Sixbit::size(&mut *self.node_buf)?;
-        Sixbit::unpack(&mut *self.node_buf, size)?
+        let data = self.node_buf.get(size.real_len as u32)?;
+        Sixbit::unpack(data, size)?
       },
       Compression::Uncompressed => {
         let length = (self.node_buf.read_u8().context(KbinErrorKind::DataRead(1))? & !ARRAY_MASK) + 1;
@@ -189,7 +191,7 @@ impl<'buf> Reader<'buf> {
       },
       node_type => self.data_buf.get_aligned(*node_type)?,
     };
-    debug!("Reader::read_node_data(node_type: {:?}, is_array: {}) => value: {:?}", node_type, is_array, value);
+    debug!("Reader::read_node_data(node_type: {:?}, is_array: {}) => value: 0x{:02x?}", node_type, is_array, value);
 
     Ok(value)
   }
@@ -205,7 +207,7 @@ impl<'buf> Reader<'buf> {
         let key = match self.compression {
           Compression::Compressed => {
             let size = Sixbit::size(&mut *self.node_buf)?;
-            let data = self.node_buf.get(size.1 as u32)?;
+            let data = self.node_buf.get(size.real_len as u32)?;
             Key::Compressed { size, data }
           },
           Compression::Uncompressed => {
