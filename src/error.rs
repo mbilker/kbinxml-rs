@@ -113,7 +113,7 @@ pub enum KbinErrorKind {
   #[fail(display = "Invalid input for boolean: {}", _0)]
   InvalidBooleanInput(u8),
 
-  #[fail(display = "Invalid node type to create `Node` object from: {:?}", _0)]
+  #[fail(display = "Invalid node type for operation: {:?}", _0)]
   InvalidNodeType(StandardType),
 
   #[fail(display = "Invalid state")]
