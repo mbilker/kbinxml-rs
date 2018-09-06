@@ -196,7 +196,6 @@ impl KbinXml {
       count);
 
     node_buf.write_u8(node_type.id | array_mask).context(KbinErrorKind::DataWrite(node_type.name))?;
-
     match self.options.compression {
       Compression::Compressed => Sixbit::pack(&mut **node_buf, input.name())?,
       Compression::Uncompressed => {
@@ -252,7 +251,15 @@ impl KbinXml {
 
       let node_type = StandardType::Attribute;
       node_buf.write_u8(node_type.id).context(KbinErrorKind::DataWrite(node_type.name))?;
-      Sixbit::pack(&mut **node_buf, key)?;
+      match self.options.compression {
+        Compression::Compressed => Sixbit::pack(&mut **node_buf, key)?,
+        Compression::Uncompressed => {
+          let data = self.options.encoding.encode_bytes(key)?;
+          let len = (data.len() - 1) as u8;
+          node_buf.write_u8(len | ARRAY_MASK).context(KbinErrorKind::DataWrite("attribute name length"))?;
+          node_buf.write_all(&data).context(KbinErrorKind::DataWrite("node name bytes"))?;
+        },
+      };
     }
 
     for child in input.children() {
