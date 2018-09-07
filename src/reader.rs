@@ -250,3 +250,17 @@ impl<'buf> Reader<'buf> {
     self.data_buf.buf_read()
   }
 }
+
+impl<'a> Iterator for Reader<'a> {
+  type Item = NodeDefinition<'a>;
+
+  fn next(&mut self) -> Option<NodeDefinition<'a>> {
+    match self.read_node_definition() {
+      Ok(v) => Some(v),
+      Err(e) => {
+        error!("Error reading node definition in `next()`: {}", e);
+        None
+      },
+    }
+  }
+}
