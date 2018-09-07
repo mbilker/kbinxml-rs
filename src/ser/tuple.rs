@@ -58,7 +58,7 @@ impl<'a> SerializeTuple for Tuple<'a> {
     // permitted by kbin
     if let Some(known) = self.node_type {
       if known != node_type {
-        return Err(KbinErrorKind::TypeMismatch(*known, *node_type).into());
+        return Err(KbinErrorKind::TypeMismatch(known, node_type).into());
       }
     } else {
       self.node_type = Some(node_type);

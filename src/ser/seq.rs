@@ -51,7 +51,7 @@ impl<'a> SerializeSeq for Seq<'a> {
     // permitted by kbin
     if let Some(node_type) = self.node_type {
       if node_type != hint.node_type {
-        return Err(KbinErrorKind::TypeMismatch(*node_type, *hint.node_type).into());
+        return Err(KbinErrorKind::TypeMismatch(node_type, hint.node_type).into());
       }
     } else {
       self.node_type = Some(hint.node_type);

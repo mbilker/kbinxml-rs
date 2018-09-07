@@ -79,7 +79,7 @@ impl<'a> SerializeMap for Map<'a> {
     match hint.node_type {
       StandardType::Attribute |
       StandardType::String => Ok(()),
-      node_type => Err(KbinErrorKind::TypeMismatch(*StandardType::String, *node_type).into()),
+      node_type => Err(KbinErrorKind::TypeMismatch(StandardType::String, node_type).into()),
     }
   }
 

@@ -93,6 +93,16 @@ macro_rules! construct_types {
       }
     }
 
+    impl fmt::Display for StandardType {
+      fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+          $(
+            StandardType::$konst => f.write_str(stringify!($konst)),
+          )+
+        }
+      }
+    }
+
     impl Deref for StandardType {
       type Target = KbinType;
 

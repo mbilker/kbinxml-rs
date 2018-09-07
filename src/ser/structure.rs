@@ -71,7 +71,7 @@ impl<'a> SerializeStruct for Struct<'a> {
 
           // Attribute nodes are always strings
           if node_type != StandardType::String {
-            return Err(KbinErrorKind::TypeMismatch(*StandardType::String, *node_type).into());
+            return Err(KbinErrorKind::TypeMismatch(StandardType::String, node_type).into());
           }
 
           (StandardType::Attribute, key)
