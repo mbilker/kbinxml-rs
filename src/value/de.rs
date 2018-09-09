@@ -1,7 +1,7 @@
 use std::fmt;
 use std::marker::PhantomData;
 
-use serde::de::{self, Deserialize, EnumAccess, Error, IntoDeserializer, SeqAccess, VariantAccess, Visitor};
+use serde::de::{Deserialize, Deserializer, EnumAccess, Error, IntoDeserializer, SeqAccess, VariantAccess, Visitor};
 use serde::de::value::SeqDeserializer;
 
 use node::Marshal;
@@ -11,7 +11,7 @@ use value::Value;
 impl<'de> Deserialize<'de> for Value {
   #[inline]
   fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where D: de::Deserializer<'de>
+    where D: Deserializer<'de>
   {
     trace!("<Value as Deserialize>::deserialize()");
 
@@ -38,7 +38,7 @@ impl<'de> Deserialize<'de> for Value {
 
       #[inline]
       fn visit_string<E>(self, value: String) -> Result<Self::Value, E>
-        where E: de::Error
+        where E: Error
       {
         trace!("ValueVisitor::visit_string(value: {:?})", value);
 
@@ -51,7 +51,7 @@ impl<'de> Deserialize<'de> for Value {
 
       #[inline]
       fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
-        where E: de::Error
+        where E: Error
       {
         trace!("ValueVisitor::visit_str(value: {:?})", value);
 
@@ -64,7 +64,7 @@ impl<'de> Deserialize<'de> for Value {
 
       #[inline]
       fn visit_bytes<E>(self, value: &[u8]) -> Result<Self::Value, E>
-        where E: de::Error
+        where E: Error
       {
         trace!("ValueVisitor::visit_bytes(value: 0x{:02x?})", value);
         self.visit_byte_buf(value.to_vec())
@@ -72,7 +72,7 @@ impl<'de> Deserialize<'de> for Value {
 
       #[inline]
       fn visit_borrowed_bytes<E>(self, value: &'de [u8]) -> Result<Self::Value, E>
-        where E: de::Error
+        where E: Error
       {
         trace!("ValueVisitor::visit_borrowed_bytes(value: 0x{:02x?})", value);
         self.visit_byte_buf(value.to_vec())
@@ -86,7 +86,7 @@ impl<'de> Deserialize<'de> for Value {
 
       #[inline]
       fn visit_some<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
-        where D: de::Deserializer<'de>
+        where D: Deserializer<'de>
       {
         trace!("ValueVisitor::visit_some()");
         Deserialize::deserialize(deserializer)
@@ -124,7 +124,7 @@ impl<'de> Deserialize<'de> for Value {
 
       #[inline]
       fn visit_newtype_struct<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
-        where D: de::Deserializer<'de>
+        where D: Deserializer<'de>
       {
         trace!("ValueVisitor::visit_newtype_struct()");
 
@@ -171,8 +171,8 @@ pub struct ValueDeserializer<E> {
   marker: PhantomData<E>,
 }
 
-impl<'de, E> de::Deserializer<'de> for ValueDeserializer<E>
-  where E: de::Error
+impl<'de, E> Deserializer<'de> for ValueDeserializer<E>
+  where E: Error
 {
   type Error = E;
 
@@ -236,7 +236,7 @@ impl<'de, E> de::Deserializer<'de> for ValueDeserializer<E>
 }
 
 impl<'de, E> IntoDeserializer<'de, E> for Value
-  where E: de::Error
+  where E: Error
 {
   type Deserializer = ValueDeserializer<E>;
 
