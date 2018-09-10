@@ -88,7 +88,6 @@ impl Sixbit {
       result.push(CHAR_MAP[current as usize] as char);
     }
 
-    debug!("result: {}", result);
     Ok(result)
   }
 }
