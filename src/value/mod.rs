@@ -13,7 +13,7 @@ use node::Node;
 use node::de::NodeSeed;
 use node_types::{self, StandardType};
 
-mod de;
+pub(crate) mod de;
 mod ser;
 
 macro_rules! tuple {
@@ -187,7 +187,7 @@ macro_rules! tuple {
         let mut values = Vec::new();
 
         for part in iter {
-          debug!("part: {:?}", part);
+          trace!("part: {:?}", part);
           values.push(Value::from_string(node_type, part, false, 1)?);
         }
 
