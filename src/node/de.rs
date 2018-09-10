@@ -1,9 +1,8 @@
-use std::fmt::{self, Write};
+use std::fmt;
 use std::marker::PhantomData;
 
-use indexmap::IndexMap;
 use serde::de::{self, Deserialize, DeserializeSeed, Error, EnumAccess, IntoDeserializer, MapAccess, SeqAccess, VariantAccess, Visitor};
-use serde::de::value::MapDeserializer;
+use serde::de::value::{MapDeserializer, SeqDeserializer};
 
 use node::Node;
 use node_types::StandardType;
@@ -27,12 +26,9 @@ impl<'de> NodeVisitor {
 
         Ok(value)
       },
-      // TODO: roll up `NodeStart` and everything else into a single map handler
+      // Rolling up the `NodeStart` handling and other value types is not going
+      // to happen as `NodeStart` nodes do not have a value
       node_type => {
-        //let value = try!(map.next_value());
-        //debug!("NodeVisitor::map_to_node(node_type: {:?}) => value: {:?}", node_type, value);
-
-        //let node = Node::with_value(key.to_owned(), value);
         let node = try!(map.next_value_seed(NodeWithValueSeed(key.to_owned())));
         debug!("NodeVisitor::map_to_node(node_type: {:?}) => node: {:?}", node_type, node);
 
@@ -55,9 +51,7 @@ impl<'de> Visitor<'de> for NodeVisitor {
   {
     trace!("NodeVisitor::visit_map()");
 
-    let mut attributes = None;
-    let mut nodes = IndexMap::new();
-    let mut value = None;
+    let mut node = Node::new(self.key.unwrap_or_else(|| "".to_owned()));
 
     while let Some(NodeStart { key, node_type }) = try!(map.next_key()) {
       debug!("NodeVisitor::visit_map() => node_type: {:?}, key: {:?}", node_type, key);
@@ -68,7 +62,14 @@ impl<'de> Visitor<'de> for NodeVisitor {
         let node_value = try!(map.next_value());
         debug!("NodeVisitor::visit_map() => node value: {:?}", node_value);
 
-        value = Some(node_value);
+        node.set_value(Some(node_value));
+      } else if key == "__node_key" {
+        trace!("NodeVisitor::visit_map() => got __node_key, getting node key");
+
+        let node_key: String = try!(map.next_value());
+        debug!("NodeVisitor::visit_map() => node key: {:?}", node_key);
+
+        node.set_key(node_key);
       } else {
         match node_type {
           StandardType::Attribute => {
@@ -76,47 +77,23 @@ impl<'de> Visitor<'de> for NodeVisitor {
             debug!("NodeVisitor::visit_map() => value: {:?}", value);
 
             if let Value::Attribute(s) = try!(value) {
-              let key = String::from(&key["attr_".len()..]);
-              let attributes = attributes.get_or_insert_with(IndexMap::new);
-              attributes.insert(key, s);
+              //let key = String::from(&key["attr_".len()..]);
+              node.set_attr(key, s);
             } else {
               return Err(A::Error::custom("`Attribute` node must have `Value::Attribute` value"));
             }
           },
           _ => {
-            let node = NodeVisitor::map_to_node(node_type, &key, &mut map)?;
+            let new_node = NodeVisitor::map_to_node(node_type, &key, &mut map)?;
             debug!("NodeVisitor::visit_map() => node: {:?}", node);
 
-            if !nodes.contains_key(&key) {
-              nodes.insert(key, node);
-            } else {
-              let mut new_key = format!("{}1", key);
-              let mut i = 2;
-              while nodes.contains_key(&new_key) {
-                new_key.truncate(key.len());
-                write!(new_key, "{}", i);
-                i += 1;
-              }
-              debug!("Node::visit_map() => next open key: {:?}", new_key);
-              nodes.insert(new_key, node);
-            }
+            node.append_child(new_node);
           },
         };
       }
     }
 
-    let children = match nodes.len() {
-      0 => None,
-      _ => Some(nodes),
-    };
-
-    //debug!("NodeVisitor::visit_map() => nodes: {:#?}", nodes);
-    Ok(Node {
-      key: self.key.unwrap_or_else(|| "".to_owned()),
-      attributes,
-      children,
-      value,
-    })
+    Ok(node)
   }
 
   #[inline]
@@ -170,6 +147,8 @@ impl<'de> DeserializeSeed<'de> for NodeValueSeed {
   fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
     where D: de::Deserializer<'de>
   {
+    trace!("NodeValueSeed(key: {:?})::deserialize()", self.0);
+
     deserializer.deserialize_map(NodeVisitor { key: Some(self.0) })
   }
 }
@@ -184,7 +163,7 @@ impl<'de> DeserializeSeed<'de> for NodeWithValueSeed {
   fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
     where D: de::Deserializer<'de>
   {
-    trace!("NodeValue::deserialize()");
+    trace!("NodeWithValueSeed(key: {:?})::deserialize()", self.0);
 
     deserializer.deserialize_tuple_struct("__value", 0, NodeVisitor { key: Some(self.0) })
   }
@@ -222,11 +201,11 @@ impl<'de, E: Error> SeqAccess<'de> for NodeDeserializer<E> {
   fn next_element_seed<T>(&mut self, seed: T) -> Result<Option<T::Value>, Self::Error>
     where T: DeserializeSeed<'de>
   {
-    macro_rules! map_deserializer {
-      ($value:expr) => {
+    macro_rules! make_deserializer {
+      ($value:expr, $deserializer:ident) => {
         match $value.take() {
           Some(value) => {
-            let deserializer = MapDeserializer::new(value.into_iter());
+            let deserializer = $deserializer::new(value.into_iter());
             seed.deserialize(deserializer).map(Some)
           },
           None => seed.deserialize(().into_deserializer()).map(Some),
@@ -237,8 +216,8 @@ impl<'de, E: Error> SeqAccess<'de> for NodeDeserializer<E> {
     trace!("--> <NodeDeserializer as SeqAccess>::next_element_seed(index: {})", self.index);
     let value = match self.index {
       0 => seed.deserialize(self.node.key.as_str().into_deserializer()).map(Some),
-      1 => map_deserializer!(self.node.attributes),
-      2 => map_deserializer!(self.node.children),
+      1 => make_deserializer!(self.node.attributes, MapDeserializer),
+      2 => make_deserializer!(self.node.children, SeqDeserializer),
       3 => match self.node.value.take() {
         Some(value) => seed.deserialize(value.into_deserializer()).map(Some),
         None => seed.deserialize(().into_deserializer()).map(Some),
@@ -286,7 +265,7 @@ impl<'de> Deserialize<'de> for NodeStart {
       type Value = NodeStart;
 
       fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-        formatter.write_str("valid node type (for NodeSeed)")
+        formatter.write_str("enum input of a node (for NodeStart)")
       }
 
       #[inline]

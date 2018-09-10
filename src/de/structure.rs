@@ -1,23 +1,29 @@
-use std::marker::PhantomData;
+use serde::de::{DeserializeSeed, IntoDeserializer, MapAccess};
 
-use serde::de::{Deserialize, DeserializeSeed, MapAccess};
-
-use de::{Deserializer, ReadMode, Result};
-use error::{Error, KbinErrorKind};
+use de::Custom;
+use de::collection::NodeCollectionDeserializer;
+use de::definition::NodeDefinitionDeserializer;
+use error::Error;
+use node::NodeCollection;
 use node_types::StandardType;
 
 pub struct Struct<'a, 'de: 'a> {
-  de: &'a mut Deserializer<'de>,
-  values_to_consume: usize,
+  collection: &'a mut NodeCollection<'de>,
+  key: Option<String>,
 }
 
 impl<'de, 'a> Struct<'a, 'de> {
-  pub fn new(de: &'a mut Deserializer<'de>) -> Self {
-    trace!("--> Struct::new()");
+  pub fn new(collection: &'a mut NodeCollection<'de>) -> Self {
+    let key = collection.base().key().ok().and_then(|v| v);
+
+    trace!("--> Struct::new() => attributes len: {}, children len: {}, base: {}",
+      collection.attributes().len(),
+      collection.children().len(),
+      collection.base());
 
     Self {
-      de,
-      values_to_consume: 0,
+      collection,
+      key,
     }
   }
 }
@@ -25,93 +31,57 @@ impl<'de, 'a> Struct<'a, 'de> {
 impl<'de, 'a> MapAccess<'de> for Struct<'a, 'de> {
   type Error = Error;
 
-  fn next_key_seed<K>(&mut self, seed: K) -> Result<Option<K::Value>>
+  fn next_key_seed<K>(&mut self, seed: K) -> Result<Option<K::Value>, Self::Error>
     where K: DeserializeSeed<'de>
   {
-    trace!("--> <Struct as MapAccess>::next_key_seed()");
+    debug!("--> <Struct as MapAccess>::next_key_seed()");
 
-    let (node_type, is_array) = self.de.reader.read_node_type()?;
-    debug!("Struct::next_key_seed() => node_type: {:?}", node_type);
+    // First, if the key field is still present, emit the `__node_key` first
+    if self.key.is_some() {
+      let de = "__node_key".into_deserializer();
+      return seed.deserialize(Custom::new(de, StandardType::String)).map(Some);
+    }
 
-    match node_type {
-      StandardType::NodeEnd |
-      StandardType::FileEnd => {
+    // Then if there are attributes left, deserialize them first
+    if let Some(attribute) = self.collection.attributes().front() {
+      let de = NodeDefinitionDeserializer::new(*attribute);
+      return seed.deserialize(de).map(Some);
+    }
+
+    // Else, deserialize the child nodes
+    let mut node = match self.collection.children_mut().front_mut() {
+      Some(v) => v,
+      None => {
         debug!("<-- <Struct as MapAccess>::next_key_seed() => end of map");
         return Ok(None);
       },
-      _ => {},
     };
 
-    let old_read_mode = self.de.set_read_mode(ReadMode::Key);
-    let key = seed.deserialize(&mut *self.de).map(Some)?;
-    self.de.read_mode = old_read_mode;
-
-    match node_type {
-      StandardType::NodeStart => {
-        debug!("Struct::next_key_seed() => got a node start!");
-      },
-      StandardType::Attribute => {
-        debug!("Struct::next_key_seed() => got an attribute!");
-      },
-      _ if self.de.ignore_attributes => {
-        // TODO(mbilker): Fix processing of `Attribute` nodes for non-NodeStart
-        // elements
-        loop {
-          let (node_type, _is_array) = self.de.reader.peek_node_type()?;
-          if node_type == StandardType::Attribute {
-            let _ = self.de.reader.read_node_type()?;
-            warn!("Struct::next_key_seed() => ignoring Attribute node");
-
-            let old_read_mode = self.de.set_read_mode(ReadMode::Key);
-            let key = String::deserialize(&mut *self.de).map(Some)?;
-            self.de.read_mode = old_read_mode;
-            warn!("Struct::next_key_seed() => ignored Attribute key: {:?}", key);
-
-            self.values_to_consume += 1;
-          } else {
-            break;
-          }
-        }
-
-        // Consume the end node and do a sanity check
-        let (node_type, _is_array) = self.de.reader.read_node_type()?;
-        if node_type != StandardType::NodeEnd {
-          return Err(KbinErrorKind::TypeMismatch(*StandardType::NodeEnd, *node_type).into());
-        }
-      },
-      _ => {},
-    }
-
-    // Store the current node type on the stack for stateful handling based on
-    // the current node type
-    self.de.node_stack.push((node_type, is_array));
-
-    Ok(key)
+    let de = NodeCollectionDeserializer::new(&mut node);
+    seed.deserialize(de).map(Some)
   }
 
-  fn next_value_seed<V>(&mut self, seed: V) -> Result<V::Value>
+  fn next_value_seed<V>(&mut self, seed: V) -> Result<V::Value, Self::Error>
     where V: DeserializeSeed<'de>
   {
     debug!("--> <Struct as MapAccess>::next_value_seed()");
-    let value = seed.deserialize(&mut *self.de)?;
 
-    if self.de.ignore_attributes {
-      // Cannot use `next_value_seed` recursively here as it would restart this for loop
-      for _ in 0..self.values_to_consume {
-        warn!("Struct::next_value_seed() => ignoring Attribute node value");
-        let seed = PhantomData;
-        let value: String = seed.deserialize(&mut *self.de)?;
-        warn!("Struct::next_value_seed() => ignored Attribute value: {:?}", value);
-
-        let popped = self.de.node_stack.pop();
-        debug!("<Struct as MapAccess>::next_value_seed() => popped: {:?}, node_stack: {:?}", popped, self.de.node_stack);
-      }
-      self.values_to_consume = 0;
+    // First, if the key field is still present, emit the `__node_key` value
+    if let Some(key) = self.key.take() {
+      let de = key.into_deserializer();
+      return seed.deserialize(de);
     }
 
-    let popped = self.de.node_stack.pop();
-    debug!("<Struct as MapAccess>::next_value_seed() => popped: {:?}, node_stack: {:?}", popped, self.de.node_stack);
+    // Then if there are attributes left, deserialize them first
+    if let Some(attribute) = self.collection.attributes_mut().pop_front() {
+      let de = NodeDefinitionDeserializer::new(attribute);
+      return seed.deserialize(de);
+    }
 
-    Ok(value)
+    // Else, deserialize the child nodes. Delegate popping nodes off the
+    // children queue by the deserialize methods else handling `Struct`
+    // sequences will break.
+    let de = NodeCollectionDeserializer::new(&mut self.collection);
+    seed.deserialize(de)
   }
 }

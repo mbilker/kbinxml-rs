@@ -32,6 +32,16 @@ impl<'de> Deserialize<'de> for ExtraNodes {
         while let Some(key) = try!(map.next_key::<String>()) {
           debug!("ExtraNodesVisitor::visit_map() => key: {:?}", key);
 
+          if key == "__node_key" {
+            debug!("ExtraNodesVisitor::visit_map() => got __node_key, getting node key");
+
+            let node_key: String = try!(map.next_value());
+            debug!("ExtraNodesVisitor::visit_map() => node key: {:?}", node_key);
+
+            extra.set_parent_key(node_key);
+            continue;
+          }
+
           let marshal: Marshal = try!(map.next_value());
           debug!("ExtraNodesVisitor::visit_map() => marshal: {:?}", marshal);
 

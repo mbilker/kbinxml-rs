@@ -1,4 +1,5 @@
 use std::fmt;
+use std::mem;
 
 use indexmap::IndexMap;
 
@@ -14,13 +15,21 @@ mod ser;
 pub use self::collection::NodeCollection;
 pub use self::definition::{Key, NodeData, NodeDefinition};
 pub use self::extra::ExtraNodes;
-pub use self::marshal::Marshal;
+pub use self::marshal::{Marshal, MarshalDeserializer};
+
+/*
+#[derive(Clone, Debug, PartialEq)]
+pub enum Child {
+  Single(Node),
+  Multiple(Vec<Node>),
+}
+*/
 
 #[derive(Clone, Default, PartialEq)]
 pub struct Node {
   key: String,
   attributes: Option<IndexMap<String, String>>,
-  children: Option<IndexMap<String, Node>>,
+  children: Option<Vec<Node>>,
   value: Option<Value>,
 }
 
@@ -73,7 +82,7 @@ impl Node {
   }
 
   #[inline]
-  pub fn children(&self) -> Option<&IndexMap<String, Node>> {
+  pub fn children(&self) -> Option<&Vec<Node>> {
     self.children.as_ref()
   }
 
@@ -86,13 +95,50 @@ impl Node {
     (self.key, self.value)
   }
 
+  pub fn set_key(&mut self, key: String) {
+    self.key = key;
+  }
+
   pub fn set_attr(&mut self, key: String, value: String) -> Option<String> {
     let attributes = self.attributes.get_or_insert_with(Default::default);
     attributes.insert(key, value)
   }
 
-  pub fn insert(&mut self, key: String, value: Node) -> Option<Node> {
+  pub fn append_child(&mut self, value: Node) {
     let children = self.children.get_or_insert_with(Default::default);
-    children.insert(key, value)
+    children.push(value);
+
+    /*
+    match children.entry(key) {
+      Entry::Occupied(mut entry) => {
+        match entry.get_mut() {
+          child @ Child::Single(_) => {
+            let old = mem::replace(child, Child::Multiple(Vec::with_capacity(2)));
+            let node = match old {
+              Child::Single(node) => node,
+              Child::Multiple(_) => panic!("`old` was `Child::Multiple` after checking"),
+            };
+            match child {
+              Child::Multiple(ref mut nodes) => {
+                nodes.push(node);
+                nodes.push(value);
+              },
+              _ => panic!("Invalid result of node swap"),
+            };
+          },
+          Child::Multiple(ref mut nodes) => {
+            nodes.push(value);
+          },
+        };
+      },
+      Entry::Vacant(entry) => {
+        entry.insert(Child::Single(value));
+      },
+    };
+    */
+  }
+
+  pub fn set_value(&mut self, value: Option<Value>) -> Option<Value> {
+    mem::replace(&mut self.value, value)
   }
 }

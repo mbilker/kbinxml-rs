@@ -24,7 +24,6 @@ mod byte_buffer;
 mod compression;
 mod encoding_type;
 mod error;
-mod ip4;
 mod node;
 mod node_types;
 mod options;
@@ -50,7 +49,6 @@ pub use error::{KbinError, KbinErrorKind, Result};
 pub use node::{ExtraNodes, Node};
 pub use options::Options;
 pub use de::from_bytes;
-pub use ip4::Ip4Addr;
 pub use ser::to_bytes;
 pub use value::Value;
 

@@ -1,3 +1,5 @@
+use std::mem;
+
 use indexmap::IndexMap;
 
 use node::Node;
@@ -9,6 +11,7 @@ mod ser;
 /// parent object
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct ExtraNodes {
+  parent_key: String,
   attributes: IndexMap<String, String>,
   nodes: IndexMap<String, Node>,
 }
@@ -16,9 +19,15 @@ pub struct ExtraNodes {
 impl ExtraNodes {
   pub fn new() -> Self {
     Self {
+      parent_key: String::with_capacity(0),
       attributes: IndexMap::new(),
       nodes: IndexMap::new(),
     }
+  }
+
+  #[inline]
+  pub fn parent_key(&self) -> &str {
+    &self.parent_key
   }
 
   #[inline]
@@ -29,6 +38,10 @@ impl ExtraNodes {
   #[inline]
   pub fn nodes(&self) -> &IndexMap<String, Node> {
     &self.nodes
+  }
+
+  pub fn set_parent_key(&mut self, key: String) -> String {
+    mem::replace(&mut self.parent_key, key)
   }
 
   pub fn set_attr(&mut self, key: String, value: String) -> Option<String> {

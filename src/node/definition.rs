@@ -1,3 +1,5 @@
+use std::fmt;
+
 use byte_buffer::strip_trailing_null_bytes;
 use encoding_type::EncodingType;
 use error::{KbinError, KbinErrorKind};
@@ -6,7 +8,7 @@ use node_types::StandardType;
 use sixbit::{Sixbit, SixbitSize};
 use value::Value;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy)]
 pub enum Key<'buf> {
   Compressed {
     size: SixbitSize,
@@ -104,6 +106,13 @@ impl<'buf> NodeDefinition<'buf> {
     }
   }
 
+  pub fn value_bytes(&self) -> Option<&'buf [u8]> {
+    match self.data {
+      NodeData::Some { ref value_data, .. } => Some(value_data),
+      NodeData::None => None,
+    }
+  }
+
   pub fn as_node(&self) -> Result<Node, KbinError> {
     trace!("parsing definition: {:?}", self);
     match (self.node_type, self.data) {
@@ -124,5 +133,56 @@ impl<'buf> NodeDefinition<'buf> {
         Err(KbinErrorKind::InvalidNodeType(node_type).into())
       },
     }
+  }
+}
+
+impl<'buf> fmt::Debug for Key<'buf> {
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    if let Ok(key) = self.to_string() {
+      write!(f, "\"{}\"", key)
+    } else {
+      match self {
+        Key::Compressed { ref size, ref data } => {
+          f.debug_struct("Compressed")
+            .field("size", &size)
+            .field("data", &data)
+            .finish()
+        },
+        Key::Uncompressed { encoding, ref data } => {
+          f.debug_struct("Uncompressed")
+            .field("encoding", &encoding)
+            .field("data", &data)
+            .finish()
+        },
+      }
+    }
+  }
+}
+
+impl<'buf> fmt::Display for NodeDefinition<'buf> {
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    let mut d = f.debug_struct("NodeDefinition");
+    d.field("node_type", &self.node_type);
+
+    match self.node_type {
+      StandardType::Attribute |
+      StandardType::String => {
+        d.field("encoding", &self.encoding);
+      },
+      _ => {},
+    };
+
+    match self.data {
+      NodeData::Some { ref key, ref value_data } => {
+        match key.to_string() {
+          Ok(key) => d.field("key", &key),
+          Err(e) => d.field("key", &e),
+        };
+        d.field("value_data", &value_data);
+      },
+      NodeData::None => {},
+    };
+
+    d.finish()
   }
 }

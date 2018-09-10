@@ -15,7 +15,7 @@ use std::net::Ipv4Addr;
 use std::str;
 
 use failure::Fail;
-use kbinxml::{ExtraNodes, Ip4Addr, KbinXml, Node, Options, Printer, from_bytes, to_bytes};
+use kbinxml::{ExtraNodes, KbinXml, Node, Options, Printer, from_bytes, to_bytes};
 use minidom::Element;
 use quick_xml::Writer;
 
@@ -27,7 +27,7 @@ pub struct Testing2 {
   vu: Vec<u8>,
   opt: Option<u8>,
   opt2: Option<u8>,
-  ip: Ip4Addr,
+  ip: Ipv4Addr,
 
   #[serde(flatten)]
   extra: ExtraNodes,
@@ -140,7 +140,9 @@ fn main() -> std::io::Result<()> {
 
       let value = from_bytes::<Node>(&contents);
       match &value {
-        Ok(obj2) => eprintln!("obj2: {:#?}", obj2),
+        Ok(obj2) => {
+          eprintln!("obj2: {:#?}", obj2);
+        },
         Err(e) => eprintln!("Unable to parse generated kbin back to `Value`: {:#?}", e),
       };
     } else {
@@ -169,7 +171,7 @@ fn main() -> std::io::Result<()> {
         vu: vec![33, 255, 254],
         opt: None,
         opt2: Some(111),
-        ip: Ip4Addr::new(Ipv4Addr::new(127, 0, 0, 1)),
+        ip: Ipv4Addr::new(127, 0, 0, 1),
         extra: ExtraNodes::new(),
       },
     };

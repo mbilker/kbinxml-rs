@@ -73,9 +73,18 @@ impl<'de, D> Deserializer<'de> for Custom<D>
     visitor.visit_enum(self)
   }
 
+  /// Passthrough identifier deserialization so regular deserialization still works
+  #[inline]
+  fn deserialize_identifier<V>(self, visitor: V) -> Result<V::Value, D::Error>
+    where V: Visitor<'de>
+  {
+    trace!("<Custom as Deserializer>::deserialize_identifier(node_type: {:?})", self.node_type);
+    self.de.deserialize_identifier(visitor)
+  }
+
   forward_to_deserialize_any! {
     bool i8 i16 i32 i64 i128 u8 u16 u32 u64 u128 f32 f64 char str
     string bytes byte_buf option unit unit_struct newtype_struct seq
-    tuple tuple_struct map struct enum identifier ignored_any
+    tuple tuple_struct map struct enum ignored_any
   }
 }

@@ -1,8 +1,9 @@
 use serde::de::{DeserializeSeed, IntoDeserializer, MapAccess};
 
-use de::{Custom, Deserializer, ReadMode, Result};
+use de::{Custom, Result};
+use de::definition::NodeDefinitionDeserializer;
 use error::{Error, KbinErrorKind};
-use node_types::StandardType;
+use node::NodeCollection;
 
 #[derive(Debug)]
 enum ReadState {
@@ -11,18 +12,16 @@ enum ReadState {
 }
 
 pub struct NodeContents<'a, 'de: 'a> {
-  de: &'a mut Deserializer<'de>,
-  node_type: StandardType,
+  collection: &'a mut NodeCollection<'de>,
   state: ReadState,
 }
 
 impl<'de, 'a> NodeContents<'a, 'de> {
-  pub fn new(de: &'a mut Deserializer<'de>, node_type: StandardType) -> Self {
-    trace!("--> NodeContents::new()");
+  pub fn new(collection: &'a mut NodeCollection<'de>) -> Self {
+    trace!("--> NodeContents::new(node_type: {:?})", collection.base().node_type);
 
     Self {
-      de,
-      node_type,
+      collection,
       state: ReadState::Value,
     }
   }
@@ -38,31 +37,22 @@ impl<'de, 'a> MapAccess<'de> for NodeContents<'a, 'de> {
 
     match self.state {
       ReadState::Value => {
+        let base = self.collection.base();
         let de = "__value".into_deserializer();
-        seed.deserialize(Custom::new(de, self.node_type)).map(Some)
+        seed.deserialize(Custom::new(de, base.node_type)).map(Some)
       },
       ReadState::Attributes => {
-        let (node_type, _is_array) = self.de.reader.read_node_type()?;
-        debug!("NodeContents::next_key_seed() => node_type: {:?}", node_type);
+        if let Some(attribute) = self.collection.attributes().front() {
+          let key = attribute.key()?.ok_or(KbinErrorKind::InvalidState)?;
+          debug!("<NodeContents as MapAccess>::next_key_seed(state: {:?}) => attribute: {:?}, key: {:?}", self.state, attribute, key);
 
-        match node_type {
-          StandardType::Attribute => {},
-          StandardType::NodeEnd |
-          StandardType::FileEnd => {
-            debug!("<-- <NodeContents as MapAccess>::next_key_seed() => end of map, node stack: {:?}", self.de.node_stack);
+          let de = NodeDefinitionDeserializer::new(*attribute);
+          seed.deserialize(de).map(Some)
+        } else {
+          debug!("<-- <NodeContents as MapAccess>::next_key_seed(state: {:?}) => end of map", self.state);
 
-            return Ok(None);
-          },
-          _ => return Err(KbinErrorKind::InvalidState.into()),
-        };
-
-        let old_read_mode = self.de.set_read_mode(ReadMode::Key);
-        let key = seed.deserialize(&mut *self.de).map(Some)?;
-        self.de.read_mode = old_read_mode;
-
-        self.node_type = node_type;
-
-        Ok(key)
+          Ok(None)
+        }
       },
     }
   }
@@ -74,13 +64,24 @@ impl<'de, 'a> MapAccess<'de> for NodeContents<'a, 'de> {
 
     match self.state {
       ReadState::Value => {
-        let value = seed.deserialize(&mut *self.de)?;
+        let base = self.collection.base();
+        let de = NodeDefinitionDeserializer::new(base);
+        let value = seed.deserialize(de)?;
         self.state = ReadState::Attributes;
 
         Ok(value)
       },
       ReadState::Attributes => {
-        seed.deserialize(Custom::new(&mut *self.de, self.node_type))
+        if let Some(attribute) = self.collection.attributes_mut().pop_front() {
+          let node_type = attribute.node_type;
+          let value = attribute.value()?;
+          debug!("<NodeContents as MapAccess>::next_value_seed() => attribute: {:?}, value: {:?}", attribute, value);
+
+          let de = value.into_deserializer();
+          seed.deserialize(Custom::new(de, node_type))
+        } else {
+          Err(KbinErrorKind::InvalidState.into())
+        }
       },
     }
   }

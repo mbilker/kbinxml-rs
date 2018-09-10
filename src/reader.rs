@@ -1,4 +1,4 @@
-use std::io::{Seek, SeekFrom};
+//use std::io::{Seek, SeekFrom};
 
 use byteorder::{BigEndian, ReadBytesExt};
 use failure::ResultExt;
@@ -21,9 +21,6 @@ pub struct Reader<'buf> {
   pub(crate) data_buf: ByteBufferRead<'buf>,
 
   data_buf_start: u64,
-
-  last_node_type: Option<(StandardType, bool)>,
-  last_node_identifier: Option<String>,
 }
 
 impl<'buf> Reader<'buf> {
@@ -68,9 +65,6 @@ impl<'buf> Reader<'buf> {
       data_buf,
 
       data_buf_start: data_buf_start as u64,
-
-      last_node_type: None,
-      last_node_identifier: None,
     })
   }
 
@@ -93,16 +87,6 @@ impl<'buf> Reader<'buf> {
     self.encoding
   }
 
-  #[inline]
-  pub fn last_node_type(&self) -> Option<(StandardType, bool)> {
-    self.last_node_type
-  }
-
-  #[inline]
-  pub fn last_identifier(&self) -> Option<&str> {
-    self.last_node_identifier.as_ref().map(String::as_str)
-  }
-
   pub fn check_if_node_buffer_end(&self) -> Result<()> {
     if self.node_buf.position() >= self.data_buf_start {
       Err(KbinErrorKind::EndOfNodeBuffer.into())
@@ -111,6 +95,7 @@ impl<'buf> Reader<'buf> {
     }
   }
 
+  /*
   pub fn peek_node_type(&self) -> Result<(StandardType, bool)> {
     self.check_if_node_buffer_end()?;
 
@@ -142,17 +127,18 @@ impl<'buf> Reader<'buf> {
 
     Ok(value)
   }
+  */
 
   pub fn read_node_type(&mut self) -> Result<(StandardType, bool)> {
     self.check_if_node_buffer_end()?;
 
     let raw_node_type = self.node_buf.read_u8().context(KbinErrorKind::NodeTypeRead)?;
     let value = Self::parse_node_type(raw_node_type)?;
-    self.last_node_type = Some(value);
 
     Ok(value)
   }
 
+  /*
   pub fn read_node_identifier(&mut self) -> Result<String> {
     let value = match self.compression {
       Compression::Compressed => {
@@ -168,10 +154,9 @@ impl<'buf> Reader<'buf> {
     };
     debug!("Reader::read_node_identifier() => value: {:?}", value);
 
-    self.last_node_identifier = Some(value.clone());
-
     Ok(value)
   }
+  */
 
   pub fn read_node_data(&mut self, node_type: (StandardType, bool)) -> Result<&'buf [u8]> {
     let (node_type, is_array) = node_type;
@@ -181,6 +166,10 @@ impl<'buf> Reader<'buf> {
       StandardType::Attribute |
       StandardType::String => self.data_buf.buf_read()?,
       StandardType::Binary => self.read_bytes()?,
+
+      StandardType::NodeStart |
+      StandardType::NodeEnd |
+      StandardType::FileEnd => &[],
 
       _ if is_array => {
         let arr_size = self.read_u32().context(KbinErrorKind::ArrayLengthRead)?;
@@ -224,6 +213,7 @@ impl<'buf> Reader<'buf> {
     }
   }
 
+  /*
   pub fn read_string(&mut self) -> Result<String> {
     let value = self.data_buf.read_str(self.encoding)?;
     debug!("Reader::read_string() => value: {:?}", value);
@@ -237,6 +227,7 @@ impl<'buf> Reader<'buf> {
 
     Ok(value)
   }
+  */
 
   pub fn read_u32(&mut self) -> Result<u32> {
     let value = self.data_buf.read_u32::<BigEndian>().context(KbinErrorKind::DataRead(4))?;
