@@ -1,5 +1,3 @@
-//use std::io::{Seek, SeekFrom};
-
 use byteorder::{BigEndian, ReadBytesExt};
 use failure::ResultExt;
 
@@ -95,40 +93,6 @@ impl<'buf> Reader<'buf> {
     }
   }
 
-  /*
-  pub fn peek_node_type(&self) -> Result<(StandardType, bool)> {
-    self.check_if_node_buffer_end()?;
-
-    let pos = self.node_buf.position();
-    let raw_node_type = self.node_buf.get_ref()[pos as usize];
-    Self::parse_node_type(raw_node_type)
-  }
-
-  pub fn peek_node_identifier(&mut self) -> Result<String> {
-    self.check_if_node_buffer_end()?;
-
-    let old_pos = self.node_buf.position();
-    let _raw_node_type = self.node_buf.read_u8().context(KbinErrorKind::NodeTypeRead)?;
-    let value = match self.compression {
-      Compression::Compressed => {
-        let size = Sixbit::size(&mut *self.node_buf)?;
-        let data = self.node_buf.get(size.real_len as u32)?;
-        Sixbit::unpack(data, size)?
-      },
-      Compression::Uncompressed => {
-        let length = (self.node_buf.read_u8().context(KbinErrorKind::DataRead(1))? & !ARRAY_MASK) + 1;
-        let bytes = self.node_buf.get(length as u32)?;
-        self.encoding.decode_bytes(bytes)?
-      },
-    };
-
-    let size = self.node_buf.position() - old_pos;
-    self.node_buf.seek(SeekFrom::Start(old_pos)).context(KbinErrorKind::DataRead(size as usize))?;
-
-    Ok(value)
-  }
-  */
-
   pub fn read_node_type(&mut self) -> Result<(StandardType, bool)> {
     self.check_if_node_buffer_end()?;
 
@@ -137,26 +101,6 @@ impl<'buf> Reader<'buf> {
 
     Ok(value)
   }
-
-  /*
-  pub fn read_node_identifier(&mut self) -> Result<String> {
-    let value = match self.compression {
-      Compression::Compressed => {
-        let size = Sixbit::size(&mut *self.node_buf)?;
-        let data = self.node_buf.get(size.real_len as u32)?;
-        Sixbit::unpack(data, size)?
-      },
-      Compression::Uncompressed => {
-        let length = (self.node_buf.read_u8().context(KbinErrorKind::DataRead(1))? & !ARRAY_MASK) + 1;
-        let data = self.node_buf.get(length as u32)?;
-        self.encoding.decode_bytes(data)?
-      },
-    };
-    debug!("Reader::read_node_identifier() => value: {:?}", value);
-
-    Ok(value)
-  }
-  */
 
   pub fn read_node_data(&mut self, node_type: (StandardType, bool)) -> Result<&'buf [u8]> {
     let (node_type, is_array) = node_type;
@@ -212,22 +156,6 @@ impl<'buf> Reader<'buf> {
       },
     }
   }
-
-  /*
-  pub fn read_string(&mut self) -> Result<String> {
-    let value = self.data_buf.read_str(self.encoding)?;
-    debug!("Reader::read_string() => value: {:?}", value);
-
-    Ok(value)
-  }
-
-  pub fn read_u8(&mut self) -> Result<u8> {
-    let value = self.data_buf.read_u8().context(KbinErrorKind::DataReadOneByte)?;
-    debug!("Reader::read_u8() => value: {}", value);
-
-    Ok(value)
-  }
-  */
 
   pub fn read_u32(&mut self) -> Result<u32> {
     let value = self.data_buf.read_u32::<BigEndian>().context(KbinErrorKind::DataRead(4))?;

@@ -17,14 +17,6 @@ pub use self::definition::{Key, NodeData, NodeDefinition};
 pub use self::extra::ExtraNodes;
 pub use self::marshal::{Marshal, MarshalDeserializer};
 
-/*
-#[derive(Clone, Debug, PartialEq)]
-pub enum Child {
-  Single(Node),
-  Multiple(Vec<Node>),
-}
-*/
-
 #[derive(Clone, Default, PartialEq)]
 pub struct Node {
   key: String,

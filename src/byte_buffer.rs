@@ -85,16 +85,6 @@ impl<'buf> ByteBufferRead<'buf> {
     Ok(data)
   }
 
-  /*
-  pub fn read_str(&mut self, encoding: EncodingType) -> Result<String> {
-    let data = self.buf_read()?;
-    let data = strip_trailing_null_bytes(data);
-    trace!("read_str => size: {}, data: 0x{:02x?}", data.len(), data);
-
-    encoding.decode_bytes(data)
-  }
-  */
-
   pub fn get(&mut self, size: u32) -> Result<&'buf [u8]> {
     let data = self.buf_read_size(size as usize)?;
     trace!("get => size: {}, data: 0x{:02x?}", size, data);
