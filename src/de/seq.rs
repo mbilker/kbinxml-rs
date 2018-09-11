@@ -3,7 +3,6 @@ use std::collections::VecDeque;
 use serde::de::{DeserializeSeed, IntoDeserializer, SeqAccess};
 
 use de::collection::NodeCollectionDeserializer;
-use de::custom::Custom;
 use error::{Error, KbinErrorKind};
 use node::NodeCollection;
 use node_types::StandardType;
@@ -14,7 +13,6 @@ enum SequenceMode {
     known_identifier: String,
   },
   Value {
-    node_type: StandardType,
     values: VecDeque<Value>,
   },
 }
@@ -31,7 +29,6 @@ impl<'de, 'a> Seq<'a, 'de> {
 
     let seq_mode = if is_array {
       let base = collection.base();
-      let node_type = base.node_type;
       let value = base.value()?;
       let values = if let Value::Array(node_type, values) = value {
         debug!("Seq::new(is_array: {}) => len: {}", is_array, values.len());
@@ -45,7 +42,7 @@ impl<'de, 'a> Seq<'a, 'de> {
         return Err(KbinErrorKind::InvalidState.into());
       };
 
-      SequenceMode::Value { node_type, values }
+      SequenceMode::Value { values }
     } else {
       let child = collection.children().front().ok_or(KbinErrorKind::InvalidState)?;
       let known_identifier = child.base().key()?.ok_or(KbinErrorKind::InvalidState)?;
@@ -107,7 +104,7 @@ impl<'de, 'a> SeqAccess<'de> for Seq<'a, 'de> {
         let de = NodeCollectionDeserializer::new(&mut self.collection);
         seed.deserialize(de).map(Some)
       },
-      SequenceMode::Value { node_type, ref mut values } => {
+      SequenceMode::Value { ref mut values } => {
         let value = match values.pop_front() {
           Some(v) => v,
           None => {
@@ -118,7 +115,6 @@ impl<'de, 'a> SeqAccess<'de> for Seq<'a, 'de> {
         };
 
         let de = value.into_deserializer();
-        let de = Custom::new(de, node_type);
         seed.deserialize(de).map(Some)
       },
     }

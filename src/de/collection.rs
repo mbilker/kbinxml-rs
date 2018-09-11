@@ -70,7 +70,7 @@ impl<'de, 'a> de::Deserializer<'de> for NodeCollectionDeserializer<'a, 'de> {
   fn deserialize_any<V>(mut self, visitor: V) -> Result<V::Value, Self::Error>
     where V: Visitor<'de>
   {
-    let collection = self.pop_node()?;
+    let mut collection = self.pop_node()?;
 
     let base = collection.base();
     let node_type = base.node_type;
@@ -80,14 +80,14 @@ impl<'de, 'a> de::Deserializer<'de> for NodeCollectionDeserializer<'a, 'de> {
       warn_attributes(&collection)?;
 
       trace!("NodeCollectionDeserializer::deserialize_any(node_type: {:?}, is_array: {})", node_type, is_array);
-      return visitor.visit_seq(Seq::new(&mut self.collection, is_array)?);
+      return visitor.visit_seq(Seq::new(&mut collection, true)?);
     }
 
     match node_type {
       StandardType::NodeStart => {
         debug!("NodeCollectionDeserializer::deserialize_any(node_type: {:?}, is_array: {}) => deserializing node", node_type, is_array);
 
-        let node = self.collection.as_node();
+        let node = collection.as_node();
         debug!("NodeCollectionDeserializer::deserialize_any(node_type: {:?}, is_array: {}) => node: {:?}", node_type, is_array, node);
 
         let marshal = Marshal::with_node(StandardType::NodeStart, node?);
@@ -157,15 +157,25 @@ impl<'de, 'a> de::Deserializer<'de> for NodeCollectionDeserializer<'a, 'de> {
     Err(Error::StaticMessage("newtype struct deserialization is not supported"))
   }
 
+  /// This will deserialize as a sequence of nodes if the first child node of
+  /// `self.collection` has `is_array == false`. Else, it will pop the first
+  /// child node and deserialize it as an array.
+  ///
+  /// This is a compromise to allow struct sequences but also allow arrays of value.
   fn deserialize_seq<V>(mut self, visitor: V) -> Result<V::Value, Self::Error>
     where V: Visitor<'de>
   {
-    let base = self.collection.base();
+    let base = self.collection.children().front().ok_or(KbinErrorKind::InvalidState)?.base();
     let node_type = base.node_type;
     let is_array = base.is_array;
     debug!("NodeCollectionDeserializer::deserialize_seq(node_type: {:?}, is_array: {})", node_type, is_array);
 
-    visitor.visit_seq(Seq::new(&mut self.collection, false)?)
+    if is_array {
+      let mut collection = self.pop_node_warn()?;
+      visitor.visit_seq(Seq::new(&mut collection, true)?)
+    } else {
+      visitor.visit_seq(Seq::new(&mut self.collection, false)?)
+    }
   }
 
   fn deserialize_tuple<V>(mut self, len: usize, visitor: V) -> Result<V::Value, Self::Error>
