@@ -13,12 +13,8 @@ extern crate serde_bytes;
 #[macro_use] extern crate serde;
 
 use std::fmt::Write as FmtWrite;
-use std::io::{Cursor, Write};
 
-use byteorder::{BigEndian, WriteBytesExt};
-use failure::ResultExt;
 use minidom::Element;
-use rustc_hex::FromHex;
 
 mod byte_buffer;
 mod compression;
@@ -31,15 +27,14 @@ mod printer;
 mod reader;
 mod sixbit;
 mod value;
+mod writer;
 
 mod de;
 mod ser;
 
-use byte_buffer::ByteBufferWrite;
 use node::NodeDefinition;
 use node_types::StandardType;
 use reader::Reader;
-use sixbit::Sixbit;
 
 // Public exports
 pub use compression::Compression;
@@ -51,6 +46,7 @@ pub use options::Options;
 pub use de::from_bytes;
 pub use ser::to_bytes;
 pub use value::Value;
+pub use writer::Writer;
 
 const SIGNATURE: u8 = 0xA0;
 
@@ -59,278 +55,111 @@ const SIG_UNCOMPRESSED: u8 = 0x45;
 
 const ARRAY_MASK: u8 = 1 << 6; // 1 << 6 = 64
 
-pub struct KbinXml {
-  options: Options,
+pub fn is_binary_xml(input: &[u8]) -> bool {
+  input.len() > 2 && input[0] == SIGNATURE && (input[1] == SIG_COMPRESSED || input[1] == SIG_UNCOMPRESSED)
 }
 
-impl KbinXml {
-  pub fn new() -> Self {
-    Self {
-      options: Options::default(),
+fn read_node(reader: &mut Reader, def: NodeDefinition) -> Result<Element> {
+  let key = def.key()?.ok_or(KbinErrorKind::InvalidNodeType(def.node_type))?;
+  let mut elem = Element::bare(key);
+
+  // Don't make the assumption that there cannot be a sub-node when a node has a value.
+  // Example: `netlog` module
+  if def.node_type != StandardType::NodeStart {
+    elem.set_attr("__type", def.node_type.name);
+
+    match def.value()? {
+      Value::Binary(data) => {
+        elem.set_attr("__size", data.len());
+
+        let len = data.len() * 2;
+        let value = data.into_iter().fold(String::with_capacity(len), |mut val, x| {
+          write!(val, "{:02x}", x).expect("Failed to append hex char");
+          val
+        });
+        debug!("KbinXml::read_node(name: {}) => binary value: {}", elem.name(), value);
+        elem.append_text_node(value);
+      },
+      Value::String(value) => {
+        debug!("KbinXml::read_node(name: {}) => string value: {:?}", elem.name(), value);
+        elem.append_text_node(value);
+      },
+      Value::Array(node_type, values) => {
+        elem.set_attr("__count", values.len());
+
+        let value = Value::Array(node_type, values).to_string();
+        debug!("KbinXml::read_node(name: {}) => value: {:?}", elem.name(), value);
+        elem.append_text_node(value);
+      },
+      value => {
+        let value = value.to_string();
+        debug!("KbinXml::read_node(name: {}) => value: {:?}", elem.name(), value);
+        elem.append_text_node(value);
+      },
     }
   }
 
-  pub fn with_options(options: Options) -> Self {
-    Self {
-      options,
-    }
-  }
+  loop {
+    let def = reader.read_node_definition()?;
 
-  pub fn is_binary_xml(input: &[u8]) -> bool {
-    input.len() > 2 && input[0] == SIGNATURE && (input[1] == SIG_COMPRESSED || input[1] == SIG_UNCOMPRESSED)
-  }
+    match def.node_type {
+      StandardType::NodeEnd => break,
+      StandardType::NodeStart => {
+        let child = read_node(reader, def)?;
+        elem.append_child(child);
 
-  fn read_node(&mut self, reader: &mut Reader, def: NodeDefinition) -> Result<Element> {
-    let key = def.key()?.ok_or(KbinErrorKind::InvalidNodeType(def.node_type))?;
-    let mut elem = Element::bare(key);
-
-    // Don't make the assumption that there cannot be a sub-node when a node has a value.
-    // Example: `netlog` module
-    if def.node_type != StandardType::NodeStart {
-      elem.set_attr("__type", def.node_type.name);
-
-      match def.value()? {
-        Value::Binary(data) => {
-          elem.set_attr("__size", data.len());
-
-          let len = data.len() * 2;
-          let value = data.into_iter().fold(String::with_capacity(len), |mut val, x| {
-            write!(val, "{:02x}", x).expect("Failed to append hex char");
-            val
-          });
-          debug!("KbinXml::read_node(name: {}) => binary value: {}", elem.name(), value);
-          elem.append_text_node(value);
-        },
-        Value::String(value) => {
-          debug!("KbinXml::read_node(name: {}) => string value: {:?}", elem.name(), value);
-          elem.append_text_node(value);
-        },
-        Value::Array(node_type, values) => {
-          elem.set_attr("__count", values.len());
-
-          let value = Value::Array(node_type, values).to_string();
-          debug!("KbinXml::read_node(name: {}) => value: {:?}", elem.name(), value);
-          elem.append_text_node(value);
-        },
-        value => {
-          let value = value.to_string();
-          debug!("KbinXml::read_node(name: {}) => value: {:?}", elem.name(), value);
-          elem.append_text_node(value);
-        },
-      }
-    }
-
-    loop {
-      let def = reader.read_node_definition()?;
-
-      match def.node_type {
-        StandardType::NodeEnd => break,
-        StandardType::NodeStart => {
-          let child = self.read_node(reader, def)?;
-          elem.append_child(child);
-
-          continue;
-        },
-        StandardType::Attribute => {
-          let node = def.as_node()?;
-          let (key, value) = node.into_key_and_value();
-          if let Some(Value::Attribute(value)) = value {
-            elem.set_attr(key, value);
-          } else {
-            return Err(KbinErrorKind::InvalidState.into());
-          }
-        },
-        _ => {
-          let child = self.read_node(reader, def)?;
-          elem.append_child(child);
-        },
-      };
-    }
-
-    Ok(elem)
-  }
-
-  fn from_binary_internal(&mut self, input: &[u8]) -> Result<(Element, EncodingType)> {
-    let mut reader = Reader::new(input)?;
-    let base = reader.read_node_definition()?;
-
-    let elem = self.read_node(&mut reader, base)?;
-    let encoding = reader.encoding();
-
-    Ok((elem, encoding))
-  }
-
-  fn write_node(&mut self, node_buf: &mut ByteBufferWrite, data_buf: &mut ByteBufferWrite, input: &Element) -> Result<()> {
-    let text = input.text();
-    let node_type = match input.attr("__type") {
-      Some(name) => StandardType::from_name(name),
-      None => {
-        // Screw whitespace with pretty printed XML
-        if text.trim().len() == 0 {
-          StandardType::NodeStart
+        continue;
+      },
+      StandardType::Attribute => {
+        let node = def.as_node()?;
+        let (key, value) = node.into_key_and_value();
+        if let Some(Value::Attribute(value)) = value {
+          elem.set_attr(key, value);
         } else {
-          StandardType::String
+          return Err(KbinErrorKind::InvalidState.into());
         }
       },
-    };
-
-    let (array_mask, count) = match input.attr("__count") {
-      Some(count) => {
-        let count = count.parse::<u32>().context(KbinErrorKind::StringParse("array count"))?;
-        debug!("write_node => __count = {}", count);
-        (ARRAY_MASK, count)
-      },
-      None => {
-        (0, 1)
-      },
-    };
-
-    debug!("write_node => name: {}, type: {:?}, type_size: {}, type_count: {}, is_array: {}, size: {}",
-      input.name(),
-      node_type,
-      node_type.size,
-      node_type.count,
-      array_mask,
-      count);
-
-    node_buf.write_u8(node_type.id | array_mask).context(KbinErrorKind::DataWrite(node_type.name))?;
-    match self.options.compression {
-      Compression::Compressed => Sixbit::pack(&mut **node_buf, input.name())?,
-      Compression::Uncompressed => {
-        let data = self.options.encoding.encode_bytes(input.name())?;
-        let len = (data.len() - 1) as u8;
-        node_buf.write_u8(len | ARRAY_MASK).context(KbinErrorKind::DataWrite("node name length"))?;
-        node_buf.write_all(&data).context(KbinErrorKind::DataWrite("node name bytes"))?;
-      },
-    };
-
-    match node_type {
-      StandardType::NodeStart => {},
-
-      StandardType::Binary => {
-        let data: Vec<u8> = text.from_hex().context(KbinErrorKind::HexError)?;
-        trace!("data: 0x{:02x?}", data);
-
-        let size = (data.len() as u32) * (node_type.size as u32);
-        data_buf.write_u32::<BigEndian>(size).context(KbinErrorKind::DataWrite("binary node size"))?;
-        data_buf.write_all(&data).context(KbinErrorKind::DataWrite("binary"))?;
-        data_buf.realign_writes(None)?;
-      },
-      StandardType::String => {
-        data_buf.write_str(self.options.encoding, &text)?;
-      },
-
       _ => {
-        let value = Value::from_string(node_type, &text, array_mask > 0, count as usize)?;
-        let data = value.to_bytes()?;
-
-        if array_mask > 0 {
-          let total_size = (count as u32) * (node_type.count as u32) * (node_type.size as u32);
-          trace!("write_node data_buf array => total_size: {}, data: 0x{:02x?}", total_size, data);
-
-          data_buf.write_u32::<BigEndian>(total_size).context(KbinErrorKind::DataWrite("node size"))?;
-          data_buf.write_all(&data).context(KbinErrorKind::DataWrite(node_type.name))?;
-          data_buf.realign_writes(None)?;
-        } else {
-          data_buf.write_aligned(*node_type, &data)?;
-        }
+        let child = read_node(reader, def)?;
+        elem.append_child(child);
       },
-    }
-
-    for (key, value) in input.attrs() {
-      match key {
-        "__count" | "__size" | "__type" => continue,
-        _ => {},
-      };
-
-      trace!("write_node => attr: {}, value: {}", key, value);
-
-      data_buf.write_str(self.options.encoding, value)?;
-
-      let node_type = StandardType::Attribute;
-      node_buf.write_u8(node_type.id).context(KbinErrorKind::DataWrite(node_type.name))?;
-      match self.options.compression {
-        Compression::Compressed => Sixbit::pack(&mut **node_buf, key)?,
-        Compression::Uncompressed => {
-          let data = self.options.encoding.encode_bytes(key)?;
-          let len = (data.len() - 1) as u8;
-          node_buf.write_u8(len | ARRAY_MASK).context(KbinErrorKind::DataWrite("attribute name length"))?;
-          node_buf.write_all(&data).context(KbinErrorKind::DataWrite("node name bytes"))?;
-        },
-      };
-    }
-
-    for child in input.children() {
-      self.write_node(node_buf, data_buf, child)?;
-    }
-
-    // Always has the array bit set
-    node_buf.write_u8(StandardType::NodeEnd.id | ARRAY_MASK).context(KbinErrorKind::DataWrite("node end"))?;
-
-    Ok(())
+    };
   }
 
-  fn to_binary_internal(&mut self, input: &Element) -> Result<Vec<u8>> {
-    let mut header = Cursor::new(Vec::with_capacity(8));
-    header.write_u8(SIGNATURE).context(KbinErrorKind::HeaderWrite("signature"))?;
+  Ok(elem)
+}
 
-    let compression = self.options.compression.to_byte();
-    header.write_u8(compression).context(KbinErrorKind::HeaderWrite("compression"))?;
+pub fn from_binary(input: &[u8]) -> Result<(Element, EncodingType)> {
+  let mut reader = Reader::new(input)?;
+  let base = reader.read_node_definition()?;
 
-    let encoding = self.options.encoding.to_byte();
-    header.write_u8(encoding).context(KbinErrorKind::HeaderWrite("encoding"))?;
-    header.write_u8(0xFF ^ encoding).context(KbinErrorKind::HeaderWrite("encoding negation"))?;
+  let elem = read_node(&mut reader, base)?;
+  let encoding = reader.encoding();
 
-    let mut node_buf = ByteBufferWrite::new(Vec::new());
-    let mut data_buf = ByteBufferWrite::new(Vec::new());
+  Ok((elem, encoding))
+}
 
-    self.write_node(&mut node_buf, &mut data_buf, input)?;
+pub fn node_collection_from_binary(input: &[u8]) -> Result<(NodeCollection, EncodingType)> {
+  let mut reader = Reader::new(input)?;
+  let collection = NodeCollection::from_iter(&mut reader).ok_or(KbinErrorKind::InvalidState)?;
+  let encoding = reader.encoding();
 
-    node_buf.write_u8(StandardType::FileEnd.id | ARRAY_MASK).context(KbinErrorKind::DataWrite("file end"))?;
-    node_buf.realign_writes(None)?;
+  Ok((collection, encoding))
+}
 
-    let mut output = header.into_inner();
+pub fn node_from_binary(input: &[u8]) -> Result<(Node, EncodingType)> {
+  let (collection, encoding) = node_collection_from_binary(input)?;
+  let node = collection.as_node()?;
 
-    let node_buf = node_buf.into_inner();
-    debug!("to_binary_internal => node_buf len: {0} (0x{0:x})", node_buf.len());
-    output.write_u32::<BigEndian>(node_buf.len() as u32).context(KbinErrorKind::HeaderWrite("node buffer length"))?;
-    output.extend_from_slice(&node_buf);
+  Ok((node, encoding))
+}
 
-    let data_buf = data_buf.into_inner();
-    debug!("to_binary_internal => data_buf len: {0} (0x{0:x})", data_buf.len());
-    output.write_u32::<BigEndian>(data_buf.len() as u32).context(KbinErrorKind::HeaderWrite("data buffer length"))?;
-    output.extend_from_slice(&data_buf);
+pub fn to_binary(input: &Element) -> Result<Vec<u8>> {
+  let mut writer = Writer::new();
+  writer.to_binary(input)
+}
 
-    Ok(output)
-  }
-
-  pub fn from_binary(input: &[u8]) -> Result<(Element, EncodingType)> {
-    let mut kbinxml = KbinXml::new();
-    kbinxml.from_binary_internal(input)
-  }
-
-  pub fn node_collection_from_binary(input: &[u8]) -> Result<(NodeCollection, EncodingType)> {
-    let mut reader = Reader::new(input)?;
-    let collection = NodeCollection::from_iter(&mut reader).ok_or(KbinErrorKind::InvalidState)?;
-    let encoding = reader.encoding();
-
-    Ok((collection, encoding))
-  }
-
-  pub fn node_from_binary(input: &[u8]) -> Result<(Node, EncodingType)> {
-    let (collection, encoding) = Self::node_collection_from_binary(input)?;
-    let node = collection.as_node()?;
-
-    Ok((node, encoding))
-  }
-
-  pub fn to_binary(input: &Element) -> Result<Vec<u8>> {
-    let mut kbinxml = KbinXml::new();
-    kbinxml.to_binary_internal(input)
-  }
-
-  pub fn to_binary_with_options(options: Options, input: &Element) -> Result<Vec<u8>> {
-    let mut kbinxml = KbinXml::with_options(options);
-    kbinxml.to_binary_internal(input)
-  }
+pub fn to_binary_with_options(options: Options, input: &Element) -> Result<Vec<u8>> {
+  let mut writer = Writer::with_options(options);
+  writer.to_binary(input)
 }

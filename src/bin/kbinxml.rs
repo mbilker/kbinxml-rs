@@ -15,7 +15,7 @@ use std::net::Ipv4Addr;
 use std::str;
 
 use failure::Fail;
-use kbinxml::{ExtraNodes, KbinXml, Node, Options, Printer, from_bytes, to_bytes};
+use kbinxml::{ExtraNodes, Node, Options, Printer, from_bytes, to_bytes};
 use minidom::Element;
 use quick_xml::Writer;
 
@@ -127,15 +127,15 @@ fn main() -> std::io::Result<()> {
     let mut contents = Vec::new();
     file.read_to_end(&mut contents)?;
 
-    if KbinXml::is_binary_xml(&contents) {
+    if kbinxml::is_binary_xml(&contents) {
       Printer::run(&contents).unwrap();
 
-      let (element, encoding_original) = KbinXml::from_binary(&contents).map_err(display_err)?;
+      let (element, encoding_original) = kbinxml::from_binary(&contents).map_err(display_err)?;
       let text_original = to_text(&element)?;
       display_buf(&text_original)?;
 
       let options = Options::with_encoding(encoding_original);
-      let buf = KbinXml::to_binary_with_options(options, &element).map_err(display_err)?;
+      let buf = kbinxml::to_binary_with_options(options, &element).map_err(display_err)?;
       compare_slice(&buf, &contents);
 
       let value = from_bytes::<Node>(&contents);
@@ -150,7 +150,7 @@ fn main() -> std::io::Result<()> {
       let element: Element = contents.parse().expect("Unable to construct DOM for input text XML");
 
       let options = Options::default();
-      let buf = KbinXml::to_binary_with_options(options, &element).map_err(display_err)?;
+      let buf = kbinxml::to_binary_with_options(options, &element).map_err(display_err)?;
       eprintln!("data: {:02x?}", buf);
       Printer::run(&buf).unwrap();
 
