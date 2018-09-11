@@ -309,12 +309,17 @@ impl KbinXml {
     kbinxml.from_binary_internal(input)
   }
 
-  pub fn node_from_binary(input: &[u8]) -> Result<(Node, EncodingType)> {
+  pub fn node_collection_from_binary(input: &[u8]) -> Result<(NodeCollection, EncodingType)> {
     let mut reader = Reader::new(input)?;
     let collection = NodeCollection::from_iter(&mut reader).ok_or(KbinErrorKind::InvalidState)?;
-
-    let node = collection.as_node()?;
     let encoding = reader.encoding();
+
+    Ok((collection, encoding))
+  }
+
+  pub fn node_from_binary(input: &[u8]) -> Result<(Node, EncodingType)> {
+    let (collection, encoding) = Self::node_collection_from_binary(input)?;
+    let node = collection.as_node()?;
 
     Ok((node, encoding))
   }
