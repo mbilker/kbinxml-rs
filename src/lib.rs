@@ -46,7 +46,7 @@ pub use compression::Compression;
 pub use encoding_type::EncodingType;
 pub use printer::Printer;
 pub use error::{KbinError, KbinErrorKind, Result};
-pub use node::{ExtraNodes, Node};
+pub use node::{ExtraNodes, Node, NodeCollection};
 pub use options::Options;
 pub use de::from_bytes;
 pub use ser::to_bytes;
@@ -307,6 +307,16 @@ impl KbinXml {
   pub fn from_binary(input: &[u8]) -> Result<(Element, EncodingType)> {
     let mut kbinxml = KbinXml::new();
     kbinxml.from_binary_internal(input)
+  }
+
+  pub fn node_from_binary(input: &[u8]) -> Result<(Node, EncodingType)> {
+    let mut reader = Reader::new(input)?;
+    let collection = NodeCollection::from_iter(&mut reader).ok_or(KbinErrorKind::InvalidState)?;
+
+    let node = collection.as_node()?;
+    let encoding = reader.encoding();
+
+    Ok((node, encoding))
   }
 
   pub fn to_binary(input: &Element) -> Result<Vec<u8>> {
