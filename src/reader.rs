@@ -1,3 +1,4 @@
+use bytes::Bytes;
 use byteorder::{BigEndian, ReadBytesExt};
 use failure::ResultExt;
 
@@ -11,21 +12,21 @@ use sixbit::Sixbit;
 
 use super::{ARRAY_MASK, SIGNATURE};
 
-pub struct Reader<'buf> {
+pub struct Reader {
   compression: Compression,
   encoding: EncodingType,
 
-  pub(crate) node_buf: ByteBufferRead<'buf>,
-  pub(crate) data_buf: ByteBufferRead<'buf>,
+  pub(crate) node_buf: ByteBufferRead,
+  pub(crate) data_buf: ByteBufferRead,
 
   data_buf_start: u64,
 }
 
-impl<'buf> Reader<'buf> {
-  pub fn new(input: &'buf [u8]) -> Result<Self> {
+impl Reader {
+  pub fn new(input: Bytes) -> Result<Self> {
     // Node buffer starts from the beginning.
     // Data buffer starts later after reading `len_data`.
-    let mut node_buf = ByteBufferRead::new(&input[..]);
+    let mut node_buf = ByteBufferRead::new(input.clone());
 
     let signature = node_buf.read_u8().context(KbinErrorKind::HeaderRead("signature"))?;
     if signature != SIGNATURE {
@@ -50,7 +51,7 @@ impl<'buf> Reader<'buf> {
     // We have read 8 bytes so far, so offset the start of the data buffer from
     // the start of the input data.
     let data_buf_start = len_node + 8;
-    let mut data_buf = ByteBufferRead::new(&input[(data_buf_start as usize)..]);
+    let mut data_buf = ByteBufferRead::new(input.slice_from(data_buf_start as usize));
 
     let len_data = data_buf.read_u32::<BigEndian>().context(KbinErrorKind::LenDataRead)?;
     info!("len_data: {0} (0x{0:x})", len_data);
@@ -102,7 +103,7 @@ impl<'buf> Reader<'buf> {
     Ok(value)
   }
 
-  pub fn read_node_data(&mut self, node_type: (StandardType, bool)) -> Result<&'buf [u8]> {
+  pub fn read_node_data(&mut self, node_type: (StandardType, bool)) -> Result<Bytes> {
     let (node_type, is_array) = node_type;
     trace!("Reader::read_node_data(node_type: {:?}, is_array: {})", node_type, is_array);
 
@@ -113,7 +114,7 @@ impl<'buf> Reader<'buf> {
 
       StandardType::NodeStart |
       StandardType::NodeEnd |
-      StandardType::FileEnd => &[],
+      StandardType::FileEnd => Bytes::new(),
 
       _ if is_array => {
         let arr_size = self.read_u32().context(KbinErrorKind::ArrayLengthRead)?;
@@ -129,7 +130,7 @@ impl<'buf> Reader<'buf> {
     Ok(value)
   }
 
-  pub fn read_node_definition(&mut self) -> Result<NodeDefinition<'buf>> {
+  pub fn read_node_definition(&mut self) -> Result<NodeDefinition> {
     let node_type = self.read_node_type()?;
     match node_type.0 {
       StandardType::NodeEnd |
@@ -165,15 +166,15 @@ impl<'buf> Reader<'buf> {
   }
 
   #[inline]
-  pub fn read_bytes(&mut self) -> Result<&'buf [u8]> {
+  pub fn read_bytes(&mut self) -> Result<Bytes> {
     self.data_buf.buf_read()
   }
 }
 
-impl<'a> Iterator for Reader<'a> {
-  type Item = NodeDefinition<'a>;
+impl Iterator for Reader {
+  type Item = NodeDefinition;
 
-  fn next(&mut self) -> Option<NodeDefinition<'a>> {
+  fn next(&mut self) -> Option<NodeDefinition> {
     match self.read_node_definition() {
       Ok(v) => Some(v),
       Err(e) => {

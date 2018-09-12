@@ -1,6 +1,7 @@
 #![cfg_attr(test, feature(test))]
 
 extern crate byteorder;
+extern crate bytes;
 extern crate encoding;
 extern crate indexmap;
 extern crate minidom;
@@ -14,6 +15,7 @@ extern crate serde_bytes;
 
 use std::fmt::Write as FmtWrite;
 
+use bytes::Bytes;
 use minidom::Element;
 
 mod byte_buffer;
@@ -34,12 +36,12 @@ mod ser;
 
 use node::NodeDefinition;
 use node_types::StandardType;
-use reader::Reader;
 
 // Public exports
 pub use compression::Compression;
 pub use encoding_type::EncodingType;
 pub use printer::Printer;
+pub use reader::Reader;
 pub use error::{KbinError, KbinErrorKind, Result};
 pub use node::{ExtraNodes, Node, NodeCollection};
 pub use options::Options;
@@ -130,7 +132,7 @@ fn read_node(reader: &mut Reader, def: NodeDefinition) -> Result<Element> {
 }
 
 pub fn from_binary(input: &[u8]) -> Result<(Element, EncodingType)> {
-  let mut reader = Reader::new(input)?;
+  let mut reader = Reader::new(Bytes::from(input))?;
   let base = reader.read_node_definition()?;
 
   let elem = read_node(&mut reader, base)?;
@@ -139,7 +141,12 @@ pub fn from_binary(input: &[u8]) -> Result<(Element, EncodingType)> {
   Ok((elem, encoding))
 }
 
-pub fn node_collection_from_binary(input: &[u8]) -> Result<(NodeCollection, EncodingType)> {
+#[inline]
+pub fn node_collection_from_slice(input: &[u8]) -> Result<(NodeCollection, EncodingType)> {
+  node_collection_from_bytes(Bytes::from(input))
+}
+
+pub fn node_collection_from_bytes(input: Bytes) -> Result<(NodeCollection, EncodingType)> {
   let mut reader = Reader::new(input)?;
   let collection = NodeCollection::from_iter(&mut reader).ok_or(KbinErrorKind::InvalidState)?;
   let encoding = reader.encoding();
@@ -147,8 +154,8 @@ pub fn node_collection_from_binary(input: &[u8]) -> Result<(NodeCollection, Enco
   Ok((collection, encoding))
 }
 
-pub fn node_from_binary(input: &[u8]) -> Result<(Node, EncodingType)> {
-  let (collection, encoding) = node_collection_from_binary(input)?;
+pub fn node_from_binary(input: Bytes) -> Result<(Node, EncodingType)> {
+  let (collection, encoding) = node_collection_from_bytes(input)?;
   let node = collection.as_node()?;
 
   Ok((node, encoding))

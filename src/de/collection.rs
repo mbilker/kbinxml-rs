@@ -9,7 +9,7 @@ use error::{Error, KbinErrorKind};
 use node::{Marshal, NodeCollection};
 use node_types::StandardType;
 
-fn warn_attributes<'de>(value: &NodeCollection<'de>) -> Result<(), Error> {
+fn warn_attributes(value: &NodeCollection) -> Result<(), Error> {
   for attr in value.attributes() {
     let key = attr.key()?.ok_or(KbinErrorKind::InvalidState)?;
     let value = attr.value()?;
@@ -19,12 +19,12 @@ fn warn_attributes<'de>(value: &NodeCollection<'de>) -> Result<(), Error> {
   Ok(())
 }
 
-pub struct NodeCollectionDeserializer<'a, 'de: 'a> {
-  pub(crate) collection: &'a mut NodeCollection<'de>,
+pub struct NodeCollectionDeserializer<'a> {
+  pub(crate) collection: &'a mut NodeCollection,
 }
 
-impl<'de, 'a> NodeCollectionDeserializer<'a, 'de> {
-  pub fn new(collection: &'a mut NodeCollection<'de>) -> Self {
+impl<'a> NodeCollectionDeserializer<'a> {
+  pub fn new(collection: &'a mut NodeCollection) -> Self {
     trace!("NodeCollectionDeserializer::new() => attributes len: {}, children len: {}, base: {}",
       collection.attributes().len(),
       collection.children().len(),
@@ -33,11 +33,11 @@ impl<'de, 'a> NodeCollectionDeserializer<'a, 'de> {
     Self { collection }
   }
 
-  fn pop_node(&mut self) -> Result<NodeCollection<'de>, Error> {
+  fn pop_node(&mut self) -> Result<NodeCollection, Error> {
     self.collection.children_mut().pop_front().ok_or(KbinErrorKind::InvalidState.into())
   }
 
-  fn pop_node_warn(&mut self) -> Result<NodeCollection<'de>, Error> {
+  fn pop_node_warn(&mut self) -> Result<NodeCollection, Error> {
     let value = self.pop_node()?;
     warn_attributes(&value)?;
 
@@ -60,7 +60,7 @@ macro_rules! forward_to_definition_deserializer {
   };
 }
 
-impl<'de, 'a> de::Deserializer<'de> for NodeCollectionDeserializer<'a, 'de> {
+impl<'de, 'a> de::Deserializer<'de> for NodeCollectionDeserializer<'a> {
   type Error = Error;
 
   fn is_human_readable(&self) -> bool {
@@ -71,10 +71,7 @@ impl<'de, 'a> de::Deserializer<'de> for NodeCollectionDeserializer<'a, 'de> {
     where V: Visitor<'de>
   {
     let mut collection = self.pop_node()?;
-
-    let base = collection.base();
-    let node_type = base.node_type;
-    let is_array = base.is_array;
+    let (node_type, is_array) = collection.base().node_type_tuple();
 
     if is_array {
       warn_attributes(&collection)?;
@@ -96,7 +93,7 @@ impl<'de, 'a> de::Deserializer<'de> for NodeCollectionDeserializer<'a, 'de> {
       _ => {
         warn_attributes(&collection)?;
 
-        let value = base.value()?;
+        let value = collection.base().value()?;
         debug!("NodeCollectionDeserializer::deserialize_any(node_type: {:?}, is_array: {}) => value: {:?}", node_type, is_array, value);
         let marshal = Marshal::with_value(node_type, value);
         visitor.visit_newtype_struct(marshal.into_deserializer())
@@ -165,9 +162,9 @@ impl<'de, 'a> de::Deserializer<'de> for NodeCollectionDeserializer<'a, 'de> {
   fn deserialize_seq<V>(mut self, visitor: V) -> Result<V::Value, Self::Error>
     where V: Visitor<'de>
   {
-    let base = self.collection.children().front().ok_or(KbinErrorKind::InvalidState)?.base();
-    let node_type = base.node_type;
-    let is_array = base.is_array;
+    let (node_type, is_array) = self.collection.children().front().ok_or(KbinErrorKind::InvalidState)?
+      .base()
+      .node_type_tuple();
     debug!("NodeCollectionDeserializer::deserialize_seq(node_type: {:?}, is_array: {})", node_type, is_array);
 
     if is_array {
@@ -192,18 +189,15 @@ impl<'de, 'a> de::Deserializer<'de> for NodeCollectionDeserializer<'a, 'de> {
   {
     trace!("NodeCollectionDeserializer::deserialize_tuple_struct(name: {:?}, len: {})", name, len);
 
-    let base = self.collection.base();
-    let node_type = base.node_type;
-
     match name {
       "__key" => {
+        let base = self.collection.base();
+        let node_type = base.node_type;
         let key = base.key()?.ok_or(KbinErrorKind::InvalidState)?;
         let de = key.into_deserializer();
         visitor.visit_enum(Custom::new(de, node_type))
       },
       "__value" => {
-        debug!("NodeCollectionDeserializer::deserialize_tuple_struct(name: {:?}) => node_type: {:?}", name, node_type);
-
         let mut collection = self.pop_node()?;
         visitor.visit_map(NodeContents::new(&mut collection))
       },

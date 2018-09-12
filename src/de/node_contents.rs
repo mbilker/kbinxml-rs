@@ -11,13 +11,13 @@ enum ReadState {
   Attributes,
 }
 
-pub struct NodeContents<'a, 'de: 'a> {
-  collection: &'a mut NodeCollection<'de>,
+pub struct NodeContents<'a> {
+  collection: &'a mut NodeCollection,
   state: ReadState,
 }
 
-impl<'de, 'a> NodeContents<'a, 'de> {
-  pub fn new(collection: &'a mut NodeCollection<'de>) -> Self {
+impl<'a> NodeContents<'a> {
+  pub fn new(collection: &'a mut NodeCollection) -> Self {
     trace!("--> NodeContents::new(node_type: {:?})", collection.base().node_type);
 
     Self {
@@ -27,7 +27,7 @@ impl<'de, 'a> NodeContents<'a, 'de> {
   }
 }
 
-impl<'de, 'a> MapAccess<'de> for NodeContents<'a, 'de> {
+impl<'de, 'a> MapAccess<'de> for NodeContents<'a> {
   type Error = Error;
 
   fn next_key_seed<K>(&mut self, seed: K) -> Result<Option<K::Value>>
@@ -46,7 +46,7 @@ impl<'de, 'a> MapAccess<'de> for NodeContents<'a, 'de> {
           let key = attribute.key()?.ok_or(KbinErrorKind::InvalidState)?;
           debug!("<NodeContents as MapAccess>::next_key_seed(state: {:?}) => attribute: {:?}, key: {:?}", self.state, attribute, key);
 
-          let de = NodeDefinitionDeserializer::new(*attribute);
+          let de = NodeDefinitionDeserializer::new(attribute);
           seed.deserialize(de).map(Some)
         } else {
           debug!("<-- <NodeContents as MapAccess>::next_key_seed(state: {:?}) => end of map", self.state);

@@ -7,13 +7,13 @@ use error::Error;
 use node::NodeCollection;
 use node_types::StandardType;
 
-pub struct Struct<'a, 'de: 'a> {
-  collection: &'a mut NodeCollection<'de>,
+pub struct Struct<'a> {
+  collection: &'a mut NodeCollection,
   key: Option<String>,
 }
 
-impl<'de, 'a> Struct<'a, 'de> {
-  pub fn new(collection: &'a mut NodeCollection<'de>) -> Self {
+impl<'a> Struct<'a> {
+  pub fn new(collection: &'a mut NodeCollection) -> Self {
     let key = collection.base().key().ok().and_then(|v| v);
 
     trace!("--> Struct::new() => attributes len: {}, children len: {}, base: {}",
@@ -28,7 +28,7 @@ impl<'de, 'a> Struct<'a, 'de> {
   }
 }
 
-impl<'de, 'a> MapAccess<'de> for Struct<'a, 'de> {
+impl<'de, 'a> MapAccess<'de> for Struct<'a> {
   type Error = Error;
 
   fn next_key_seed<K>(&mut self, seed: K) -> Result<Option<K::Value>, Self::Error>
@@ -44,7 +44,7 @@ impl<'de, 'a> MapAccess<'de> for Struct<'a, 'de> {
 
     // Then if there are attributes left, deserialize them first
     if let Some(attribute) = self.collection.attributes().front() {
-      let de = NodeDefinitionDeserializer::new(*attribute);
+      let de = NodeDefinitionDeserializer::new(attribute);
       return seed.deserialize(de).map(Some);
     }
 
@@ -74,7 +74,7 @@ impl<'de, 'a> MapAccess<'de> for Struct<'a, 'de> {
 
     // Then if there are attributes left, deserialize them first
     if let Some(attribute) = self.collection.attributes_mut().pop_front() {
-      let de = NodeDefinitionDeserializer::new(attribute);
+      let de = NodeDefinitionDeserializer::new(&attribute);
       return seed.deserialize(de);
     }
 

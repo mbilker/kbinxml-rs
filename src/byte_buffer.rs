@@ -3,6 +3,7 @@ use std::io::{Cursor, Seek, SeekFrom, Write};
 use std::ops::{Deref, DerefMut};
 
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
+use bytes::Bytes;
 use failure::ResultExt;
 
 use node_types::KbinType;
@@ -20,9 +21,9 @@ pub(crate) fn strip_trailing_null_bytes<'a>(data: &'a [u8]) -> &'a [u8] {
   &data[..=index]
 }
 
-pub struct ByteBufferRead<'buf> {
-  cursor: Cursor<&'buf [u8]>,
-  buffer: &'buf [u8],
+pub struct ByteBufferRead {
+  cursor: Cursor<Bytes>,
+  buffer: Bytes,
   offset_1: usize,
   offset_2: usize,
 }
@@ -33,10 +34,10 @@ pub struct ByteBufferWrite {
   offset_2: u64,
 }
 
-impl<'buf> ByteBufferRead<'buf> {
-  pub fn new(buffer: &'buf [u8]) -> Self {
+impl ByteBufferRead {
+  pub fn new(buffer: Bytes) -> Self {
     Self {
-      cursor: Cursor::new(buffer),
+      cursor: Cursor::new(buffer.clone()),
       buffer,
       offset_1: 0,
       offset_2: 0,
@@ -62,12 +63,12 @@ impl<'buf> ByteBufferRead<'buf> {
     }
   }
 
-  fn buf_read_size(&mut self, size: usize) -> Result<&'buf [u8]> {
+  fn buf_read_size(&mut self, size: usize) -> Result<Bytes> {
     // To avoid an allocation of a `Vec` here, the raw input byte array is used
     let start = self.data_buf_offset();
     let end = self.check_read_size(start, size)?;
 
-    let data = &self.buffer[start..end];
+    let data = self.buffer.slice(start, end);
     trace!("buf_read_size => index: {}, size: {}, data: 0x{:02x?}", self.cursor.position(), data.len(), data);
 
     self.cursor.seek(SeekFrom::Current(size as i64)).context(KbinErrorKind::DataRead(size))?;
@@ -75,7 +76,7 @@ impl<'buf> ByteBufferRead<'buf> {
     Ok(data)
   }
 
-  pub fn buf_read(&mut self) -> Result<&'buf [u8]> {
+  pub fn buf_read(&mut self) -> Result<Bytes> {
     let size = self.cursor.read_u32::<BigEndian>().context(KbinErrorKind::DataReadSize)?;
     debug!("buf_read => index: {}, size: {}", self.cursor.position(), size);
 
@@ -85,14 +86,14 @@ impl<'buf> ByteBufferRead<'buf> {
     Ok(data)
   }
 
-  pub fn get(&mut self, size: u32) -> Result<&'buf [u8]> {
+  pub fn get(&mut self, size: u32) -> Result<Bytes> {
     let data = self.buf_read_size(size as usize)?;
     trace!("get => size: {}, data: 0x{:02x?}", size, data);
 
     Ok(data)
   }
 
-  pub fn get_aligned(&mut self, data_type: KbinType) -> Result<&'buf [u8]> {
+  pub fn get_aligned(&mut self, data_type: KbinType) -> Result<Bytes> {
     if self.offset_1 % 4 == 0 {
       self.offset_1 = self.data_buf_offset();
     }
@@ -107,14 +108,14 @@ impl<'buf> ByteBufferRead<'buf> {
     let (check_old, data) = match size {
       1 => {
         let end = self.check_read_size(self.offset_1, 1)?;
-        let data = &self.buffer[self.offset_1..end];
+        let data = self.buffer.slice(self.offset_1, end);
         self.offset_1 += 1;
 
         (true, data)
       },
       2 => {
         let end = self.check_read_size(self.offset_2, 2)?;
-        let data = &self.buffer[self.offset_2..end];
+        let data = self.buffer.slice(self.offset_2, end);
         self.offset_2 += 2;
 
         (true, data)
@@ -273,15 +274,15 @@ impl ByteBufferWrite {
   }
 }
 
-impl<'buf> Deref for ByteBufferRead<'buf> {
-  type Target = Cursor<&'buf [u8]>;
+impl Deref for ByteBufferRead {
+  type Target = Cursor<Bytes>;
 
   fn deref(&self) -> &Self::Target {
     &self.cursor
   }
 }
 
-impl<'buf> DerefMut for ByteBufferRead<'buf> {
+impl DerefMut for ByteBufferRead {
   fn deref_mut(&mut self) -> &mut Self::Target {
     &mut self.cursor
   }

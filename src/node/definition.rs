@@ -1,5 +1,7 @@
 use std::fmt;
 
+use bytes::Bytes;
+
 use byte_buffer::strip_trailing_null_bytes;
 use encoding_type::EncodingType;
 use error::{KbinError, KbinErrorKind};
@@ -8,37 +10,37 @@ use node_types::StandardType;
 use sixbit::{Sixbit, SixbitSize};
 use value::Value;
 
-#[derive(Clone, Copy)]
-pub enum Key<'buf> {
+#[derive(Clone)]
+pub enum Key {
   Compressed {
     size: SixbitSize,
-    data: &'buf [u8],
+    data: Bytes,
   },
   Uncompressed {
     encoding: EncodingType,
-    data: &'buf [u8],
+    data: Bytes,
   },
 }
 
-#[derive(Clone, Copy, Debug)]
-pub enum NodeData<'buf> {
+#[derive(Clone, Debug)]
+pub enum NodeData {
   Some {
-    key: Key<'buf>,
-    value_data: &'buf [u8],
+    key: Key,
+    value_data: Bytes,
   },
   None,
 }
 
-#[derive(Clone, Copy, Debug)]
-pub struct NodeDefinition<'buf> {
+#[derive(Clone, Debug)]
+pub struct NodeDefinition {
   encoding: EncodingType,
   pub node_type: StandardType,
   pub is_array: bool,
 
-  data: NodeData<'buf>,
+  data: NodeData,
 }
 
-impl<'buf> Key<'buf> {
+impl Key {
   fn to_string(&self) -> Result<String, KbinError> {
     match self {
       Key::Compressed { ref size, ref data } => {
@@ -51,7 +53,7 @@ impl<'buf> Key<'buf> {
   }
 }
 
-impl<'buf> NodeDefinition<'buf> {
+impl NodeDefinition {
   pub fn new(encoding: EncodingType, node_type: (StandardType, bool)) -> Self {
     let (node_type, is_array) = node_type;
 
@@ -63,7 +65,7 @@ impl<'buf> NodeDefinition<'buf> {
     }
   }
 
-  pub fn with_data(encoding: EncodingType, node_type: (StandardType, bool), data: NodeData<'buf>) -> Self {
+  pub fn with_data(encoding: EncodingType, node_type: (StandardType, bool), data: NodeData) -> Self {
     let (node_type, is_array) = node_type;
 
     Self {
@@ -74,6 +76,16 @@ impl<'buf> NodeDefinition<'buf> {
     }
   }
 
+  #[inline]
+  pub fn encoding(&self) -> EncodingType {
+    self.encoding
+  }
+
+  #[inline]
+  pub fn node_type_tuple(&self) -> (StandardType, bool) {
+    (self.node_type, self.is_array)
+  }
+
   pub fn key(&self) -> Result<Option<String>, KbinError> {
     match self.data {
       NodeData::Some { ref key, .. } => key.to_string().map(Some),
@@ -82,7 +94,7 @@ impl<'buf> NodeDefinition<'buf> {
   }
 
   pub fn value(&self) -> Result<Value, KbinError> {
-    match (self.node_type, self.data) {
+    match (self.node_type, &self.data) {
       (StandardType::Attribute, NodeData::Some { ref value_data, .. }) => {
         let data = strip_trailing_null_bytes(value_data);
         let value = self.encoding.decode_bytes(data)?;
@@ -106,7 +118,7 @@ impl<'buf> NodeDefinition<'buf> {
     }
   }
 
-  pub fn value_bytes(&self) -> Option<&'buf [u8]> {
+  pub fn value_bytes<'a>(&'a self) -> Option<&'a [u8]> {
     match self.data {
       NodeData::Some { ref value_data, .. } => Some(value_data),
       NodeData::None => None,
@@ -115,7 +127,7 @@ impl<'buf> NodeDefinition<'buf> {
 
   pub fn as_node(&self) -> Result<Node, KbinError> {
     trace!("parsing definition: {:?}", self);
-    match (self.node_type, self.data) {
+    match (self.node_type, &self.data) {
       (StandardType::NodeEnd, _) |
       (StandardType::FileEnd, _) => {
         Err(KbinErrorKind::InvalidNodeType(self.node_type).into())
@@ -136,7 +148,7 @@ impl<'buf> NodeDefinition<'buf> {
   }
 }
 
-impl<'buf> fmt::Debug for Key<'buf> {
+impl fmt::Debug for Key {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
     if let Ok(key) = self.to_string() {
       write!(f, "\"{}\"", key)
@@ -159,7 +171,7 @@ impl<'buf> fmt::Debug for Key<'buf> {
   }
 }
 
-impl<'buf> fmt::Display for NodeDefinition<'buf> {
+impl fmt::Display for NodeDefinition {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
     let mut d = f.debug_struct("NodeDefinition");
     d.field("node_type", &self.node_type);

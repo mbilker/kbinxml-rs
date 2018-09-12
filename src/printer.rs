@@ -1,3 +1,5 @@
+use bytes::Bytes;
+
 use error::Result;
 use node::NodeCollection;
 use node_types::StandardType;
@@ -7,7 +9,7 @@ pub struct Printer;
 
 impl Printer {
   pub fn run(input: &[u8]) -> Result<()> {
-    let mut reader = Reader::new(input)?;
+    let mut reader = Reader::new(Bytes::from(input))?;
     let mut nodes = Vec::new();
     let mut definitions = Vec::new();
 

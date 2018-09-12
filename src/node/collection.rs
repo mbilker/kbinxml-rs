@@ -9,14 +9,14 @@ use value::Value;
 
 /// A collection of node definitions (`NodeDefinition`)
 #[derive(Debug)]
-pub struct NodeCollection<'buf> {
-  base: NodeDefinition<'buf>,
-  attributes: VecDeque<NodeDefinition<'buf>>,
-  children: VecDeque<NodeCollection<'buf>>,
+pub struct NodeCollection {
+  base: NodeDefinition,
+  attributes: VecDeque<NodeDefinition>,
+  children: VecDeque<NodeCollection>,
 }
 
-impl<'buf> NodeCollection<'buf> {
-  pub fn new(base: NodeDefinition<'buf>) -> Self {
+impl NodeCollection {
+  pub fn new(base: NodeDefinition) -> Self {
     Self {
       base,
       attributes: VecDeque::with_capacity(0),
@@ -24,8 +24,8 @@ impl<'buf> NodeCollection<'buf> {
     }
   }
 
-  pub fn from_iter<I>(mut iter: I) -> Option<NodeCollection<'buf>>
-    where I: Iterator<Item = NodeDefinition<'buf>>
+  pub fn from_iter<I>(mut iter: I) -> Option<NodeCollection>
+    where I: Iterator<Item = NodeDefinition>
   {
     let base = if let Some(def) = iter.next() {
       def
@@ -36,8 +36,8 @@ impl<'buf> NodeCollection<'buf> {
     NodeCollection::with_base(base, &mut iter)
   }
 
-  fn with_base<I>(base: NodeDefinition<'buf>, iter: &mut I) -> Option<NodeCollection<'buf>>
-    where I: Iterator<Item = NodeDefinition<'buf>>
+  fn with_base<I>(base: NodeDefinition, iter: &mut I) -> Option<NodeCollection>
+    where I: Iterator<Item = NodeDefinition>
   {
     let mut attributes = VecDeque::new();
     let mut children = VecDeque::new();
@@ -66,27 +66,27 @@ impl<'buf> NodeCollection<'buf> {
   }
 
   #[inline]
-  pub fn base(&self) -> NodeDefinition<'buf> {
-    self.base
+  pub fn base(&self) -> &NodeDefinition {
+    &self.base
   }
 
   #[inline]
-  pub fn attributes(&self) -> &VecDeque<NodeDefinition<'buf>> {
+  pub fn attributes(&self) -> &VecDeque<NodeDefinition> {
     &self.attributes
   }
 
   #[inline]
-  pub fn attributes_mut(&mut self) -> &mut VecDeque<NodeDefinition<'buf>> {
+  pub fn attributes_mut(&mut self) -> &mut VecDeque<NodeDefinition> {
     &mut self.attributes
   }
 
   #[inline]
-  pub fn children(&self) -> &VecDeque<NodeCollection<'buf>> {
+  pub fn children(&self) -> &VecDeque<NodeCollection> {
     &self.children
   }
 
   #[inline]
-  pub fn children_mut(&mut self) -> &mut VecDeque<NodeCollection<'buf>> {
+  pub fn children_mut(&mut self) -> &mut VecDeque<NodeCollection> {
     &mut self.children
   }
 
@@ -139,7 +139,7 @@ impl<'a, T> fmt::Debug for VecDisplayDebugWrapper<'a, T>
   }
 }
 
-impl<'buf> fmt::Display for NodeCollection<'buf> {
+impl fmt::Display for NodeCollection {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
     let mut d = f.debug_struct("NodeCollection");
 

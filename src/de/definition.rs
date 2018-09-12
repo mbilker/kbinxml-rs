@@ -7,12 +7,12 @@ use node::{Marshal, NodeCollection, NodeDefinition};
 use node_types::StandardType;
 use value::Value;
 
-pub struct NodeDefinitionDeserializer<'de> {
-  definition: NodeDefinition<'de>,
+pub struct NodeDefinitionDeserializer<'a> {
+  definition: &'a NodeDefinition,
 }
 
-impl<'de> NodeDefinitionDeserializer<'de> {
-  pub fn new(definition: NodeDefinition<'de>) -> Self {
+impl<'a> NodeDefinitionDeserializer<'a> {
+  pub fn new(definition: &'a NodeDefinition) -> Self {
     trace!("NodeDefinitionDeserializer::new(definition: {})", definition);
 
     Self { definition }
@@ -38,7 +38,7 @@ macro_rules! auto_deserialize {
   };
 }
 
-impl<'de> de::Deserializer<'de> for NodeDefinitionDeserializer<'de> {
+impl<'de, 'a> de::Deserializer<'de> for NodeDefinitionDeserializer<'a> {
   type Error = Error;
 
   fn is_human_readable(&self) -> bool {
@@ -55,7 +55,7 @@ impl<'de> de::Deserializer<'de> for NodeDefinitionDeserializer<'de> {
     // Construct a shim `NodeCollection` for `Seq` if we are deserializing an
     // array value
     if is_array {
-      let mut collection = NodeCollection::new(self.definition);
+      let mut collection = NodeCollection::new(self.definition.clone());
       return visitor.visit_seq(Seq::new(&mut collection, true)?);
     }
 

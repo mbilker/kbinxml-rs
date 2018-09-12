@@ -1,5 +1,6 @@
 use std::result::Result as StdResult;
 
+use bytes::Bytes;
 use serde::de::{self, Deserialize, Visitor};
 
 use error::{Error, KbinErrorKind};
@@ -18,8 +19,8 @@ use self::structure::Struct;
 
 pub type Result<T> = StdResult<T, Error>;
 
-pub struct Deserializer<'de> {
-  collection: NodeCollection<'de>,
+pub struct Deserializer {
+  collection: NodeCollection,
 }
 
 pub fn from_bytes<'a, T>(input: &'a [u8]) -> Result<T>
@@ -30,16 +31,16 @@ pub fn from_bytes<'a, T>(input: &'a [u8]) -> Result<T>
   Ok(t)
 }
 
-impl<'de> Deserializer<'de> {
-  pub fn new(input: &'de [u8]) -> Result<Self> {
-    let mut reader = Reader::new(input)?;
+impl Deserializer {
+  pub fn new(input: &[u8]) -> Result<Self> {
+    let mut reader = Reader::new(Bytes::from(input))?;
     let collection = NodeCollection::from_iter(&mut reader).ok_or(KbinErrorKind::InvalidState)?;
 
     Ok(Self { collection })
   }
 }
 
-impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
+impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer {
   type Error = Error;
 
   fn is_human_readable(&self) -> bool {
