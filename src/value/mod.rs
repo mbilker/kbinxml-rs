@@ -309,7 +309,7 @@ macro_rules! tuple {
       Ok(value)
     }
 
-    fn to_bytes_inner(self, output: &mut Vec<u8>) -> Result<(), KbinError> {
+    fn to_bytes_inner(&self, output: &mut Vec<u8>) -> Result<(), KbinError> {
       debug!("Value::to_bytes_inner(self: {:?})", self);
 
       macro_rules! gen_error {
@@ -319,20 +319,20 @@ macro_rules! tuple {
       }
 
       match self {
-        Value::S8(n) => output.push(n as u8),
-        Value::U8(n) => output.push(n),
-        Value::S16(n) => output.write_i16::<BigEndian>(n).context(gen_error!(S16))?,
-        Value::U16(n) => output.write_u16::<BigEndian>(n).context(gen_error!(U16))?,
-        Value::S32(n) => output.write_i32::<BigEndian>(n).context(gen_error!(S32))?,
-        Value::U32(n) => output.write_u32::<BigEndian>(n).context(gen_error!(U32))?,
-        Value::S64(n) => output.write_i64::<BigEndian>(n).context(gen_error!(S64))?,
-        Value::U64(n) => output.write_u64::<BigEndian>(n).context(gen_error!(U64))?,
-        Value::Binary(data) => output.extend_from_slice(&data),
-        Value::Time(n) => output.write_u32::<BigEndian>(n).context(gen_error!(Time))?,
+        Value::S8(ref n) => output.push(*n as u8),
+        Value::U8(ref n) => output.push(*n),
+        Value::S16(ref n) => output.write_i16::<BigEndian>(*n).context(gen_error!(S16))?,
+        Value::U16(ref n) => output.write_u16::<BigEndian>(*n).context(gen_error!(U16))?,
+        Value::S32(ref n) => output.write_i32::<BigEndian>(*n).context(gen_error!(S32))?,
+        Value::U32(ref n) => output.write_u32::<BigEndian>(*n).context(gen_error!(U32))?,
+        Value::S64(ref n) => output.write_i64::<BigEndian>(*n).context(gen_error!(S64))?,
+        Value::U64(ref n) => output.write_u64::<BigEndian>(*n).context(gen_error!(U64))?,
+        Value::Binary(ref data) => output.extend_from_slice(data),
+        Value::Time(ref n) => output.write_u32::<BigEndian>(*n).context(gen_error!(Time))?,
         Value::Ip4(addr) => output.extend_from_slice(&addr.octets()),
-        Value::Float(n) => output.write_f32::<BigEndian>(n).context(gen_error!(Float))?,
-        Value::Double(n) => output.write_f64::<BigEndian>(n).context(gen_error!(Double))?,
-        Value::Boolean(v) => output.push(if v { 0x01 } else { 0x00 }),
+        Value::Float(ref n) => output.write_f32::<BigEndian>(*n).context(gen_error!(Float))?,
+        Value::Double(ref n) => output.write_f64::<BigEndian>(*n).context(gen_error!(Double))?,
+        Value::Boolean(ref v) => output.push(if *v { 0x01 } else { 0x00 }),
         Value::Array(_, values) => {
           for value in values {
             value.to_bytes_inner(output)?;
@@ -428,11 +428,16 @@ macro_rules! construct_types {
         ]
       }
 
-      pub fn to_bytes(self) -> Result<Vec<u8>, KbinError> {
+      pub fn to_bytes(&self) -> Result<Vec<u8>, KbinError> {
         let mut output = Vec::new();
         self.to_bytes_inner(&mut output)?;
 
         Ok(output)
+      }
+
+      #[inline]
+      pub fn to_bytes_into(&self, output: &mut Vec<u8>) -> Result<(), KbinError> {
+        self.to_bytes_inner(output)
       }
 
       pub fn standard_type(&self) -> StandardType {
@@ -448,17 +453,24 @@ macro_rules! construct_types {
         }
       }
 
-      pub fn as_i8(&self) -> Option<i8> {
+      pub fn as_i8(&self) -> Result<i8, KbinError> {
         match self {
-          Value::S8(ref n) => Some(*n),
-          _ => None,
+          Value::S8(ref n) => Ok(*n),
+          value => Err(KbinErrorKind::ValueTypeMismatch(StandardType::S8, value.clone()).into()),
         }
       }
 
-      pub fn as_u8(&self) -> Option<u8> {
+      pub fn as_u8(&self) -> Result<u8, KbinError> {
         match self {
-          Value::U8(ref n) => Some(*n),
-          _ => None,
+          Value::U8(ref n) => Ok(*n),
+          value => Err(KbinErrorKind::ValueTypeMismatch(StandardType::U8, value.clone()).into()),
+        }
+      }
+
+      pub fn as_attribute(self) -> Result<String, KbinError> {
+        match self {
+          Value::Attribute(s) => Ok(s),
+          value => Err(KbinErrorKind::ValueTypeMismatch(StandardType::Attribute, value).into()),
         }
       }
     }

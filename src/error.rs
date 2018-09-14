@@ -5,6 +5,7 @@ use std::string::FromUtf8Error;
 
 use failure::{Backtrace, Compat, Context, Fail};
 use serde::{de, ser};
+use value::Value;
 
 use node_types::{KbinType, StandardType};
 
@@ -107,10 +108,13 @@ pub enum KbinErrorKind {
   #[fail(display = "Type mismatch, expected: {}, found: {}", _0, _1)]
   TypeMismatch(StandardType, StandardType),
 
+  #[fail(display = "Value mismatch, expected {}, but found {:?}", _0, _1)]
+  ValueTypeMismatch(StandardType, Value),
+
   #[fail(display = "Invalid input for boolean: {}", _0)]
   InvalidBooleanInput(u8),
 
-  #[fail(display = "Invalid node type for operation: {:?}", _0)]
+  #[fail(display = "Invalid node type {:?} for operation", _0)]
   InvalidNodeType(StandardType),
 
   #[fail(display = "Invalid state")]

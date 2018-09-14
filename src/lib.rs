@@ -48,7 +48,7 @@ pub use options::Options;
 pub use de::from_bytes;
 pub use ser::to_bytes;
 pub use value::Value;
-pub use writer::Writer;
+pub use writer::{Writer, Writeable};
 
 const SIGNATURE: u8 = 0xA0;
 
@@ -161,12 +161,16 @@ pub fn node_from_binary(input: Bytes) -> Result<(Node, EncodingType)> {
   Ok((node, encoding))
 }
 
-pub fn to_binary(input: &Element) -> Result<Vec<u8>> {
+pub fn to_binary<T>(input: &T) -> Result<Vec<u8>>
+  where T: Writeable<T>
+{
   let mut writer = Writer::new();
   writer.to_binary(input)
 }
 
-pub fn to_binary_with_options(options: Options, input: &Element) -> Result<Vec<u8>> {
+pub fn to_binary_with_options<T>(options: Options, input: &T) -> Result<Vec<u8>>
+  where T: Writeable<T>
+{
   let mut writer = Writer::with_options(options);
   writer.to_binary(input)
 }
