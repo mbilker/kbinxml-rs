@@ -28,6 +28,7 @@ mod options;
 mod printer;
 mod reader;
 mod sixbit;
+mod to_element;
 mod value;
 mod writer;
 
@@ -47,6 +48,7 @@ pub use node::{ExtraNodes, Node, NodeCollection};
 pub use options::Options;
 pub use de::from_bytes;
 pub use ser::to_bytes;
+pub use to_element::ToElement;
 pub use value::Value;
 pub use writer::{Writer, Writeable};
 
