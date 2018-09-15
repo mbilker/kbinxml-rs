@@ -17,6 +17,35 @@ pub use self::definition::{Key, NodeData, NodeDefinition};
 pub use self::extra::ExtraNodes;
 pub use self::marshal::{Marshal, MarshalDeserializer};
 
+/*
+match children.entry(key) {
+  Entry::Occupied(mut entry) => {
+    match entry.get_mut() {
+      child @ Child::Single(_) => {
+        let old = mem::replace(child, Child::Multiple(Vec::with_capacity(2)));
+        let node = match old {
+          Child::Single(node) => node,
+          Child::Multiple(_) => panic!("`old` was `Child::Multiple` after checking"),
+        };
+        match child {
+          Child::Multiple(ref mut nodes) => {
+            nodes.push(node);
+            nodes.push(value);
+          },
+          _ => panic!("Invalid result of node swap"),
+        };
+      },
+      Child::Multiple(ref mut nodes) => {
+        nodes.push(value);
+      },
+    };
+  },
+  Entry::Vacant(entry) => {
+    entry.insert(Child::Single(value));
+  },
+};
+*/
+
 #[derive(Clone, Default, PartialEq)]
 pub struct Node {
   key: String,
@@ -79,8 +108,19 @@ impl Node {
   }
 
   #[inline]
+  pub fn children_mut(&mut self) -> Option<&mut Vec<Node>> {
+    self.children.as_mut()
+  }
+
+  #[inline]
   pub fn value(&self) -> Option<&Value> {
     self.value.as_ref()
+  }
+
+  pub fn attr(&self, key: &str) -> Option<&str> {
+    self.attributes().and_then(|attributes| {
+      attributes.get(key).map(String::as_str)
+    })
   }
 
   pub fn into_key_and_value(self) -> (String, Option<Value>) {
@@ -91,46 +131,48 @@ impl Node {
     self.key = key;
   }
 
-  pub fn set_attr(&mut self, key: String, value: String) -> Option<String> {
+  pub fn set_attr<K, V>(&mut self, key: K, value: V) -> Option<String>
+    where K: Into<String>,
+          V: Into<String>
+  {
     let attributes = self.attributes.get_or_insert_with(Default::default);
-    attributes.insert(key, value)
+    attributes.insert(key.into(), value.into())
   }
 
   pub fn append_child(&mut self, value: Node) {
     let children = self.children.get_or_insert_with(Default::default);
     children.push(value);
-
-    /*
-    match children.entry(key) {
-      Entry::Occupied(mut entry) => {
-        match entry.get_mut() {
-          child @ Child::Single(_) => {
-            let old = mem::replace(child, Child::Multiple(Vec::with_capacity(2)));
-            let node = match old {
-              Child::Single(node) => node,
-              Child::Multiple(_) => panic!("`old` was `Child::Multiple` after checking"),
-            };
-            match child {
-              Child::Multiple(ref mut nodes) => {
-                nodes.push(node);
-                nodes.push(value);
-              },
-              _ => panic!("Invalid result of node swap"),
-            };
-          },
-          Child::Multiple(ref mut nodes) => {
-            nodes.push(value);
-          },
-        };
-      },
-      Entry::Vacant(entry) => {
-        entry.insert(Child::Single(value));
-      },
-    };
-    */
   }
 
   pub fn set_value(&mut self, value: Option<Value>) -> Option<Value> {
     mem::replace(&mut self.value, value)
+  }
+
+  pub fn get_first(&self, key: &str) -> Option<&Node> {
+    if let Some(ref children) = self.children {
+      for node in children {
+        if node.key == key {
+          return Some(node);
+        }
+      }
+
+      None
+    } else {
+      None
+    }
+  }
+
+  pub fn get_first_mut(&mut self, key: &str) -> Option<&mut Node> {
+    if let Some(ref mut children) = self.children {
+      for node in children {
+        if node.key == key {
+          return Some(node);
+        }
+      }
+
+      None
+    } else {
+      None
+    }
   }
 }

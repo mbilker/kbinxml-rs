@@ -440,6 +440,11 @@ macro_rules! construct_types {
         self.to_bytes_inner(output)
       }
 
+      #[inline]
+      pub fn array_as_string(values: &[Value]) -> String {
+        BorrowedValueArray(values).to_string()
+      }
+
       pub fn standard_type(&self) -> StandardType {
         match *self {
           $(
@@ -564,6 +569,22 @@ impl fmt::Debug for Value {
   }
 }
 
+/// A separate wrapper struct so `Value::Array` can be formatted by
+/// `<Value as fmt::Display>` and `Value::array_as_string`
+struct BorrowedValueArray<'a>(&'a [Value]);
+
+impl<'a> fmt::Display for BorrowedValueArray<'a> {
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    for (i, v) in self.0.iter().enumerate() {
+      if i > 0 {
+        f.write_str(" ")?;
+      }
+      fmt::Display::fmt(v, f)?;
+    }
+    Ok(())
+  }
+}
+
 impl fmt::Display for Value {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
     macro_rules! display_value {
@@ -612,15 +633,7 @@ impl fmt::Display for Value {
             true => f.write_str("1"),
             false => f.write_str("0"),
           },
-          Value::Array(_, values) => {
-            for (i, v) in values.iter().enumerate() {
-              if i > 0 {
-                f.write_str(" ")?;
-              }
-              fmt::Display::fmt(v, f)?;
-            }
-            Ok(())
-          },
+          Value::Array(_, values) => BorrowedValueArray(&values).fmt(f),
           Value::Node(_) => Ok(()),
         }
       };

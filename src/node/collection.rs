@@ -7,6 +7,13 @@ use node::{Node, NodeDefinition};
 use node_types::StandardType;
 use value::Value;
 
+fn parse_index(s: &str) -> Option<usize> {
+  if s.starts_with('+') || (s.starts_with('0') && s.len() != 1) {
+    return None;
+  }
+  s.parse().ok()
+}
+
 /// A collection of node definitions (`NodeDefinition`)
 #[derive(Debug)]
 pub struct NodeCollection {
@@ -108,6 +115,39 @@ impl NodeCollection {
     }
 
     Ok(node)
+  }
+
+  pub fn pointer<'a>(&'a self, pointer: &str) -> Option<&'a NodeCollection> {
+    if pointer == "" {
+      return Some(self);
+    }
+    if !pointer.starts_with('/') {
+      return None;
+    }
+    let tokens = pointer
+      .split('/')
+      .skip(1)
+      .map(|x| x.replace("~1", "/").replace("~0", "~"));
+    let mut target = self;
+
+    for token in tokens {
+      let target_opt = if let Some(index) = parse_index(&token) {
+        eprintln!("index: {}", index);
+        target.children().get(index)
+      } else {
+        eprintln!("token: {:?}", token);
+        target.children().iter().find(|ref child| {
+          child.base().key().ok().and_then(|x| x).expect("key not parseable") == token
+        })
+      };
+
+      if let Some(t) = target_opt {
+        target = t;
+      } else {
+        return None;
+      }
+    }
+    Some(target)
   }
 }
 
