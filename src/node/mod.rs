@@ -1,4 +1,5 @@
 use std::fmt;
+use std::iter::IntoIterator;
 use std::mem;
 
 use indexmap::IndexMap;
@@ -46,6 +47,19 @@ match children.entry(key) {
 };
 */
 
+// The attributes argument is very hard to generalize
+fn convert_attributes(attrs: &[(&str, &str)]) -> IndexMap<String, String> {
+  let mut attributes = IndexMap::with_capacity(attrs.len());
+  for (key, value) in attrs.iter() {
+    attributes.insert(String::from(*key), String::from(*value));
+  }
+  attributes
+}
+
+pub struct OptionIterator<T: IntoIterator> {
+  inner: Option<T::IntoIter>,
+}
+
 #[derive(Clone, Default, PartialEq)]
 pub struct Node {
   key: String,
@@ -74,19 +88,69 @@ impl fmt::Debug for Node {
 }
 
 impl Node {
-  pub fn new(key: String) -> Self {
+  pub fn new<K>(key: K) -> Self
+    where K: Into<String>
+  {
     Self {
-      key,
+      key: key.into(),
       attributes: None,
       children: None,
       value: None,
     }
   }
 
-  pub fn with_value(key: String, value: Value) -> Self {
+  pub fn with_attrs<K>(key: K, attrs: &[(&str, &str)]) -> Self
+    where K: Into<String>
+  {
     Self {
-      key,
+      key: key.into(),
+      attributes: Some(convert_attributes(attrs)),
+      children: None,
+      value: None,
+    }
+  }
+
+  pub fn with_value<K>(key: K, value: Value) -> Self
+    where K: Into<String>
+  {
+    Self {
+      key: key.into(),
       attributes: None,
+      children: None,
+      value: Some(value),
+    }
+  }
+
+  pub fn with_nodes<K, N>(key: K, nodes: N) -> Self
+    where K: Into<String>,
+          N: Into<Vec<Node>>
+  {
+    Self {
+      key: key.into(),
+      attributes: None,
+      children: Some(nodes.into()),
+      value: None,
+    }
+  }
+
+  pub fn with<K, N>(key: K, attrs: &[(&str, &str)], nodes: N) -> Self
+    where K: Into<String>,
+          N: Into<Vec<Node>>
+  {
+    Self {
+      key: key.into(),
+      attributes: Some(convert_attributes(attrs)),
+      children: Some(nodes.into()),
+      value: None,
+    }
+  }
+
+  pub fn with_attrs_value<K>(key: K, attrs: &[(&str, &str)], value: Value) -> Self
+    where K: Into<String>
+  {
+    Self {
+      key: key.into(),
+      attributes: Some(convert_attributes(attrs)),
       children: None,
       value: Some(value),
     }
@@ -115,6 +179,11 @@ impl Node {
   #[inline]
   pub fn value(&self) -> Option<&Value> {
     self.value.as_ref()
+  }
+
+  #[inline]
+  pub fn children_iter_mut(&mut self) -> OptionIterator<&mut Vec<Node>> {
+    OptionIterator::new(self.children_mut())
   }
 
   pub fn attr(&self, key: &str) -> Option<&str> {
@@ -148,31 +217,62 @@ impl Node {
     mem::replace(&mut self.value, value)
   }
 
-  pub fn get_first(&self, key: &str) -> Option<&Node> {
+  pub fn has(&self, key: &str) -> bool {
+    if let Some(ref children) = self.children {
+      for node in children {
+        if node.key == key {
+          return true;
+        }
+      }
+    }
+
+    false
+  }
+
+  pub fn get_child(&self, key: &str) -> Option<&Node> {
     if let Some(ref children) = self.children {
       for node in children {
         if node.key == key {
           return Some(node);
         }
       }
-
-      None
-    } else {
-      None
     }
+
+    None
   }
 
-  pub fn get_first_mut(&mut self, key: &str) -> Option<&mut Node> {
+  pub fn get_child_mut(&mut self, key: &str) -> Option<&mut Node> {
     if let Some(ref mut children) = self.children {
       for node in children {
         if node.key == key {
           return Some(node);
         }
       }
+    }
 
-      None
-    } else {
-      None
+    None
+  }
+}
+
+impl<T> OptionIterator<T>
+  where T: IntoIterator
+{
+  pub fn new(inner: Option<T>) -> Self {
+    OptionIterator {
+      inner: inner.map(|inner| inner.into_iter()),
+    }
+  }
+}
+
+impl<T> Iterator for OptionIterator<T>
+  where T: IntoIterator
+{
+  type Item = T::Item;
+
+  fn next(&mut self) -> Option<Self::Item> {
+    match self.inner {
+      Some(ref mut inner) => inner.next(),
+      None => None,
     }
   }
 }

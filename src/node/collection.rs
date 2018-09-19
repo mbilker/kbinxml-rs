@@ -15,7 +15,7 @@ fn parse_index(s: &str) -> Option<usize> {
 }
 
 /// A collection of node definitions (`NodeDefinition`)
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct NodeCollection {
   base: NodeDefinition,
   attributes: VecDeque<NodeDefinition>,
