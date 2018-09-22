@@ -18,7 +18,13 @@ pub(crate) fn strip_trailing_null_bytes<'a>(data: &'a [u8]) -> &'a [u8] {
   while index > 0 && index < len && data[index] == 0x00 {
     index -= 1;
   }
-  &data[..=index]
+
+  // Handle case where the buffer is only a null byte
+  if index == 0 && data.len() == 1 && data[index] == 0x00 {
+    &[]
+  } else {
+    &data[..=index]
+  }
 }
 
 pub struct ByteBufferRead {
