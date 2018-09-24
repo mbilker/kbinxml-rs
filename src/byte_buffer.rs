@@ -75,7 +75,7 @@ impl ByteBufferRead {
     let end = self.check_read_size(start, size)?;
 
     let data = self.buffer.slice(start, end);
-    trace!("buf_read_size => index: {}, size: {}, data: 0x{:02x?}", self.cursor.position(), data.len(), data);
+    trace!("buf_read_size => index: {}, size: {}, data: 0x{:02x?}", self.cursor.position(), data.len(), &*data);
 
     self.cursor.seek(SeekFrom::Current(size as i64)).context(KbinErrorKind::DataRead(size))?;
 
@@ -94,7 +94,7 @@ impl ByteBufferRead {
 
   pub fn get(&mut self, size: u32) -> Result<Bytes> {
     let data = self.buf_read_size(size as usize)?;
-    trace!("get => size: {}, data: 0x{:02x?}", size, data);
+    trace!("get => size: {}, data: 0x{:02x?}", size, &*data);
 
     Ok(data)
   }

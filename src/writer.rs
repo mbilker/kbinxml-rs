@@ -113,8 +113,6 @@ impl Writeable<Element> for Element {
 
       StandardType::Binary => {
         let data: Vec<u8> = text.from_hex().context(KbinErrorKind::HexError)?;
-        trace!("data: 0x{:02x?}", data);
-
         let size = (data.len() as u32) * (node_type.size as u32);
         data_buf.write_u32::<BigEndian>(size).context(KbinErrorKind::DataWrite("binary node size"))?;
         data_buf.write_all(&data).context(KbinErrorKind::DataWrite("binary"))?;
@@ -181,6 +179,13 @@ impl Writeable<NodeCollection> for NodeCollection {
     let array_mask = if is_array { ARRAY_MASK } else { 0 };
     let name = input.base().key()?.ok_or(KbinErrorKind::InvalidState)?;
 
+    debug!("NodeCollection write_node => name: {}, type: {:?}, type_size: {}, type_count: {}, is_array: {}",
+      name,
+      node_type,
+      node_type.size,
+      node_type.count,
+      is_array);
+
     node_buf.write_u8(node_type.id | array_mask).context(KbinErrorKind::DataWrite(node_type.name))?;
     match options.compression {
       Compression::Compressed => Sixbit::pack(&mut **node_buf, &name)?,
@@ -200,6 +205,8 @@ impl Writeable<NodeCollection> for NodeCollection {
     for attr in input.attributes() {
       let key = attr.key()?.ok_or(KbinErrorKind::InvalidState)?;
       let value = attr.value_bytes().ok_or(KbinErrorKind::InvalidState)?;
+
+      trace!("NodeCollection write_node => attr: {}, value: 0x{:02x?}", key, value);
 
       data_buf.buf_write(value)?;
 
@@ -235,6 +242,13 @@ impl Writeable<Node> for Node {
     };
     let array_mask = if is_array { ARRAY_MASK } else { 0 };
 
+    debug!("Node write_node => name: {}, type: {:?}, type_size: {}, type_count: {}, is_array: {}",
+      input.key(),
+      node_type,
+      node_type.size,
+      node_type.count,
+      is_array);
+
     node_buf.write_u8(node_type.id | array_mask).context(KbinErrorKind::DataWrite(node_type.name))?;
     match options.compression {
       Compression::Compressed => Sixbit::pack(&mut **node_buf, &input.key())?,
@@ -252,6 +266,8 @@ impl Writeable<Node> for Node {
 
     if let Some(attributes) = input.attributes() {
       for (key, value) in attributes {
+        trace!("Node write_node => attr: {}, value: {}", key, value);
+
         data_buf.write_str(options.encoding, value)?;
 
         node_buf.write_u8(StandardType::Attribute.id).context(KbinErrorKind::DataWrite(StandardType::Attribute.name))?;
