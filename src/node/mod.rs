@@ -7,16 +7,22 @@ use indexmap::IndexMap;
 use value::Value;
 
 mod collection;
-pub(crate) mod de;
 mod definition;
-mod extra;
-mod marshal;
-mod ser;
 
 pub use self::collection::NodeCollection;
 pub use self::definition::{Key, NodeData, NodeDefinition};
-pub use self::extra::ExtraNodes;
-pub use self::marshal::{Marshal, MarshalDeserializer};
+
+cfg_if! {
+  if #[cfg(feature = "serde")] {
+    pub(crate) mod de;
+    mod extra;
+    mod marshal;
+    mod ser;
+
+    pub use self::marshal::{Marshal, MarshalDeserializer};
+    pub use self::extra::ExtraNodes;
+  }
+}
 
 /*
 match children.entry(key) {

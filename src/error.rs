@@ -1,10 +1,8 @@
-use std::error::Error as StdError;
-use std::fmt::{self, Display};
+use std::fmt;
 use std::result::Result as StdResult;
 use std::string::FromUtf8Error;
 
-use failure::{Backtrace, Compat, Context, Fail};
-use serde::{de, ser};
+use failure::{Backtrace, Context, Fail};
 use value::Value;
 
 use node_types::{KbinType, StandardType};
@@ -163,56 +161,66 @@ impl From<FromUtf8Error> for KbinError {
   }
 }
 
-#[derive(Clone, Debug)]
-pub enum Error {
-  Message(String),
-  StaticMessage(&'static str),
+cfg_if! {
+  if #[cfg(feature = "serde")] {
+    use std::error::Error as StdError;
+    use std::fmt::Display;
 
-  Wrapped(Compat<KbinError>),
-}
+    use failure::Compat;
+    use serde::{de, ser};
 
-impl ser::Error for Error {
-  fn custom<T: Display>(msg: T) -> Self {
-    Error::Message(msg.to_string())
-  }
-}
+    #[derive(Clone, Debug)]
+    pub enum Error {
+      Message(String),
+      StaticMessage(&'static str),
 
-impl de::Error for Error {
-  fn custom<T: Display>(msg: T) -> Self {
-    Error::Message(msg.to_string())
-  }
-}
-
-impl Display for Error {
-  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    f.write_str(StdError::description(self))
-  }
-}
-
-impl StdError for Error {
-  fn description(&self) -> &str {
-    match *self {
-      Error::Message(ref msg) => msg,
-      Error::StaticMessage(ref msg) => msg,
-      Error::Wrapped(ref err) => err.description(),
+      Wrapped(Compat<KbinError>),
     }
-  }
-}
 
-impl From<KbinError> for Error {
-  fn from(inner: KbinError) -> Self {
-    Error::Wrapped(inner.compat())
-  }
-}
+    impl ser::Error for Error {
+      fn custom<T: Display>(msg: T) -> Self {
+        Error::Message(msg.to_string())
+      }
+    }
 
-impl From<KbinErrorKind> for Error {
-  fn from(inner: KbinErrorKind) -> Self {
-    Error::Wrapped(KbinError::from(inner).compat())
-  }
-}
+    impl de::Error for Error {
+      fn custom<T: Display>(msg: T) -> Self {
+        Error::Message(msg.to_string())
+      }
+    }
 
-impl From<Context<KbinErrorKind>> for Error {
-  fn from(inner: Context<KbinErrorKind>) -> Self {
-    Error::Wrapped(KbinError::from(inner).compat())
+    impl Display for Error {
+      fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str(StdError::description(self))
+      }
+    }
+
+    impl StdError for Error {
+      fn description(&self) -> &str {
+        match *self {
+          Error::Message(ref msg) => msg,
+          Error::StaticMessage(ref msg) => msg,
+          Error::Wrapped(ref err) => err.description(),
+        }
+      }
+    }
+
+    impl From<KbinError> for Error {
+      fn from(inner: KbinError) -> Self {
+        Error::Wrapped(inner.compat())
+      }
+    }
+
+    impl From<KbinErrorKind> for Error {
+      fn from(inner: KbinErrorKind) -> Self {
+        Error::Wrapped(KbinError::from(inner).compat())
+      }
+    }
+
+    impl From<Context<KbinErrorKind>> for Error {
+      fn from(inner: Context<KbinErrorKind>) -> Self {
+        Error::Wrapped(KbinError::from(inner).compat())
+      }
+    }
   }
 }

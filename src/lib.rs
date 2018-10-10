@@ -6,12 +6,11 @@ extern crate encoding;
 extern crate indexmap;
 extern crate minidom;
 extern crate rustc_hex;
-extern crate serde_bytes;
 
+#[macro_use] extern crate cfg_if;
 #[macro_use] extern crate failure;
 #[macro_use] extern crate lazy_static;
 #[macro_use] extern crate log;
-#[macro_use] extern crate serde;
 
 use std::fmt::Write as FmtWrite;
 
@@ -32,9 +31,6 @@ mod to_element;
 mod value;
 mod writer;
 
-mod de;
-mod ser;
-
 use node::NodeDefinition;
 use node_types::StandardType;
 
@@ -44,13 +40,26 @@ pub use encoding_type::EncodingType;
 pub use printer::Printer;
 pub use reader::Reader;
 pub use error::{KbinError, KbinErrorKind, Result};
-pub use node::{ExtraNodes, Node, NodeCollection};
+pub use node::{Node, NodeCollection};
 pub use options::Options;
-pub use de::from_bytes;
-pub use ser::to_bytes;
 pub use to_element::ToElement;
 pub use value::Value;
 pub use writer::{Writer, Writeable};
+
+cfg_if! {
+  if #[cfg(feature = "serde")] {
+    extern crate serde_bytes;
+
+    #[macro_use] extern crate serde;
+
+    mod de;
+    mod ser;
+
+    pub use de::from_bytes;
+    pub use node::ExtraNodes;
+    pub use ser::to_bytes;
+  }
+}
 
 const SIGNATURE: u8 = 0xA0;
 

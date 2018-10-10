@@ -5,16 +5,22 @@ use std::str::FromStr;
 use byteorder::{BigEndian, ByteOrder, WriteBytesExt};
 use failure::{Fail, ResultExt};
 use rustc_hex::FromHex;
-use serde::de::{Deserialize, Deserializer, DeserializeSeed};
-use serde_bytes::ByteBuf;
 
 use error::{KbinError, KbinErrorKind};
 use node::Node;
-use node::de::NodeSeed;
 use node_types::{self, StandardType};
 
-pub(crate) mod de;
-mod ser;
+cfg_if! {
+  if #[cfg(feature = "serde")] {
+    use serde::de::{Deserialize, Deserializer, DeserializeSeed};
+    use serde_bytes::ByteBuf;
+
+    pub(crate) mod de;
+    mod ser;
+
+    use node::de::NodeSeed;
+  }
+}
 
 macro_rules! tuple {
   (
@@ -480,6 +486,7 @@ macro_rules! construct_types {
       }
     }
 
+    #[cfg(feature = "serde")]
     impl<'de> DeserializeSeed<'de> for StandardType {
       type Value = Value;
 
@@ -509,6 +516,7 @@ impl From<Vec<u8>> for Value {
   }
 }
 
+#[cfg(feature = "serde")]
 impl From<ByteBuf> for Value {
   fn from(value: ByteBuf) -> Value {
     Value::Binary(value.into())
