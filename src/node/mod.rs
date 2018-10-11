@@ -24,35 +24,6 @@ cfg_if! {
   }
 }
 
-/*
-match children.entry(key) {
-  Entry::Occupied(mut entry) => {
-    match entry.get_mut() {
-      child @ Child::Single(_) => {
-        let old = mem::replace(child, Child::Multiple(Vec::with_capacity(2)));
-        let node = match old {
-          Child::Single(node) => node,
-          Child::Multiple(_) => panic!("`old` was `Child::Multiple` after checking"),
-        };
-        match child {
-          Child::Multiple(ref mut nodes) => {
-            nodes.push(node);
-            nodes.push(value);
-          },
-          _ => panic!("Invalid result of node swap"),
-        };
-      },
-      Child::Multiple(ref mut nodes) => {
-        nodes.push(value);
-      },
-    };
-  },
-  Entry::Vacant(entry) => {
-    entry.insert(Child::Single(value));
-  },
-};
-*/
-
 // The attributes argument is very hard to generalize
 fn convert_attributes(attrs: &[(&str, &str)]) -> IndexMap<String, String> {
   let mut attributes = IndexMap::with_capacity(attrs.len());
