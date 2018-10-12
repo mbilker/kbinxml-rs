@@ -478,6 +478,20 @@ macro_rules! construct_types {
         }
       }
 
+      pub fn as_str(&self) -> Result<&str, KbinError> {
+        match self {
+          Value::String(ref s) => Ok(s),
+          value => Err(KbinErrorKind::ValueTypeMismatch(StandardType::String, value.clone()).into()),
+        }
+      }
+
+      pub fn as_string(self) -> Result<String, KbinError> {
+        match self {
+          Value::String(s) => Ok(s),
+          value => Err(KbinErrorKind::ValueTypeMismatch(StandardType::String, value).into()),
+        }
+      }
+
       pub fn as_attribute(self) -> Result<String, KbinError> {
         match self {
           Value::Attribute(s) => Ok(s),
