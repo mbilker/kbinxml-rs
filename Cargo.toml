@@ -1,6 +1,6 @@
 [package]
 name = "kbinxml"
-version = "0.12.0"
+version = "0.12.1"
 authors = ["Matt Bilker <me@mbilker.us>"]
 
 [dependencies]
@@ -17,9 +17,9 @@ pretty_env_logger = "0.2.3"
 quick-xml = "0.12.1"
 rustc-hex = "2.0.1"
 
-serde = { version = "1.0.69", optional = true }
+serde = { version = "1.0.79", optional = true }
 serde_bytes = { version = "0.10.4", optional = true }
-serde_derive = { version = "1.0.69", optional = true }
+serde_derive = { version = "1.0.79", optional = true }
 
 [features]
 serde-1 = ["serde", "serde_bytes", "serde_derive", "indexmap/serde-1"]
