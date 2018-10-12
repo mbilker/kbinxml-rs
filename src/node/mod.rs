@@ -33,6 +33,13 @@ fn convert_attributes(attrs: &[(&str, &str)]) -> IndexMap<String, String> {
   attributes
 }
 
+fn parse_index(s: &str) -> Option<usize> {
+  if s.starts_with('+') || (s.starts_with('0') && s.len() != 1) {
+    return None;
+  }
+  s.parse().ok()
+}
+
 pub struct OptionIterator<T: IntoIterator> {
   inner: Option<T::IntoIter>,
 }
@@ -228,6 +235,36 @@ impl Node {
     }
 
     None
+  }
+
+  pub fn pointer(&self, pointer: &[&str]) -> Option<&Node> {
+    if pointer.is_empty() {
+      return Some(self);
+    }
+    let mut target = self;
+
+    for token in pointer {
+      let children = match target.children {
+        Some(ref v) => v,
+        None => return None,
+      };
+
+      let target_opt = if let Some(index) = parse_index(&token) {
+        eprintln!("index: {}", index);
+        children.get(index)
+      } else {
+        children.iter().find(|ref child| {
+          child.key() == *token
+        })
+      };
+
+      if let Some(t) = target_opt {
+        target = t;
+      } else {
+        return None;
+      }
+    }
+    Some(target)
   }
 }
 
