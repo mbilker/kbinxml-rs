@@ -10,7 +10,7 @@ use node_types::StandardType;
 use sixbit::{Sixbit, SixbitSize};
 use value::Value;
 
-#[derive(Clone)]
+#[derive(Clone, Eq)]
 pub enum Key {
   Compressed {
     size: SixbitSize,
@@ -22,7 +22,7 @@ pub enum Key {
   },
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum NodeData {
   Some {
     key: Key,
@@ -31,7 +31,7 @@ pub enum NodeData {
   None,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct NodeDefinition {
   encoding: EncodingType,
   pub node_type: StandardType,
@@ -143,6 +143,35 @@ impl NodeDefinition {
       },
       (node_type, NodeData::None) => {
         Err(KbinErrorKind::InvalidNodeType(node_type).into())
+      },
+    }
+  }
+}
+
+impl PartialEq for Key {
+  fn eq(&self, other: &Key) -> bool {
+    match (self.to_string(), other.to_string()) {
+      (Ok(key1), Ok(key2)) => {
+        key1 == key2
+      },
+      (_, _) => {
+        // If the conversion fails, check if they have the same enum variant
+        // to check if the inner data is equal.
+        match (self, other) {
+          (
+            Key::Compressed { data: data1, .. },
+            Key::Compressed { data: data2, .. },
+          ) => {
+            data1 == data2
+          },
+          (
+            Key::Uncompressed { data: data1, .. },
+            Key::Uncompressed { data: data2, .. },
+          ) => {
+            data1 == data2
+          },
+          (_, _) => false,
+        }
       },
     }
   }

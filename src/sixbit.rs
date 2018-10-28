@@ -20,7 +20,7 @@ lazy_static! {
   };
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct SixbitSize {
   pub sixbit_len: u8,
   pub real_len: usize,
