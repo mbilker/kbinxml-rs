@@ -1,6 +1,6 @@
 [package]
 name = "kbinxml"
-version = "0.13.1"
+version = "0.13.2"
 authors = ["Matt Bilker <me@mbilker.us>"]
 
 [dependencies]
@@ -12,9 +12,9 @@ failure = "0.1.1"
 indexmap = "1.0.1"
 lazy_static = "1.0.0"
 log = "0.4.1"
-minidom = "0.9.0"
+minidom = "0.10.0"
 pretty_env_logger = "0.2.3"
-quick-xml = "0.12.1"
+quick-xml = "0.13.1"
 rustc-hex = "2.0.1"
 
 serde = { version = "1.0.79", optional = true }

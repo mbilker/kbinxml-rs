@@ -117,9 +117,6 @@ impl EncodingType {
   fn encode_with_encoding(encoding: &'static Encoding, input: &str) -> Result<Vec<u8>, KbinError> {
     let (output, actual_encoding, had_unmappable_characters) = encoding.encode(input);
 
-    eprintln!("actual encoding: {:?}", actual_encoding);
-    eprintln!("had unmappable characters: {}", had_unmappable_characters);
-
     if encoding != actual_encoding {
       Err(format_err!("Another encoding was used to encode the output: {:?}", actual_encoding)
         .context(KbinErrorKind::Encoding)
