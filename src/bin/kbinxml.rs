@@ -11,12 +11,11 @@ extern crate quick_xml;
 use std::env;
 use std::fs::File;
 use std::io::{Cursor, Error as IoError, ErrorKind as IoErrorKind, Read, Write, stdout};
-use std::str;
 
 use failure::Fail;
-use kbinxml::{Options, Printer};
+use kbinxml::{NodeCollection, Options, Printer};
 use minidom::Element;
-use quick_xml::Writer;
+use quick_xml::{Reader, Writer};
 
 cfg_if! {
   if #[cfg(feature = "serde")] {
@@ -84,6 +83,34 @@ fn display_buf(buf: &[u8]) -> Result<(), IoError> {
   println!();
 
   Ok(())
+}
+
+fn compare_collections(left: &NodeCollection, right: &NodeCollection) -> bool {
+  if left.base() != right.base() {
+    eprintln!("left.base() != right.base()");
+    eprintln!("left.base(): {:#?}", left.base());
+    eprintln!("right.base(): {:#?}", right.base());
+
+    return false;
+  }
+
+  for (left, right) in left.attributes().iter().zip(right.attributes().iter()) {
+    if left != right {
+      eprintln!("left attribute != right attribute");
+      eprintln!("left: {:#?}", left);
+      eprintln!("right: {:#?}", right);
+
+      return false;
+    }
+  }
+
+  for (left, right) in left.children().iter().zip(right.children().iter()) {
+    if !compare_collections(left, right) {
+      return false;
+    }
+  }
+
+  true
 }
 
 fn compare_slice(left: &[u8], right: &[u8]) {
@@ -206,7 +233,7 @@ fn main() -> std::io::Result<()> {
     if kbinxml::is_binary_xml(&contents) {
       Printer::run(&contents).unwrap();
 
-      let (element, encoding_original) = kbinxml::from_binary(&contents).map_err(display_err)?;
+      let (element, encoding_original) = kbinxml::element_from_binary(&contents).map_err(display_err)?;
       let text_original = to_text(&element)?;
       display_buf(&text_original)?;
 
@@ -216,13 +243,19 @@ fn main() -> std::io::Result<()> {
 
       test_serde_node(&contents)?;
     } else {
-      let contents = str::from_utf8(&contents).expect("Unable to interpret file contents as UTF-8");
-      let element: Element = contents.parse().expect("Unable to construct DOM for input text XML");
+      let mut reader = Reader::from_reader(contents.as_slice());
+      let element = Element::from_reader(&mut reader).expect("Unable to construct DOM for input text XML");
 
       let options = Options::default();
       let buf = kbinxml::to_binary_with_options(options, &element).map_err(display_err)?;
       eprintln!("data: {:02x?}", buf);
-      Printer::run(&buf).unwrap();
+
+      let encoded_collection = Printer::run(&buf).unwrap();
+      let (collection, _encoding) = kbinxml::from_text_xml(&contents).map_err(display_err)?;
+
+      if let Some(encoded_collection) = encoded_collection {
+        compare_collections(&encoded_collection, &collection);
+      }
 
       let mut stdout = stdout();
       stdout.lock().write_all(&buf)?;

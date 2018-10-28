@@ -8,7 +8,7 @@ use reader::Reader;
 pub struct Printer;
 
 impl Printer {
-  pub fn run(input: &[u8]) -> Result<()> {
+  pub fn run(input: &[u8]) -> Result<Option<NodeCollection>> {
     let mut reader = Reader::new(Bytes::from(input))?;
     let mut nodes = Vec::new();
     let mut definitions = Vec::new();
@@ -47,12 +47,12 @@ impl Printer {
       };
     }
 
-    let collection = NodeCollection::from_iter(definitions.into_iter());
+    let collection = NodeCollection::from_iter(&mut definitions.into_iter());
     match collection {
-      Some(collection) => eprintln!("collection: {:#}", collection),
+      Some(ref collection) => eprintln!("collection: {:#}", collection),
       None => eprintln!("collection: {:?}", collection),
     };
 
-    Ok(())
+    Ok(collection)
   }
 }

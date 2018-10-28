@@ -34,12 +34,6 @@ pub enum KbinErrorKind {
   #[fail(display = "Unable to read data size")]
   DataReadSize,
 
-  #[fail(display = "Unable to read 1 byte data")]
-  DataReadOneByte,
-
-  #[fail(display = "Unable to read 2 byte data")]
-  DataReadTwoByte,
-
   #[fail(display = "Unable to read aligned data from data buffer")]
   DataReadAligned,
 
@@ -75,6 +69,9 @@ pub enum KbinErrorKind {
 
   #[fail(display = "Unable to write sixbit string content")]
   SixbitWrite,
+
+  #[fail(display = "No node collection found")]
+  NoNodeCollection,
 
   #[fail(display = "Unable to interpret string as UTF-8")]
   Utf8,
@@ -112,7 +109,7 @@ pub enum KbinErrorKind {
   #[fail(display = "Invalid input for boolean: {}", _0)]
   InvalidBooleanInput(u8),
 
-  #[fail(display = "Invalid node type {:?} for operation", _0)]
+  #[fail(display = "Invalid node type for operation: {:?}", _0)]
   InvalidNodeType(StandardType),
 
   #[fail(display = "Invalid state")]

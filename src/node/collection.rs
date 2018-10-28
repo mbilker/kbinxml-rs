@@ -31,7 +31,15 @@ impl NodeCollection {
     }
   }
 
-  pub fn from_iter<I>(mut iter: I) -> Option<NodeCollection>
+  pub fn with_attributes(base: NodeDefinition, attributes: VecDeque<NodeDefinition>) -> Self {
+    Self {
+      base,
+      attributes,
+      children: VecDeque::with_capacity(0),
+    }
+  }
+
+  pub fn from_iter<I>(iter: &mut I) -> Option<NodeCollection>
     where I: Iterator<Item = NodeDefinition>
   {
     let base = if let Some(def) = iter.next() {
@@ -40,10 +48,10 @@ impl NodeCollection {
       return None;
     };
 
-    NodeCollection::with_base(base, &mut iter)
+    NodeCollection::from_iter_base(base, iter)
   }
 
-  fn with_base<I>(base: NodeDefinition, iter: &mut I) -> Option<NodeCollection>
+  fn from_iter_base<I>(base: NodeDefinition, iter: &mut I) -> Option<NodeCollection>
     where I: Iterator<Item = NodeDefinition>
   {
     let mut attributes = VecDeque::new();
@@ -55,7 +63,7 @@ impl NodeCollection {
           StandardType::Attribute => attributes.push_back(def),
           StandardType::NodeEnd |
           StandardType::FileEnd => break,
-          _ => match NodeCollection::with_base(def, iter) {
+          _ => match NodeCollection::from_iter_base(def, iter) {
             Some(child) => children.push_back(child),
             None => return None,
           },
@@ -75,6 +83,11 @@ impl NodeCollection {
   #[inline]
   pub fn base(&self) -> &NodeDefinition {
     &self.base
+  }
+
+  #[inline]
+  pub fn base_mut(&mut self) -> &mut NodeDefinition {
+    &mut self.base
   }
 
   #[inline]

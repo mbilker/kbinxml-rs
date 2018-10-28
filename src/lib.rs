@@ -2,9 +2,10 @@
 
 extern crate byteorder;
 extern crate bytes;
-extern crate encoding;
+extern crate encoding_rs;
 extern crate indexmap;
 extern crate minidom;
+extern crate quick_xml;
 extern crate rustc_hex;
 
 #[macro_use] extern crate cfg_if;
@@ -27,12 +28,14 @@ mod options;
 mod printer;
 mod reader;
 mod sixbit;
+mod text_reader;
 mod to_element;
 mod value;
 mod writer;
 
 use node::NodeDefinition;
 use node_types::StandardType;
+use text_reader::TextXmlReader;
 
 // Public exports
 pub use compression::Compression;
@@ -142,7 +145,7 @@ fn read_node(reader: &mut Reader, def: NodeDefinition) -> Result<Element> {
   Ok(elem)
 }
 
-pub fn from_binary(input: &[u8]) -> Result<(Element, EncodingType)> {
+pub fn element_from_binary(input: &[u8]) -> Result<(Element, EncodingType)> {
   let mut reader = Reader::new(Bytes::from(input))?;
   let base = reader.read_node_definition()?;
 
@@ -152,24 +155,33 @@ pub fn from_binary(input: &[u8]) -> Result<(Element, EncodingType)> {
   Ok((elem, encoding))
 }
 
-#[inline]
-pub fn node_collection_from_slice(input: &[u8]) -> Result<(NodeCollection, EncodingType)> {
-  node_collection_from_bytes(Bytes::from(input))
-}
-
-pub fn node_collection_from_bytes(input: Bytes) -> Result<(NodeCollection, EncodingType)> {
+pub fn from_binary(input: Bytes) -> Result<(NodeCollection, EncodingType)> {
   let mut reader = Reader::new(input)?;
-  let collection = NodeCollection::from_iter(&mut reader).ok_or(KbinErrorKind::InvalidState)?;
+  let collection = NodeCollection::from_iter(&mut reader).ok_or(KbinErrorKind::NoNodeCollection)?;
   let encoding = reader.encoding();
 
   Ok((collection, encoding))
 }
 
-pub fn node_from_binary(input: Bytes) -> Result<(Node, EncodingType)> {
-  let (collection, encoding) = node_collection_from_bytes(input)?;
-  let node = collection.as_node()?;
+pub fn from_text_xml(input: &[u8]) -> Result<(NodeCollection, EncodingType)> {
+  let mut reader = TextXmlReader::new(input);
+  let collection = reader.as_node_collection()?.ok_or(KbinErrorKind::NoNodeCollection)?;
+  let encoding = reader.encoding();
 
-  Ok((node, encoding))
+  Ok((collection, encoding))
+}
+
+pub fn from_bytes(input: Bytes) -> Result<(NodeCollection, EncodingType)> {
+  if is_binary_xml(&input) {
+    from_binary(input)
+  } else {
+    from_text_xml(&input)
+  }
+}
+
+#[inline]
+pub fn from_slice(input: &[u8]) -> Result<(NodeCollection, EncodingType)> {
+  from_binary(Bytes::from(input))
 }
 
 pub fn to_binary<T>(input: &T) -> Result<Vec<u8>>

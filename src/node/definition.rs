@@ -44,10 +44,10 @@ impl Key {
   fn to_string(&self) -> Result<String, KbinError> {
     match self {
       Key::Compressed { ref size, ref data } => {
-        Ok(Sixbit::unpack(data, *size)?)
+        Sixbit::unpack(data, *size)
       },
       Key::Uncompressed { encoding, ref data } => {
-        Ok(encoding.decode_bytes(data)?)
+        encoding.decode_bytes(data)
       },
     }
   }
@@ -84,6 +84,16 @@ impl NodeDefinition {
   #[inline]
   pub fn node_type_tuple(&self) -> (StandardType, bool) {
     (self.node_type, self.is_array)
+  }
+
+  #[inline]
+  pub fn data<'a>(&'a self) -> &'a NodeData {
+    &self.data
+  }
+
+  #[inline]
+  pub fn data_mut<'a>(&'a mut self) -> &'a mut NodeData {
+    &mut self.data
   }
 
   pub fn key(&self) -> Result<Option<String>, KbinError> {
@@ -180,7 +190,11 @@ impl PartialEq for Key {
 impl fmt::Debug for Key {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
     if let Ok(key) = self.to_string() {
-      write!(f, "\"{}\"", key)
+      let variant = match self {
+        Key::Compressed { .. } => "Compressed",
+        Key::Uncompressed { .. } => "Uncompressed",
+      };
+      write!(f, "{} {{ \"{}\" }}", variant, key)
     } else {
       match self {
         Key::Compressed { ref size, ref data } => {

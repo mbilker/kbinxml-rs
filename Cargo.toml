@@ -1,13 +1,13 @@
 [package]
 name = "kbinxml"
-version = "0.12.1"
+version = "0.13.1"
 authors = ["Matt Bilker <me@mbilker.us>"]
 
 [dependencies]
 byteorder = "1.2.3"
 bytes = "0.4.10"
 cfg-if = "0.1"
-encoding = "0.2"
+encoding_rs = { version = "0.8.6", features = ["simd-accel"] }
 failure = "0.1.1"
 indexmap = "1.0.1"
 lazy_static = "1.0.0"
