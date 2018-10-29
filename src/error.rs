@@ -3,9 +3,10 @@ use std::result::Result as StdResult;
 use std::string::FromUtf8Error;
 
 use failure::{Backtrace, Context, Fail};
-use value::Value;
+use quick_xml::Error as QuickXmlError;
 
 use node_types::{KbinType, StandardType};
+use value::Value;
 
 pub type Result<T> = StdResult<T, KbinError>;
 
@@ -14,7 +15,7 @@ pub struct KbinError {
   inner: Context<KbinErrorKind>,
 }
 
-#[derive(Clone, Debug, Fail)]
+#[derive(Debug, Fail)]
 pub enum KbinErrorKind {
   #[fail(display = "Unable to read {} byte from header", _0)]
   HeaderRead(&'static str),
@@ -106,6 +107,9 @@ pub enum KbinErrorKind {
   #[fail(display = "Value mismatch, expected {}, but found {:?}", _0, _1)]
   ValueTypeMismatch(StandardType, Value),
 
+  #[fail(display = "Value mismatch, expected an array, but found {:?}", _0)]
+  ExpectedValueArray(Value),
+
   #[fail(display = "Invalid input for boolean: {}", _0)]
   InvalidBooleanInput(u8),
 
@@ -114,19 +118,20 @@ pub enum KbinErrorKind {
 
   #[fail(display = "Invalid state")]
   InvalidState,
+
+  #[fail(display = "Error handling XML")]
+  XmlError(#[cause] QuickXmlError),
+}
+
+impl KbinError {
+  pub fn get_context(&self) -> &KbinErrorKind {
+    self.inner.get_context()
+  }
 }
 
 impl fmt::Display for KbinError {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
     fmt::Display::fmt(&self.inner, f)
-  }
-}
-
-impl Clone for KbinError {
-  fn clone(&self) -> Self {
-    Self {
-      inner: Context::new(self.inner.get_context().clone())
-    }
   }
 }
 
@@ -153,8 +158,16 @@ impl From<Context<KbinErrorKind>> for KbinError {
 }
 
 impl From<FromUtf8Error> for KbinError {
-  fn from(inner: FromUtf8Error) -> KbinError {
+  fn from(inner: FromUtf8Error) -> Self {
     inner.context(KbinErrorKind::Utf8).into()
+  }
+}
+
+impl From<QuickXmlError> for KbinError {
+  fn from(inner: QuickXmlError) -> Self {
+    Self {
+      inner: Context::new(KbinErrorKind::XmlError(inner)),
+    }
   }
 }
 
