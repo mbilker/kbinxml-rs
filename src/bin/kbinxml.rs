@@ -10,12 +10,12 @@ extern crate quick_xml;
 
 use std::env;
 use std::fs::File;
-use std::io::{Cursor, Error as IoError, ErrorKind as IoErrorKind, Read, Write, stdout};
+use std::io::{Error as IoError, ErrorKind as IoErrorKind, Read, Write, stdout};
 
 use failure::Fail;
 use kbinxml::{NodeCollection, Options, Printer};
 use minidom::Element;
-use quick_xml::{Reader, Writer};
+use quick_xml::Reader;
 
 cfg_if! {
   if #[cfg(feature = "serde")] {
@@ -66,15 +66,6 @@ fn display_err(err: impl Fail) -> IoError {
   }
 
   IoError::new(IoErrorKind::Other, "Error parsing kbin")
-}
-
-fn to_text(element: &Element) -> Result<Vec<u8>, IoError> {
-  let inner = Cursor::new(Vec::new());
-  let mut writer = Writer::new_with_indent(inner, b' ', 2);
-  element.to_writer(&mut writer).map_err(|e| IoError::new(IoErrorKind::Other, format!("{:?}", e)))?;
-
-  let buf = writer.into_inner().into_inner();
-  Ok(buf)
 }
 
 fn display_buf(buf: &[u8]) -> Result<(), IoError> {
@@ -233,9 +224,11 @@ fn main() -> std::io::Result<()> {
     if kbinxml::is_binary_xml(&contents) {
       Printer::run(&contents).unwrap();
 
-      let (element, encoding_original) = kbinxml::element_from_binary(&contents).map_err(display_err)?;
-      let text_original = to_text(&element)?;
+      let (collection, _encoding) = kbinxml::from_slice(&contents).map_err(display_err)?;
+      let text_original = kbinxml::to_text_xml(&collection).map_err(display_err)?;
       display_buf(&text_original)?;
+
+      let (element, encoding_original) = kbinxml::element_from_binary(&contents).map_err(display_err)?;
 
       let options = Options::with_encoding(encoding_original);
       let buf = kbinxml::to_binary_with_options(options, &element).map_err(display_err)?;
