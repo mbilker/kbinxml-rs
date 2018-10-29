@@ -30,12 +30,14 @@ mod reader;
 mod sixbit;
 mod text_reader;
 mod to_element;
+mod to_text_xml;
 mod value;
 mod writer;
 
 use node::NodeDefinition;
 use node_types::StandardType;
 use text_reader::TextXmlReader;
+use to_text_xml::TextXmlWriter;
 
 // Public exports
 pub use compression::Compression;
@@ -46,6 +48,7 @@ pub use error::{KbinError, KbinErrorKind, Result};
 pub use node::{Node, NodeCollection};
 pub use options::Options;
 pub use to_element::ToElement;
+pub use to_text_xml::ToTextXml;
 pub use value::Value;
 pub use writer::{Writer, Writeable};
 
@@ -196,4 +199,11 @@ pub fn to_binary_with_options<T>(options: Options, input: &T) -> Result<Vec<u8>>
 {
   let mut writer = Writer::with_options(options);
   writer.to_binary(input)
+}
+
+pub fn to_text_xml<T>(input: &T) -> Result<Vec<u8>>
+  where T: ToTextXml
+{
+  let writer = TextXmlWriter::new();
+  writer.to_text_xml(input)
 }
