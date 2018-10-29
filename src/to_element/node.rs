@@ -1,11 +1,10 @@
+use std::fmt::Write;
+
 use minidom::Element;
 
 use node::Node;
+use to_element::ToElement;
 use value::Value;
-
-pub trait ToElement {
-  fn to_element(&self) -> Element;
-}
 
 impl ToElement for Node {
   fn to_element(&self) -> Element {
@@ -15,6 +14,16 @@ impl ToElement for Node {
       elem.set_attr("__type", value.standard_type().name);
 
       match value {
+        Value::Binary(data) => {
+          elem.set_attr("__size", data.len());
+
+          let len = data.len() * 2;
+          let value = data.into_iter().fold(String::with_capacity(len), |mut val, x| {
+            write!(val, "{:02x}", x).expect("Failed to append hex char");
+            val
+          });
+          elem.append_text_node(value);
+        },
         Value::String(value) => {
           elem.append_text_node(value.as_str());
         },
