@@ -478,6 +478,13 @@ macro_rules! construct_types {
         }
       }
 
+      pub fn as_slice(&self) -> Result<&[u8], KbinError> {
+        match self {
+          Value::Binary(ref data) => Ok(data),
+          value => Err(KbinErrorKind::ValueTypeMismatch(StandardType::Binary, value.clone()).into()),
+        }
+      }
+
       pub fn as_str(&self) -> Result<&str, KbinError> {
         match self {
           Value::String(ref s) => Ok(s),
@@ -496,6 +503,13 @@ macro_rules! construct_types {
         match self {
           Value::Attribute(s) => Ok(s),
           value => Err(KbinErrorKind::ValueTypeMismatch(StandardType::Attribute, value).into()),
+        }
+      }
+
+      pub fn as_array(&self) -> Result<&[Value], KbinError> {
+        match self {
+          Value::Array(_, ref values) => Ok(values),
+          value => Err(KbinErrorKind::ExpectedValueArray(value.clone()).into()),
         }
       }
     }
