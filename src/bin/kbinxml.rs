@@ -1,5 +1,4 @@
-#![feature(int_to_from_bytes)]
-
+extern crate byteorder;
 extern crate failure;
 extern crate kbinxml;
 extern crate minidom;
@@ -12,6 +11,7 @@ use std::env;
 use std::fs::File;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind, Read, Write, stdout};
 
+use byteorder::{BigEndian, ByteOrder};
 use failure::Fail;
 use kbinxml::{NodeCollection, Options, Printer};
 use minidom::Element;
@@ -105,17 +105,14 @@ fn compare_collections(left: &NodeCollection, right: &NodeCollection) -> bool {
 }
 
 fn compare_slice(left: &[u8], right: &[u8]) {
-  let mut buf = [0; 4];
-  buf.clone_from_slice(&left[4..8]);
-  let node_buf_length = u32::from_be_bytes(buf);
+  let node_buf_length = BigEndian::read_u32(&left[4..8]);
   //println!("node_buf_length: {}", node_buf_length);
 
   let data_buf_start = 8 + node_buf_length as usize;
-  let data_buf_len_end = data_buf_start + 4;
+  //let data_buf_len_end = data_buf_start + 4;
   //println!("data_buf start: {} + 8 = {}", node_buf_length, data_buf_start);
 
-  buf.clone_from_slice(&left[data_buf_start..data_buf_len_end]);
-  //let data_buf_length = u32::from_be(u32::from_bytes(buf));
+  //let data_buf_length = BigEndian::read_u32(&left[data_buf_start..data_buf_len_end]);
   //println!("data_buf_length: {}", data_buf_length);
 
   let mut i = 0;
