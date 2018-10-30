@@ -2,8 +2,6 @@
 
 An encoder/decoder for Konami's binary XML format, used in some of their games.
 
-**WARNING!** Requires Rust Nightly due to the use of the `int_to_from_bytes` unstable feature.
-
 ### Setup
 
 - Setup Rust Nightly through `rustup` or your own preferred method of acquiring the nightly version of Rust
