@@ -5,6 +5,7 @@ use quick_xml::Writer;
 use quick_xml::events::{BytesEnd, BytesStart, BytesText, Event};
 use quick_xml::events::attributes::Attribute;
 
+use encoding_type::EncodingType;
 use error::KbinError;
 use node::Node;
 use node_types::StandardType;
@@ -12,6 +13,11 @@ use to_text_xml::ToTextXml;
 use value::Value;
 
 impl ToTextXml for Node {
+  /// At the moment, a `Node` will always contain UTF-8 data.
+  fn encoding(&self) -> EncodingType {
+    EncodingType::UTF_8
+  }
+
   fn write<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), KbinError> {
     let key = self.key();
     let mut elem = BytesStart::borrowed(key.as_bytes(), key.as_bytes().len());

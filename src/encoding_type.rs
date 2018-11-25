@@ -62,6 +62,17 @@ impl EncodingType {
     }
   }
 
+  pub fn name(&self) -> Option<&'static str> {
+    match *self {
+      EncodingType::None       => None,
+      EncodingType::ASCII      => None,
+      EncodingType::ISO_8859_1 => Some(WINDOWS_1252.name()),
+      EncodingType::EUC_JP     => Some(EUC_JP.name()),
+      EncodingType::SHIFT_JIS  => Some(SHIFT_JIS.name()),
+      EncodingType::UTF_8      => Some(UTF_8.name()),
+    }
+  }
+
   fn decode_ascii(input: &[u8]) -> Result<String, KbinError> {
     // ASCII only goes up to 0x7F
     match input.iter().position(|&ch| ch >= 0x80) {

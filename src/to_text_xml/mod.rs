@@ -1,13 +1,16 @@
 use std::io::{Cursor, Write};
 
 use quick_xml::Writer;
+use quick_xml::events::{BytesDecl, Event};
 
+use encoding_type::EncodingType;
 use error::KbinError;
 
 mod node;
 mod node_collection;
 
 pub trait ToTextXml {
+  fn encoding(&self) -> EncodingType;
   fn write<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), KbinError>;
 }
 
@@ -28,6 +31,12 @@ impl TextXmlWriter {
   pub fn to_text_xml<T>(mut self, value: &T) -> Result<Vec<u8>, KbinError>
     where T: ToTextXml
   {
+    if let Some(encoding) = value.encoding().name() {
+      let header = BytesDecl::new(b"1.0", Some(encoding.as_bytes()), None);
+
+      self.xml_writer.write_event(Event::Decl(header))?;
+    }
+
     value.write(&mut self.xml_writer)?;
 
     Ok(self.xml_writer.into_inner().into_inner())

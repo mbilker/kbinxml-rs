@@ -5,12 +5,19 @@ use quick_xml::Writer;
 use quick_xml::events::{BytesEnd, BytesStart, BytesText, Event};
 use quick_xml::events::attributes::Attribute;
 
+use encoding_type::EncodingType;
 use error::{KbinError, KbinErrorKind};
 use node::NodeCollection;
 use node_types::StandardType;
 use to_text_xml::ToTextXml;
 
 impl ToTextXml for NodeCollection {
+  /// At the moment, decoding the value of a `NodeDefinition` will decode
+  /// strings into UTF-8.
+  fn encoding(&self) -> EncodingType {
+    EncodingType::UTF_8
+  }
+
   fn write<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), KbinError> {
     let base = self.base();
     let key = base.key()?.ok_or(KbinErrorKind::InvalidState)?;
