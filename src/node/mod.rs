@@ -166,6 +166,11 @@ impl Node {
   }
 
   #[inline]
+  pub fn children_iter(&self) -> OptionIterator<&Vec<Node>> {
+    OptionIterator::new(self.children())
+  }
+
+  #[inline]
   pub fn children_iter_mut(&mut self) -> OptionIterator<&mut Vec<Node>> {
     OptionIterator::new(self.children_mut())
   }
