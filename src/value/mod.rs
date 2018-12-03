@@ -202,7 +202,6 @@ macro_rules! tuple {
 
       if is_array {
         let value = match node_type.count {
-          //0 => return Err(KbinErrorKind::InvalidState.into()),
           1 => {
             // May have a node (i.e. `Ip4`) that is only a single count, but it
             // can be part of an array

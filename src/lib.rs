@@ -35,7 +35,6 @@ mod value;
 mod writer;
 
 use node::NodeDefinition;
-use node_types::StandardType;
 use text_reader::TextXmlReader;
 use to_text_xml::TextXmlWriter;
 
@@ -46,6 +45,7 @@ pub use printer::Printer;
 pub use reader::Reader;
 pub use error::{KbinError, KbinErrorKind, Result};
 pub use node::{Node, NodeCollection};
+pub use node_types::StandardType;
 pub use options::Options;
 pub use to_element::ToElement;
 pub use to_text_xml::ToTextXml;
