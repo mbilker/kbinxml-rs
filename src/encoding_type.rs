@@ -1,3 +1,5 @@
+use std::fmt;
+
 use error::{KbinError, KbinErrorKind};
 use failure::ResultExt;
 
@@ -21,6 +23,21 @@ pub enum EncodingType {
 impl Default for EncodingType {
   fn default() -> Self {
     EncodingType::SHIFT_JIS
+  }
+}
+
+impl fmt::Display for EncodingType {
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    let encoding = match *self {
+      EncodingType::None => "None",
+      EncodingType::ASCII => "ASCII",
+      EncodingType::ISO_8859_1 => "ISO-8859-1",
+      EncodingType::EUC_JP => "EUC-JP",
+      EncodingType::SHIFT_JIS => "SHIFT-JIS",
+      EncodingType::UTF_8 => "UTF-8",
+    };
+
+    write!(f, "{}", encoding)
   }
 }
 
