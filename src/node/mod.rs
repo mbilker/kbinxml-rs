@@ -151,6 +151,11 @@ impl Node {
   }
 
   #[inline]
+  pub fn attributes_mut(&mut self) -> Option<&mut IndexMap<String, String>> {
+    self.attributes.as_mut()
+  }
+
+  #[inline]
   pub fn children(&self) -> Option<&Vec<Node>> {
     self.children.as_ref()
   }
@@ -178,6 +183,12 @@ impl Node {
   pub fn attr(&self, key: &str) -> Option<&str> {
     self.attributes().and_then(|attributes| {
       attributes.get(key).map(String::as_str)
+    })
+  }
+
+  pub fn attr_mut(&mut self, key: &str) -> Option<&mut String> {
+    self.attributes_mut().and_then(|attributes| {
+      attributes.get_mut(key)
     })
   }
 
