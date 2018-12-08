@@ -13,8 +13,13 @@ pub use error::{KbinError, KbinErrorKind, Result};
 
 /// Remove trailing null bytes, used for the `String` type
 pub(crate) fn strip_trailing_null_bytes<'a>(data: &'a [u8]) -> &'a [u8] {
-  let mut index = data.len() - 1;
   let len = data.len();
+
+  if len == 0 {
+    return data;
+  }
+
+  let mut index = len - 1;
   while index > 0 && index < len && data[index] == 0x00 {
     index -= 1;
   }
