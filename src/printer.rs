@@ -14,7 +14,7 @@ impl Printer {
     let mut definitions = Vec::new();
 
     while let Ok(def) = reader.read_node_definition() {
-      eprintln!("definition: {:?}", def);
+      trace!("definition: {:?}", def);
 
       let node_type = def.node_type;
       let key = match def.key() {
