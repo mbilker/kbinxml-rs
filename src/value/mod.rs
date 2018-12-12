@@ -503,6 +503,20 @@ macro_rules! construct_types {
         }
       }
 
+      pub fn as_i16(&self) -> Result<i16, KbinError> {
+        match self {
+          Value::S16(ref n) => Ok(*n),
+          value => Err(KbinErrorKind::ValueTypeMismatch(StandardType::S16, value.clone()).into()),
+        }
+      }
+
+      pub fn as_u16(&self) -> Result<u16, KbinError> {
+        match self {
+          Value::U16(ref n) => Ok(*n),
+          value => Err(KbinErrorKind::ValueTypeMismatch(StandardType::U16, value.clone()).into()),
+        }
+      }
+
       pub fn as_i32(&self) -> Result<i32, KbinError> {
         match self {
           Value::S32(ref n) => Ok(*n),
@@ -514,6 +528,20 @@ macro_rules! construct_types {
         match self {
           Value::U32(ref n) => Ok(*n),
           value => Err(KbinErrorKind::ValueTypeMismatch(StandardType::U32, value.clone()).into()),
+        }
+      }
+
+      pub fn as_i64(&self) -> Result<i64, KbinError> {
+        match self {
+          Value::S64(ref n) => Ok(*n),
+          value => Err(KbinErrorKind::ValueTypeMismatch(StandardType::S64, value.clone()).into()),
+        }
+      }
+
+      pub fn as_u64(&self) -> Result<u64, KbinError> {
+        match self {
+          Value::U64(ref n) => Ok(*n),
+          value => Err(KbinErrorKind::ValueTypeMismatch(StandardType::U64, value.clone()).into()),
         }
       }
 
