@@ -503,6 +503,20 @@ macro_rules! construct_types {
         }
       }
 
+      pub fn as_i32(&self) -> Result<i32, KbinError> {
+        match self {
+          Value::S32(ref n) => Ok(*n),
+          value => Err(KbinErrorKind::ValueTypeMismatch(StandardType::S32, value.clone()).into()),
+        }
+      }
+
+      pub fn as_u32(&self) -> Result<u32, KbinError> {
+        match self {
+          Value::U32(ref n) => Ok(*n),
+          value => Err(KbinErrorKind::ValueTypeMismatch(StandardType::U32, value.clone()).into()),
+        }
+      }
+
       pub fn as_slice(&self) -> Result<&[u8], KbinError> {
         match self {
           Value::Binary(ref data) => Ok(data),
