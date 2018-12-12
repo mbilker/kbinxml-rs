@@ -1,3 +1,5 @@
+#[cfg(feature = "try_from")]
+use std::convert::TryFrom;
 use std::fmt;
 use std::net::Ipv4Addr;
 use std::str::FromStr;
@@ -410,6 +412,18 @@ macro_rules! construct_types {
       impl From<$($value_type)*> for Value {
         fn from(value: $($value_type)*) -> Value {
           Value::$konst(value)
+        }
+      }
+
+      #[cfg(feature = "try_from")]
+      impl TryFrom<Value> for $($value_type)* {
+        type Error = KbinError;
+
+        fn try_from(value: Value) -> Result<Self, Self::Error> {
+          match value {
+            Value::$konst(v) => Ok(v),
+            value => Err(KbinErrorKind::ValueTypeMismatch(StandardType::$konst, value).into()),
+          }
         }
       }
     )+

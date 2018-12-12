@@ -1,4 +1,5 @@
 #![cfg_attr(test, feature(test))]
+#![cfg_attr(feature = "try_from", feature(try_from))]
 
 extern crate byteorder;
 extern crate bytes;

@@ -23,3 +23,4 @@ serde_derive = { version = "1.0.79", optional = true }
 
 [features]
 serde-1 = ["serde", "serde_bytes", "serde_derive", "indexmap/serde-1"]
+try_from = []
