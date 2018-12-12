@@ -426,6 +426,18 @@ macro_rules! construct_types {
           }
         }
       }
+
+      #[cfg(feature = "try_from")]
+      impl TryFrom<&Value> for $($value_type)* {
+        type Error = KbinError;
+
+        fn try_from(value: &Value) -> Result<Self, Self::Error> {
+          match value {
+            Value::$konst(ref v) => Ok(v.clone()),
+            value => Err(KbinErrorKind::ValueTypeMismatch(StandardType::$konst, value.clone()).into()),
+          }
+        }
+      }
     )+
 
     impl Value {
