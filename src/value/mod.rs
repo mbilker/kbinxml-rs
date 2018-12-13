@@ -441,41 +441,6 @@ macro_rules! construct_types {
     )+
 
     impl Value {
-      tuple! {
-        byte: [
-          s8: [S8_2, S8_3, S8_4, Vs8],
-          u8: [U8_2, U8_3, U8_4, Vu8],
-          bool: [Boolean2, Boolean3, Boolean4, Vb]
-        ],
-        multi: [
-          read_i16_into write_i16 i16 => [S16_2, S16_3, S16_4, Vs16],
-          read_i32_into write_i32 i32 => [S32_2, S32_3, S32_4],
-          read_i64_into write_i64 i64 => [S64_2, S64_3, S64_4],
-          read_u16_into write_u16 u16 => [U16_2, U16_3, U16_4, Vu16],
-          read_u32_into write_u32 u32 => [U32_2, U32_3, U32_4],
-          read_u64_into write_u64 u64 => [U64_2, U64_3, U64_4],
-          read_f32_into_unchecked write_f32 f32 => [Float2, Float3, Float4],
-          read_f64_into_unchecked write_f64 f64 => [Double2, Double3, Double4]
-        ]
-      }
-
-      pub fn to_bytes(&self) -> Result<Vec<u8>, KbinError> {
-        let mut output = Vec::new();
-        self.to_bytes_inner(&mut output)?;
-
-        Ok(output)
-      }
-
-      #[inline]
-      pub fn to_bytes_into(&self, output: &mut Vec<u8>) -> Result<(), KbinError> {
-        self.to_bytes_inner(output)
-      }
-
-      #[inline]
-      pub fn array_as_string(values: &[Value]) -> String {
-        BorrowedValueArray(values).to_string()
-      }
-
       pub fn standard_type(&self) -> StandardType {
         match *self {
           $(
@@ -486,97 +451,6 @@ macro_rules! construct_types {
           Value::Attribute(_) => StandardType::Attribute,
           Value::Array(node_type, _) => node_type,
           Value::Node(_) => StandardType::NodeStart,
-        }
-      }
-
-      pub fn as_i8(&self) -> Result<i8, KbinError> {
-        match self {
-          Value::S8(ref n) => Ok(*n),
-          value => Err(KbinErrorKind::ValueTypeMismatch(StandardType::S8, value.clone()).into()),
-        }
-      }
-
-      pub fn as_u8(&self) -> Result<u8, KbinError> {
-        match self {
-          Value::U8(ref n) => Ok(*n),
-          value => Err(KbinErrorKind::ValueTypeMismatch(StandardType::U8, value.clone()).into()),
-        }
-      }
-
-      pub fn as_i16(&self) -> Result<i16, KbinError> {
-        match self {
-          Value::S16(ref n) => Ok(*n),
-          value => Err(KbinErrorKind::ValueTypeMismatch(StandardType::S16, value.clone()).into()),
-        }
-      }
-
-      pub fn as_u16(&self) -> Result<u16, KbinError> {
-        match self {
-          Value::U16(ref n) => Ok(*n),
-          value => Err(KbinErrorKind::ValueTypeMismatch(StandardType::U16, value.clone()).into()),
-        }
-      }
-
-      pub fn as_i32(&self) -> Result<i32, KbinError> {
-        match self {
-          Value::S32(ref n) => Ok(*n),
-          value => Err(KbinErrorKind::ValueTypeMismatch(StandardType::S32, value.clone()).into()),
-        }
-      }
-
-      pub fn as_u32(&self) -> Result<u32, KbinError> {
-        match self {
-          Value::U32(ref n) => Ok(*n),
-          value => Err(KbinErrorKind::ValueTypeMismatch(StandardType::U32, value.clone()).into()),
-        }
-      }
-
-      pub fn as_i64(&self) -> Result<i64, KbinError> {
-        match self {
-          Value::S64(ref n) => Ok(*n),
-          value => Err(KbinErrorKind::ValueTypeMismatch(StandardType::S64, value.clone()).into()),
-        }
-      }
-
-      pub fn as_u64(&self) -> Result<u64, KbinError> {
-        match self {
-          Value::U64(ref n) => Ok(*n),
-          value => Err(KbinErrorKind::ValueTypeMismatch(StandardType::U64, value.clone()).into()),
-        }
-      }
-
-      pub fn as_slice(&self) -> Result<&[u8], KbinError> {
-        match self {
-          Value::Binary(ref data) => Ok(data),
-          value => Err(KbinErrorKind::ValueTypeMismatch(StandardType::Binary, value.clone()).into()),
-        }
-      }
-
-      pub fn as_str(&self) -> Result<&str, KbinError> {
-        match self {
-          Value::String(ref s) => Ok(s),
-          value => Err(KbinErrorKind::ValueTypeMismatch(StandardType::String, value.clone()).into()),
-        }
-      }
-
-      pub fn as_string(self) -> Result<String, KbinError> {
-        match self {
-          Value::String(s) => Ok(s),
-          value => Err(KbinErrorKind::ValueTypeMismatch(StandardType::String, value).into()),
-        }
-      }
-
-      pub fn as_attribute(self) -> Result<String, KbinError> {
-        match self {
-          Value::Attribute(s) => Ok(s),
-          value => Err(KbinErrorKind::ValueTypeMismatch(StandardType::Attribute, value).into()),
-        }
-      }
-
-      pub fn as_array(&self) -> Result<&[Value], KbinError> {
-        match self {
-          Value::Array(_, ref values) => Ok(values),
-          value => Err(KbinErrorKind::ExpectedValueArray(value.clone()).into()),
         }
       }
     }
@@ -601,6 +475,134 @@ macro_rules! construct_types {
           StandardType::FileEnd => unimplemented!(),
         }
       }
+    }
+  }
+}
+
+impl Value {
+  tuple! {
+    byte: [
+      s8: [S8_2, S8_3, S8_4, Vs8],
+      u8: [U8_2, U8_3, U8_4, Vu8],
+      bool: [Boolean2, Boolean3, Boolean4, Vb]
+    ],
+    multi: [
+      read_i16_into write_i16 i16 => [S16_2, S16_3, S16_4, Vs16],
+      read_i32_into write_i32 i32 => [S32_2, S32_3, S32_4],
+      read_i64_into write_i64 i64 => [S64_2, S64_3, S64_4],
+      read_u16_into write_u16 u16 => [U16_2, U16_3, U16_4, Vu16],
+      read_u32_into write_u32 u32 => [U32_2, U32_3, U32_4],
+      read_u64_into write_u64 u64 => [U64_2, U64_3, U64_4],
+      read_f32_into_unchecked write_f32 f32 => [Float2, Float3, Float4],
+      read_f64_into_unchecked write_f64 f64 => [Double2, Double3, Double4]
+    ]
+  }
+
+  pub fn to_bytes(&self) -> Result<Vec<u8>, KbinError> {
+    let mut output = Vec::new();
+    self.to_bytes_inner(&mut output)?;
+
+    Ok(output)
+  }
+
+  #[inline]
+  pub fn to_bytes_into(&self, output: &mut Vec<u8>) -> Result<(), KbinError> {
+    self.to_bytes_inner(output)
+  }
+
+  #[inline]
+  pub fn array_as_string(values: &[Value]) -> String {
+    BorrowedValueArray(values).to_string()
+  }
+
+  pub fn as_i8(&self) -> Result<i8, KbinError> {
+    match self {
+      Value::S8(ref n) => Ok(*n),
+      value => Err(KbinErrorKind::ValueTypeMismatch(StandardType::S8, value.clone()).into()),
+    }
+  }
+
+  pub fn as_u8(&self) -> Result<u8, KbinError> {
+    match self {
+      Value::U8(ref n) => Ok(*n),
+      value => Err(KbinErrorKind::ValueTypeMismatch(StandardType::U8, value.clone()).into()),
+    }
+  }
+
+  pub fn as_i16(&self) -> Result<i16, KbinError> {
+    match self {
+      Value::S16(ref n) => Ok(*n),
+      value => Err(KbinErrorKind::ValueTypeMismatch(StandardType::S16, value.clone()).into()),
+    }
+  }
+
+  pub fn as_u16(&self) -> Result<u16, KbinError> {
+    match self {
+      Value::U16(ref n) => Ok(*n),
+      value => Err(KbinErrorKind::ValueTypeMismatch(StandardType::U16, value.clone()).into()),
+    }
+  }
+
+  pub fn as_i32(&self) -> Result<i32, KbinError> {
+    match self {
+      Value::S32(ref n) => Ok(*n),
+      value => Err(KbinErrorKind::ValueTypeMismatch(StandardType::S32, value.clone()).into()),
+    }
+  }
+
+  pub fn as_u32(&self) -> Result<u32, KbinError> {
+    match self {
+      Value::U32(ref n) => Ok(*n),
+      value => Err(KbinErrorKind::ValueTypeMismatch(StandardType::U32, value.clone()).into()),
+    }
+  }
+
+  pub fn as_i64(&self) -> Result<i64, KbinError> {
+    match self {
+      Value::S64(ref n) => Ok(*n),
+      value => Err(KbinErrorKind::ValueTypeMismatch(StandardType::S64, value.clone()).into()),
+    }
+  }
+
+  pub fn as_u64(&self) -> Result<u64, KbinError> {
+    match self {
+      Value::U64(ref n) => Ok(*n),
+      value => Err(KbinErrorKind::ValueTypeMismatch(StandardType::U64, value.clone()).into()),
+    }
+  }
+
+  pub fn as_slice(&self) -> Result<&[u8], KbinError> {
+    match self {
+      Value::Binary(ref data) => Ok(data),
+      value => Err(KbinErrorKind::ValueTypeMismatch(StandardType::Binary, value.clone()).into()),
+    }
+  }
+
+  pub fn as_str(&self) -> Result<&str, KbinError> {
+    match self {
+      Value::String(ref s) => Ok(s),
+      value => Err(KbinErrorKind::ValueTypeMismatch(StandardType::String, value.clone()).into()),
+    }
+  }
+
+  pub fn as_string(self) -> Result<String, KbinError> {
+    match self {
+      Value::String(s) => Ok(s),
+      value => Err(KbinErrorKind::ValueTypeMismatch(StandardType::String, value).into()),
+    }
+  }
+
+  pub fn as_attribute(self) -> Result<String, KbinError> {
+    match self {
+      Value::Attribute(s) => Ok(s),
+      value => Err(KbinErrorKind::ValueTypeMismatch(StandardType::Attribute, value).into()),
+    }
+  }
+
+  pub fn as_array(&self) -> Result<&[Value], KbinError> {
+    match self {
+      Value::Array(_, ref values) => Ok(values),
+      value => Err(KbinErrorKind::ExpectedValueArray(value.clone()).into()),
     }
   }
 }
