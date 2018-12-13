@@ -599,6 +599,13 @@ impl Value {
     }
   }
 
+  pub fn as_binary(&self) -> Result<&[u8], KbinError> {
+    match self {
+      Value::Binary(ref data) => Ok(data),
+      value => Err(KbinErrorKind::ValueTypeMismatch(StandardType::Binary, value.clone()).into()),
+    }
+  }
+
   pub fn as_array(&self) -> Result<&[Value], KbinError> {
     match self {
       Value::Array(_, ref values) => Ok(values),
@@ -620,6 +627,15 @@ impl TryFrom<Value> for Vec<u8> {
 
   fn try_from(value: Value) -> Result<Self, Self::Error> {
     value.into_binary()
+  }
+}
+
+#[cfg(feature = "try_from")]
+impl TryFrom<&Value> for Vec<u8> {
+  type Error = KbinError;
+
+  fn try_from(value: &Value) -> Result<Self, Self::Error> {
+    value.as_binary().map(Vec::from)
   }
 }
 
