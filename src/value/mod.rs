@@ -605,6 +605,22 @@ impl Value {
       value => Err(KbinErrorKind::ExpectedValueArray(value.clone()).into()),
     }
   }
+
+  pub fn into_binary(self) -> Result<Vec<u8>, KbinError> {
+    match self {
+      Value::Binary(data) => Ok(data),
+      value => Err(KbinErrorKind::ValueTypeMismatch(StandardType::Binary, value).into()),
+    }
+  }
+}
+
+#[cfg(feature = "try_from")]
+impl TryFrom<Value> for Vec<u8> {
+  type Error = KbinError;
+
+  fn try_from(value: Value) -> Result<Self, Self::Error> {
+    value.into_binary()
+  }
 }
 
 impl From<Vec<u8>> for Value {
