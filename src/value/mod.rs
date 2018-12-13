@@ -626,7 +626,18 @@ impl TryFrom<Value> for Vec<u8> {
   type Error = KbinError;
 
   fn try_from(value: Value) -> Result<Self, Self::Error> {
-    value.into_binary()
+    // An array of unsigned 8-bit integers can either be `Binary` or a literal
+    // array of unsigned 8-bit integers.
+    match value {
+      Value::Binary(data) => Ok(data),
+      Value::Array(node_type, values) => {
+        if node_type != StandardType::U8 {
+          return Err(KbinErrorKind::ValueTypeMismatch(StandardType::U8, Value::Array(node_type, values)).into());
+        }
+        values.iter().map(Value::as_u8).collect()
+      },
+      value => Err(KbinErrorKind::ValueTypeMismatch(StandardType::Binary, value).into()),
+    }
   }
 }
 
@@ -635,7 +646,16 @@ impl TryFrom<&Value> for Vec<u8> {
   type Error = KbinError;
 
   fn try_from(value: &Value) -> Result<Self, Self::Error> {
-    value.as_binary().map(Vec::from)
+    match value {
+      Value::Binary(ref data) => Ok(data.to_vec()),
+      Value::Array(ref node_type, ref values) => {
+        if *node_type != StandardType::U8 {
+          return Err(KbinErrorKind::ValueTypeMismatch(StandardType::U8, value.clone()).into());
+        }
+        values.iter().map(Value::as_u8).collect()
+      },
+      value => Err(KbinErrorKind::ValueTypeMismatch(StandardType::Binary, value.clone()).into()),
+    }
   }
 }
 
