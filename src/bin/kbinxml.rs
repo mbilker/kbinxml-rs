@@ -9,7 +9,7 @@ extern crate quick_xml;
 
 use std::env;
 use std::fs::File;
-use std::io::{Error as IoError, ErrorKind as IoErrorKind, Read, Write, stdout};
+use std::io::{self, Error as IoError, ErrorKind as IoErrorKind, Read, Write};
 
 use byteorder::{BigEndian, ByteOrder};
 use failure::Fail;
@@ -69,8 +69,7 @@ fn display_err(err: impl Fail) -> IoError {
 }
 
 fn display_buf(buf: &[u8]) -> Result<(), IoError> {
-  let stdout = stdout();
-  stdout.lock().write_all(&buf)?;
+  io::stdout().write_all(&buf)?;
   println!();
 
   Ok(())
@@ -247,8 +246,7 @@ fn main() -> std::io::Result<()> {
         compare_collections(&encoded_collection, &collection);
       }
 
-      let mut stdout = stdout();
-      stdout.lock().write_all(&buf)?;
+      io::stdout().write_all(&buf)?;
     }
   } else {
     test_serde()?;
