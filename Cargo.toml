@@ -1,6 +1,6 @@
 [package]
 name = "kbinxml"
-version = "0.15.4"
+version = "0.15.5"
 authors = ["Matt Bilker <me@mbilker.us>"]
 
 [dependencies]
