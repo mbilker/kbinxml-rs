@@ -23,7 +23,7 @@ cfg_if! {
 
     use std::net::Ipv4Addr;
 
-    use kbinxml::{ExtraNodes, Node, from_bytes, to_bytes};
+    use kbinxml::{ExtraNodes, Node};
 
     #[derive(Debug, Deserialize, Serialize)]
     #[serde(rename = "test2")]
@@ -142,6 +142,8 @@ fn compare_slice(left: &[u8], right: &[u8]) {
 
 #[cfg(feature = "serde")]
 fn test_serde() -> std::io::Result<()> {
+  use kbinxml::{serde_from_bytes, serde_to_bytes};
+
   let obj = Testing {
     the_attr: "the_value".to_string(),
     hi: 12,
@@ -159,19 +161,19 @@ fn test_serde() -> std::io::Result<()> {
       extra: ExtraNodes::new(),
     },
   };
-  let bytes = to_bytes(&obj).unwrap();
+  let bytes = serde_to_bytes(&obj).unwrap();
   eprintln!("bytes: {:02x?}", bytes);
 
   let mut file = File::create("testing.kbin")?;
   file.write_all(&bytes)?;
 
-  let obj2 = from_bytes::<Testing>(&bytes);
+  let obj2 = serde_from_bytes::<Testing>(&bytes);
   match &obj2 {
     Ok(obj2) => eprintln!("obj2: {:#?}", obj2),
     Err(e) => eprintln!("Unable to parse generated kbin back to struct: {:#?}", e),
   };
 
-  let value = from_bytes::<Node>(&bytes);
+  let value = serde_from_bytes::<Node>(&bytes);
   match &value {
     Ok(obj2) => eprintln!("obj2: {:#?}", obj2),
     Err(e) => eprintln!("Unable to parse generated kbin back to `Value`: {:#?}", e),
@@ -191,7 +193,7 @@ fn test_serde() -> std::io::Result<()> {
 
 #[cfg(feature = "serde")]
 fn test_serde_node(contents: &[u8]) -> std::io::Result<()> {
-  let node = from_bytes::<Node>(&contents);
+  let node = kbinxml::serde_from_bytes::<Node>(&contents);
   match &node {
     Ok(obj2) => {
       eprintln!("obj2: {:#?}", obj2);

@@ -62,9 +62,9 @@ cfg_if! {
     mod de;
     mod ser;
 
-    pub use de::from_bytes;
+    pub use de::from_bytes as serde_from_bytes;
     pub use node::ExtraNodes;
-    pub use ser::to_bytes;
+    pub use ser::to_bytes as serde_to_bytes;
   }
 }
 

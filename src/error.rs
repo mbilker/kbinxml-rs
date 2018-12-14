@@ -179,7 +179,7 @@ cfg_if! {
     use failure::Compat;
     use serde::{de, ser};
 
-    #[derive(Clone, Debug)]
+    #[derive(Debug)]
     pub enum Error {
       Message(String),
       StaticMessage(&'static str),
