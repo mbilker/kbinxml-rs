@@ -8,7 +8,7 @@ use crate::reader::Reader;
 pub struct Printer;
 
 impl Printer {
-  pub fn run(input: &[u8]) -> Result<Option<NodeCollection>> {
+  pub fn run(input: &[u8]) -> Result<()> {
     let mut reader = Reader::new(Bytes::from(input))?;
     let mut nodes = Vec::new();
     let mut definitions = Vec::new();
@@ -53,6 +53,6 @@ impl Printer {
       None => eprintln!("collection: {:?}", collection),
     };
 
-    Ok(collection)
+    Ok(())
   }
 }
