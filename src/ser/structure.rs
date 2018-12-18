@@ -2,9 +2,9 @@ use byteorder::WriteBytesExt;
 use failure::ResultExt;
 use serde::ser::{Serialize, SerializeStruct};
 
-use error::{Error, KbinErrorKind};
-use node_types::StandardType;
-use ser::{Result, Serializer, TypeHint, ARRAY_MASK};
+use crate::error::{Error, KbinErrorKind};
+use crate::node_types::StandardType;
+use crate::ser::{Result, Serializer, TypeHint, ARRAY_MASK};
 
 pub struct Struct<'a> {
   ser: &'a mut Serializer,

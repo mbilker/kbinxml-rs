@@ -6,10 +6,10 @@ use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use bytes::Bytes;
 use failure::ResultExt;
 
-use node_types::KbinType;
+use crate::node_types::KbinType;
 
-pub use encoding_type::EncodingType;
-pub use error::{KbinError, KbinErrorKind, Result};
+pub use crate::encoding_type::EncodingType;
+pub use crate::error::{KbinError, KbinErrorKind, Result};
 
 /// Remove trailing null bytes, used for the `String` type
 pub(crate) fn strip_trailing_null_bytes<'a>(data: &'a [u8]) -> &'a [u8] {

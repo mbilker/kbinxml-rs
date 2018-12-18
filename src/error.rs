@@ -5,8 +5,8 @@ use std::string::FromUtf8Error;
 use failure::{Backtrace, Context, Fail};
 use quick_xml::Error as QuickXmlError;
 
-use node_types::{KbinType, StandardType};
-use value::Value;
+use crate::node_types::{KbinType, StandardType};
+use crate::value::Value;
 
 pub type Result<T> = StdResult<T, KbinError>;
 

@@ -4,9 +4,9 @@ use byteorder::{BigEndian, WriteBytesExt};
 use failure::ResultExt;
 use serde::ser::{Serialize, SerializeSeq};
 
-use error::KbinErrorKind;
-use node_types::StandardType;
-use ser::{Error, Result, Serializer, TypeHint, WriteMode};
+use crate::error::KbinErrorKind;
+use crate::node_types::StandardType;
+use crate::ser::{Error, Result, Serializer, TypeHint, WriteMode};
 
 pub struct Seq<'a> {
   ser: &'a mut Serializer,

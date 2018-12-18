@@ -1,4 +1,4 @@
-use error::{KbinError, KbinErrorKind};
+use crate::error::{KbinError, KbinErrorKind};
 use super::{SIG_COMPRESSED, SIG_UNCOMPRESSED};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

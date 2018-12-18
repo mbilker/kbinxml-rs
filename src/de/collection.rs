@@ -1,13 +1,13 @@
 use serde::de::{self, IntoDeserializer, Visitor};
 
-use de::custom::Custom;
-use de::definition::NodeDefinitionDeserializer;
-use de::node_contents::NodeContents;
-use de::seq::Seq;
-use de::structure::Struct;
-use error::{Error, KbinErrorKind};
-use node::{Marshal, NodeCollection};
-use node_types::StandardType;
+use crate::de::custom::Custom;
+use crate::de::definition::NodeDefinitionDeserializer;
+use crate::de::node_contents::NodeContents;
+use crate::de::seq::Seq;
+use crate::de::structure::Struct;
+use crate::error::{Error, KbinErrorKind};
+use crate::node::{Marshal, NodeCollection};
+use crate::node_types::StandardType;
 
 fn warn_attributes(value: &NodeCollection) -> Result<(), Error> {
   for attr in value.attributes() {

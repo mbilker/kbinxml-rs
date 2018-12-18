@@ -1,11 +1,11 @@
 use serde::de::{self, IntoDeserializer, Visitor};
 
-use de::custom::Custom;
-use de::seq::Seq;
-use error::{Error, KbinErrorKind};
-use node::{Marshal, NodeCollection, NodeDefinition};
-use node_types::StandardType;
-use value::Value;
+use crate::de::custom::Custom;
+use crate::de::seq::Seq;
+use crate::error::{Error, KbinErrorKind};
+use crate::node::{Marshal, NodeCollection, NodeDefinition};
+use crate::node_types::StandardType;
+use crate::value::Value;
 
 pub struct NodeDefinitionDeserializer<'a> {
   definition: &'a NodeDefinition,

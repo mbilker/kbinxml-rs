@@ -2,9 +2,9 @@ use std::fmt::Write;
 
 use minidom::Element;
 
-use node::Node;
-use to_element::ToElement;
-use value::Value;
+use crate::node::Node;
+use crate::to_element::ToElement;
+use crate::value::Value;
 
 impl ToElement for Node {
   fn to_element(&self) -> Element {

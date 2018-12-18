@@ -5,14 +5,14 @@ use failure::ResultExt;
 use minidom::Element;
 use rustc_hex::FromHex;
 
-use byte_buffer::ByteBufferWrite;
-use compression::Compression;
-use error::{KbinErrorKind, Result};
-use node::{Node, NodeCollection};
-use node_types::StandardType;
-use options::Options;
-use sixbit::Sixbit;
-use value::Value;
+use crate::byte_buffer::ByteBufferWrite;
+use crate::compression::Compression;
+use crate::error::{KbinErrorKind, Result};
+use crate::node::{Node, NodeCollection};
+use crate::node_types::StandardType;
+use crate::options::Options;
+use crate::sixbit::Sixbit;
+use crate::value::Value;
 
 use super::{ARRAY_MASK, SIGNATURE};
 

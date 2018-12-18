@@ -1,9 +1,9 @@
 use bytes::Bytes;
 
-use error::Result;
-use node::NodeCollection;
-use node_types::StandardType;
-use reader::Reader;
+use crate::error::Result;
+use crate::node::NodeCollection;
+use crate::node_types::StandardType;
+use crate::reader::Reader;
 
 pub struct Printer;
 

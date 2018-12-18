@@ -5,11 +5,11 @@ use byteorder::{BigEndian, ByteOrder, WriteBytesExt};
 use failure::ResultExt;
 use serde::ser::{self, Impossible, Serialize};
 
-use byte_buffer::ByteBufferWrite;
-use encoding_type::EncodingType;
-use node_types::StandardType;
-use error::{Error, KbinError, KbinErrorKind};
-use sixbit::Sixbit;
+use crate::byte_buffer::ByteBufferWrite;
+use crate::encoding_type::EncodingType;
+use crate::node_types::StandardType;
+use crate::error::{Error, KbinError, KbinErrorKind};
+use crate::sixbit::Sixbit;
 use super::{ARRAY_MASK, SIGNATURE, SIG_COMPRESSED};
 
 mod buffer;

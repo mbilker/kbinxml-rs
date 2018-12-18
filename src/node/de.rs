@@ -4,9 +4,9 @@ use std::marker::PhantomData;
 use serde::de::{self, Deserialize, DeserializeSeed, Error, EnumAccess, IntoDeserializer, MapAccess, SeqAccess, VariantAccess, Visitor};
 use serde::de::value::{MapDeserializer, SeqDeserializer};
 
-use node::Node;
-use node_types::StandardType;
-use value::Value;
+use crate::node::Node;
+use crate::node_types::StandardType;
+use crate::value::Value;
 
 pub(crate) struct NodeVisitor {
   key: Option<String>,
@@ -21,7 +21,7 @@ impl<'de> NodeVisitor {
     match node_type {
       StandardType::Attribute => Err(A::Error::custom("`Attribute` nodes must be handled elsewhere")),
       StandardType::NodeStart => {
-        let value = try!(map.next_value_seed(NodeValueSeed(key.to_owned())));
+        let value = map.next_value_seed(NodeValueSeed(key.to_owned()))?;
         debug!("NodeVisitor::map_to_node(node_type: {:?}) => value: {:?}", node_type, value);
 
         Ok(value)
@@ -29,7 +29,7 @@ impl<'de> NodeVisitor {
       // Rolling up the `NodeStart` handling and other value types is not going
       // to happen as `NodeStart` nodes do not have a value
       node_type => {
-        let node = try!(map.next_value_seed(NodeWithValueSeed(key.to_owned())));
+        let node = map.next_value_seed(NodeWithValueSeed(key.to_owned()))?;
         debug!("NodeVisitor::map_to_node(node_type: {:?}) => node: {:?}", node_type, node);
 
         Ok(node)
@@ -53,20 +53,20 @@ impl<'de> Visitor<'de> for NodeVisitor {
 
     let mut node = Node::new(self.key.unwrap_or_else(|| "".to_owned()));
 
-    while let Some(NodeStart { key, node_type }) = try!(map.next_key()) {
+    while let Some(NodeStart { key, node_type }) = map.next_key()? {
       debug!("NodeVisitor::visit_map() => node_type: {:?}, key: {:?}", node_type, key);
 
       if key == "__value" {
         trace!("NodeVisitor::visit_map() => got __value, getting node value");
 
-        let node_value = try!(map.next_value());
+        let node_value = map.next_value()?;
         debug!("NodeVisitor::visit_map() => node value: {:?}", node_value);
 
         node.set_value(Some(node_value));
       } else if key == "__node_key" {
         trace!("NodeVisitor::visit_map() => got __node_key, getting node key");
 
-        let node_key: String = try!(map.next_value());
+        let node_key: String = map.next_value()?;
         debug!("NodeVisitor::visit_map() => node key: {:?}", node_key);
 
         node.set_key(node_key);
@@ -76,7 +76,7 @@ impl<'de> Visitor<'de> for NodeVisitor {
             let value = map.next_value();
             debug!("NodeVisitor::visit_map() => value: {:?}", value);
 
-            if let Value::Attribute(s) = try!(value) {
+            if let Value::Attribute(s) = value? {
               //let key = String::from(&key["attr_".len()..]);
               node.set_attr(key, s);
             } else {

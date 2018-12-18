@@ -2,8 +2,8 @@ use byteorder::{BigEndian, WriteBytesExt};
 use failure::ResultExt;
 use serde::ser::{self, Impossible, Serialize};
 
-use error::{Error, KbinErrorKind};
-use node_types::StandardType;
+use crate::error::{Error, KbinErrorKind};
+use crate::node_types::StandardType;
 
 pub struct BufferSerializer {
   buffer: Vec<u8>,

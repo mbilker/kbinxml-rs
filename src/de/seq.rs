@@ -2,11 +2,11 @@ use std::collections::VecDeque;
 
 use serde::de::{DeserializeSeed, IntoDeserializer, SeqAccess};
 
-use de::collection::NodeCollectionDeserializer;
-use error::{Error, KbinErrorKind};
-use node::NodeCollection;
-use node_types::StandardType;
-use value::Value;
+use crate::de::collection::NodeCollectionDeserializer;
+use crate::error::{Error, KbinErrorKind};
+use crate::node::NodeCollection;
+use crate::node_types::StandardType;
+use crate::value::Value;
 
 enum SequenceMode {
   Struct {

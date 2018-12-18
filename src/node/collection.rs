@@ -2,10 +2,10 @@ use std::collections::VecDeque;
 use std::fmt;
 use std::iter::Iterator;
 
-use error::{KbinError, KbinErrorKind};
-use node::{Node, NodeDefinition};
-use node_types::StandardType;
-use value::Value;
+use crate::error::{KbinError, KbinErrorKind};
+use crate::node::{Node, NodeDefinition};
+use crate::node_types::StandardType;
+use crate::value::Value;
 
 fn parse_index(s: &str) -> Option<usize> {
   if s.starts_with('+') || (s.starts_with('0') && s.len() != 1) {

@@ -4,7 +4,7 @@ use std::mem;
 
 use indexmap::IndexMap;
 
-use value::Value;
+use crate::value::Value;
 
 mod collection;
 mod definition;

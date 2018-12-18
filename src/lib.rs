@@ -35,23 +35,23 @@ mod to_text_xml;
 mod value;
 mod writer;
 
-use node::NodeDefinition;
-use text_reader::TextXmlReader;
-use to_text_xml::TextXmlWriter;
+use crate::node::NodeDefinition;
+use crate::text_reader::TextXmlReader;
+use crate::to_text_xml::TextXmlWriter;
 
 // Public exports
-pub use compression::Compression;
-pub use encoding_type::EncodingType;
-pub use printer::Printer;
-pub use reader::Reader;
-pub use error::{KbinError, KbinErrorKind, Result};
-pub use node::{Node, NodeCollection};
-pub use node_types::StandardType;
-pub use options::Options;
-pub use to_element::ToElement;
-pub use to_text_xml::ToTextXml;
-pub use value::Value;
-pub use writer::{Writer, Writeable};
+pub use crate::compression::Compression;
+pub use crate::encoding_type::EncodingType;
+pub use crate::printer::Printer;
+pub use crate::reader::Reader;
+pub use crate::error::{KbinError, KbinErrorKind, Result};
+pub use crate::node::{Node, NodeCollection};
+pub use crate::node_types::StandardType;
+pub use crate::options::Options;
+pub use crate::to_element::ToElement;
+pub use crate::to_text_xml::ToTextXml;
+pub use crate::value::Value;
+pub use crate::writer::{Writer, Writeable};
 
 cfg_if! {
   if #[cfg(feature = "serde")] {
@@ -62,9 +62,9 @@ cfg_if! {
     mod de;
     mod ser;
 
-    pub use de::from_bytes as serde_from_bytes;
-    pub use node::ExtraNodes;
-    pub use ser::to_bytes as serde_to_bytes;
+    pub use crate::de::from_bytes as serde_from_bytes;
+    pub use crate::node::ExtraNodes;
+    pub use crate::ser::to_bytes as serde_to_bytes;
   }
 }
 

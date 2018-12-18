@@ -1,8 +1,8 @@
 use serde::ser::{Serialize, SerializeTupleStruct};
 
-use error::KbinErrorKind;
-use node_types::StandardType;
-use ser::{Error, Result, Serializer, TypeHint, WriteMode};
+use crate::error::KbinErrorKind;
+use crate::node_types::StandardType;
+use crate::ser::{Error, Result, Serializer, TypeHint, WriteMode};
 
 pub struct Custom<'a> {
   ser: &'a mut Serializer,

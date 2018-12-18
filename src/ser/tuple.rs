@@ -1,9 +1,9 @@
 use serde::ser::{Serialize, SerializeTuple};
 
-use error::KbinErrorKind;
-use node_types::StandardType;
-use ser::{Error, Result, Serializer, TypeHint};
-use ser::buffer::BufferSerializer;
+use crate::error::KbinErrorKind;
+use crate::node_types::StandardType;
+use crate::ser::{Error, Result, Serializer, TypeHint};
+use crate::ser::buffer::BufferSerializer;
 
 /// Tuple handler for serialization.
 ///

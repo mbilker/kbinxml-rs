@@ -1,9 +1,9 @@
 use serde::de::{DeserializeSeed, IntoDeserializer, MapAccess};
 
-use de::{Custom, Result};
-use de::definition::NodeDefinitionDeserializer;
-use error::{Error, KbinErrorKind};
-use node::NodeCollection;
+use crate::de::{Custom, Result};
+use crate::de::definition::NodeDefinitionDeserializer;
+use crate::error::{Error, KbinErrorKind};
+use crate::node::NodeCollection;
 
 #[derive(Debug)]
 enum ReadState {

@@ -1,6 +1,6 @@
 use serde::ser::{Serialize, SerializeMap};
 
-use node::ExtraNodes;
+use crate::node::ExtraNodes;
 
 impl Serialize for ExtraNodes {
   #[inline]

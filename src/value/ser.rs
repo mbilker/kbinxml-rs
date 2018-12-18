@@ -1,6 +1,6 @@
 use serde::ser::{Serialize, SerializeTupleStruct};
 
-use value::Value;
+use crate::value::Value;
 
 impl Serialize for Value {
   #[inline]

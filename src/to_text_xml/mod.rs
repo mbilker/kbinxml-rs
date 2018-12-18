@@ -3,8 +3,8 @@ use std::io::{Cursor, Write};
 use quick_xml::Writer;
 use quick_xml::events::{BytesDecl, Event};
 
-use encoding_type::EncodingType;
-use error::KbinError;
+use crate::encoding_type::EncodingType;
+use crate::error::KbinError;
 
 mod node;
 mod node_collection;

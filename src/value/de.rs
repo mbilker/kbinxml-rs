@@ -4,9 +4,9 @@ use std::marker::PhantomData;
 use serde::de::{Deserialize, Deserializer, EnumAccess, Error, IntoDeserializer, SeqAccess, VariantAccess, Visitor};
 use serde::de::value::SeqDeserializer;
 
-use node::Marshal;
-use node_types::StandardType;
-use value::Value;
+use crate::node::Marshal;
+use crate::node_types::StandardType;
+use crate::value::Value;
 
 impl<'de> Deserialize<'de> for Value {
   #[inline]
@@ -101,7 +101,7 @@ impl<'de> Deserialize<'de> for Value {
         let mut vec = Vec::new();
         let mut array_node_type = None;
 
-        while let Some(elem) = try!(seq.next_element()) {
+        while let Some(elem) = seq.next_element()? {
           let elem: Value = elem;
           let node_type = elem.standard_type();
 

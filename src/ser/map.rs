@@ -2,10 +2,10 @@ use byteorder::WriteBytesExt;
 use failure::ResultExt;
 use serde::ser::{Serialize, SerializeMap};
 
-use error::{Error, KbinErrorKind};
-use node_types::StandardType;
-use ser::{Result, Serializer, TypeHint, WriteMode, ARRAY_MASK};
-use sixbit::Sixbit;
+use crate::error::{Error, KbinErrorKind};
+use crate::node_types::StandardType;
+use crate::ser::{Result, Serializer, TypeHint, WriteMode, ARRAY_MASK};
+use crate::sixbit::Sixbit;
 
 pub struct Map<'a> {
   ser: &'a mut Serializer,

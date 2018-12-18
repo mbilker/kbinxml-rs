@@ -6,11 +6,11 @@ use quick_xml::Reader;
 use quick_xml::events::{BytesStart, BytesText, Event};
 use quick_xml::events::attributes::Attributes;
 
-use encoding_type::EncodingType;
-use error::{KbinErrorKind, Result};
-use node::{Key, NodeData, NodeCollection, NodeDefinition};
-use node_types::StandardType;
-use value::Value;
+use crate::encoding_type::EncodingType;
+use crate::error::{KbinErrorKind, Result};
+use crate::node::{Key, NodeData, NodeCollection, NodeDefinition};
+use crate::node_types::StandardType;
+use crate::value::Value;
 
 pub struct TextXmlReader<'a> {
   xml_reader: Reader<&'a [u8]>,

@@ -2,13 +2,13 @@ use bytes::Bytes;
 use byteorder::{BigEndian, ReadBytesExt};
 use failure::ResultExt;
 
-use byte_buffer::ByteBufferRead;
-use compression::Compression;
-use encoding_type::EncodingType;
-use error::{KbinErrorKind, Result};
-use node::{Key, NodeData, NodeDefinition};
-use node_types::StandardType;
-use sixbit::Sixbit;
+use crate::byte_buffer::ByteBufferRead;
+use crate::compression::Compression;
+use crate::encoding_type::EncodingType;
+use crate::error::{KbinErrorKind, Result};
+use crate::node::{Key, NodeData, NodeDefinition};
+use crate::node_types::StandardType;
+use crate::sixbit::Sixbit;
 
 use super::{ARRAY_MASK, SIGNATURE};
 

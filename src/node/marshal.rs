@@ -3,10 +3,10 @@ use std::marker::PhantomData;
 
 use serde::de::{self, Deserialize, DeserializeSeed, IntoDeserializer, SeqAccess, Visitor};
 
-use node::Node;
-use node::de::NodeSeed;
-use node_types::StandardType;
-use value::Value;
+use crate::node::Node;
+use crate::node::de::NodeSeed;
+use crate::node_types::StandardType;
+use crate::value::Value;
 
 #[derive(Debug)]
 pub enum MarshalValue {

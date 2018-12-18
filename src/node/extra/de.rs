@@ -2,10 +2,10 @@ use std::fmt;
 
 use serde::de::{self, Deserialize, Error, MapAccess, Visitor};
 
-use node::Node;
-use node::extra::ExtraNodes;
-use node::marshal::{Marshal, MarshalValue};
-use value::Value;
+use crate::node::Node;
+use crate::node::extra::ExtraNodes;
+use crate::node::marshal::{Marshal, MarshalValue};
+use crate::value::Value;
 
 impl<'de> Deserialize<'de> for ExtraNodes {
   #[inline]
@@ -29,20 +29,20 @@ impl<'de> Deserialize<'de> for ExtraNodes {
 
         let mut extra = ExtraNodes::new();
 
-        while let Some(key) = try!(map.next_key::<String>()) {
+        while let Some(key) = map.next_key::<String>()? {
           debug!("ExtraNodesVisitor::visit_map() => key: {:?}", key);
 
           if key == "__node_key" {
             debug!("ExtraNodesVisitor::visit_map() => got __node_key, getting node key");
 
-            let node_key: String = try!(map.next_value());
+            let node_key: String = map.next_value()?;
             debug!("ExtraNodesVisitor::visit_map() => node key: {:?}", node_key);
 
             extra.set_parent_key(node_key);
             continue;
           }
 
-          let marshal: Marshal = try!(map.next_value());
+          let marshal: Marshal = map.next_value()?;
           debug!("ExtraNodesVisitor::visit_map() => marshal: {:?}", marshal);
 
           let value = marshal.into_inner();

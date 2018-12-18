@@ -2,13 +2,13 @@ use std::fmt;
 
 use bytes::Bytes;
 
-use byte_buffer::strip_trailing_null_bytes;
-use encoding_type::EncodingType;
-use error::{KbinError, KbinErrorKind};
-use node::Node;
-use node_types::StandardType;
-use sixbit::{Sixbit, SixbitSize};
-use value::Value;
+use crate::byte_buffer::strip_trailing_null_bytes;
+use crate::encoding_type::EncodingType;
+use crate::error::{KbinError, KbinErrorKind};
+use crate::node::Node;
+use crate::node_types::StandardType;
+use crate::sixbit::{Sixbit, SixbitSize};
+use crate::value::Value;
 
 #[derive(Clone, Eq)]
 pub enum Key {

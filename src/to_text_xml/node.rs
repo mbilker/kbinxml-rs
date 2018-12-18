@@ -5,12 +5,12 @@ use quick_xml::Writer;
 use quick_xml::events::{BytesEnd, BytesStart, BytesText, Event};
 use quick_xml::events::attributes::Attribute;
 
-use encoding_type::EncodingType;
-use error::KbinError;
-use node::Node;
-use node_types::StandardType;
-use to_text_xml::ToTextXml;
-use value::Value;
+use crate::encoding_type::EncodingType;
+use crate::error::KbinError;
+use crate::node::Node;
+use crate::node_types::StandardType;
+use crate::to_text_xml::ToTextXml;
+use crate::value::Value;
 
 impl ToTextXml for Node {
   /// At the moment, a `Node` will always contain UTF-8 data.

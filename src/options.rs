@@ -1,5 +1,5 @@
-use compression::Compression;
-use encoding_type::EncodingType;
+use crate::compression::Compression;
+use crate::encoding_type::EncodingType;
 
 #[derive(Clone, Debug, Default)]
 pub struct Options {

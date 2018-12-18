@@ -1,6 +1,6 @@
 use serde::ser::Serialize;
 
-use node::Node;
+use crate::node::Node;
 
 impl Serialize for Node {
   #[inline]

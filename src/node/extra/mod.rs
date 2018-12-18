@@ -2,7 +2,7 @@ use std::mem;
 
 use indexmap::IndexMap;
 
-use node::Node;
+use crate::node::Node;
 
 mod de;
 mod ser;

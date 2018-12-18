@@ -4,7 +4,7 @@ use std::io::{Read, Write};
 use byteorder::{ReadBytesExt, WriteBytesExt};
 use failure::ResultExt;
 
-use error::{KbinError, KbinErrorKind};
+use crate::error::{KbinError, KbinErrorKind};
 
 static CHAR_MAP: &'static [u8] = b"0123456789:ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz";
 

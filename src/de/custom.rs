@@ -1,6 +1,6 @@
 use serde::de::{Deserializer, DeserializeSeed, EnumAccess, Error, IntoDeserializer, VariantAccess, Visitor};
 
-use node_types::StandardType;
+use crate::node_types::StandardType;
 
 pub struct Custom<D> {
   de: D,

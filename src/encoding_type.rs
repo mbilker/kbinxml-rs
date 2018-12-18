@@ -1,6 +1,6 @@
 use std::fmt;
 
-use error::{KbinError, KbinErrorKind};
+use crate::error::{KbinError, KbinErrorKind};
 use failure::ResultExt;
 
 /// The `encoding_rs` crate uses the following to describe their counterparts:

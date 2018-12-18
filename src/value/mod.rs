@@ -8,9 +8,9 @@ use byteorder::{BigEndian, ByteOrder, WriteBytesExt};
 use failure::{Fail, ResultExt};
 use rustc_hex::FromHex;
 
-use error::{KbinError, KbinErrorKind};
-use node::Node;
-use node_types::{self, StandardType};
+use crate::error::{KbinError, KbinErrorKind};
+use crate::node::Node;
+use crate::node_types::{self, StandardType};
 
 cfg_if! {
   if #[cfg(feature = "serde")] {
@@ -20,7 +20,7 @@ cfg_if! {
     pub(crate) mod de;
     mod ser;
 
-    use node::de::NodeSeed;
+    use crate::node::de::NodeSeed;
   }
 }
 

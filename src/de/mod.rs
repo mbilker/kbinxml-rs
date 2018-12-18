@@ -3,9 +3,9 @@ use std::result::Result as StdResult;
 use bytes::Bytes;
 use serde::de::{self, Deserialize, Visitor};
 
-use error::{Error, KbinErrorKind};
-use node::NodeCollection;
-use reader::Reader;
+use crate::error::{Error, KbinErrorKind};
+use crate::node::NodeCollection;
+use crate::reader::Reader;
 
 mod collection;
 mod custom;

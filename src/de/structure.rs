@@ -1,11 +1,11 @@
 use serde::de::{DeserializeSeed, IntoDeserializer, MapAccess};
 
-use de::Custom;
-use de::collection::NodeCollectionDeserializer;
-use de::definition::NodeDefinitionDeserializer;
-use error::Error;
-use node::NodeCollection;
-use node_types::StandardType;
+use crate::de::Custom;
+use crate::de::collection::NodeCollectionDeserializer;
+use crate::de::definition::NodeDefinitionDeserializer;
+use crate::error::Error;
+use crate::node::NodeCollection;
+use crate::node_types::StandardType;
 
 pub struct Struct<'a> {
   collection: &'a mut NodeCollection,
