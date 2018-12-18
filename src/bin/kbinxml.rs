@@ -1,18 +1,12 @@
-extern crate byteorder;
-extern crate failure;
-extern crate kbinxml;
-extern crate minidom;
-extern crate pretty_env_logger;
-extern crate quick_xml;
-
 #[macro_use] extern crate cfg_if;
 
-use std::env;
 use std::fs::File;
-use std::io::{self, Error as IoError, ErrorKind as IoErrorKind, Read, Write};
+use std::io::{self, Error as IoError, Read, Write};
 
 use byteorder::{BigEndian, ByteOrder};
-use failure::Fail;
+use bytes::Bytes;
+use clap::{App, Arg};
+use failure::Fallible;
 use kbinxml::{NodeCollection, Options, Printer};
 use minidom::Element;
 use quick_xml::Reader;
@@ -51,21 +45,6 @@ cfg_if! {
       testing2: Testing2,
     }
   }
-}
-
-fn display_err(err: impl Fail) -> IoError {
-  let mut fail: &Fail = &err;
-  eprintln!("e: {}", err);
-  while let Some(cause) = fail.cause() {
-    eprintln!("Cause: {}", cause);
-    fail = cause;
-  }
-
-  if let Some(backtrace) = err.backtrace() {
-    eprintln!("{}", backtrace);
-  }
-
-  IoError::new(IoErrorKind::Other, "Error parsing kbin")
 }
 
 fn display_buf(buf: &[u8]) -> Result<(), IoError> {
@@ -209,10 +188,24 @@ fn test_serde_node(_contents: &[u8]) -> std::io::Result<()> {
   Ok(())
 }
 
-fn main() -> std::io::Result<()> {
-  pretty_env_logger::init();
+fn run() -> Fallible<()> {
+  let matches = App::new("kbinxml")
+    .about(env!("CARGO_PKG_DESCRIPTION"))
+    .version(env!("CARGO_PKG_VERSION"))
+    .author("Matt Bilker <me@mbilker.us>")
+    .arg(Arg::with_name("printer")
+      .help("Turn on the NodeCollection and NodeDefinition debug printer")
+      .short("p"))
+    .arg(Arg::with_name("input")
+      .help("The file to convert")
+      .index(1))
+    .arg(Arg::with_name("serde")
+      .help("Test serialization and deserialization from kbin"))
+    .get_matches();
 
-  if let Some(file_name) = env::args().skip(1).next() {
+  let printer_enabled = matches.is_present("printer");
+
+  if let Some(file_name) = matches.value_of("input") {
     eprintln!("file_name: {}", file_name);
 
     let mut file = File::open(file_name)?;
@@ -220,38 +213,59 @@ fn main() -> std::io::Result<()> {
     file.read_to_end(&mut contents)?;
 
     if kbinxml::is_binary_xml(&contents) {
-      Printer::run(&contents).unwrap();
+      if printer_enabled {
+        Printer::run(&contents).unwrap();
+      }
 
-      let (collection, _encoding) = kbinxml::from_slice(&contents).map_err(display_err)?;
-      let text_original = kbinxml::to_text_xml(&collection).map_err(display_err)?;
+      let (collection, _encoding) = kbinxml::from_slice(&contents)?;
+      let text_original = kbinxml::to_text_xml(&collection)?;
       display_buf(&text_original)?;
 
-      let (element, encoding_original) = kbinxml::element_from_binary(&contents).map_err(display_err)?;
+      let (element, encoding_original) = kbinxml::element_from_binary(&contents)?;
 
       let options = Options::with_encoding(encoding_original);
-      let buf = kbinxml::to_binary_with_options(options, &element).map_err(display_err)?;
+      let buf = kbinxml::to_binary_with_options(options, &element)?;
       compare_slice(&buf, &contents);
 
       test_serde_node(&contents)?;
     } else {
+      let (collection, encoding) = kbinxml::from_text_xml(&contents)?;
+
       let mut reader = Reader::from_reader(contents.as_slice());
       let element = Element::from_reader(&mut reader).expect("Unable to construct DOM for input text XML");
 
-      let options = Options::default();
-      let buf = kbinxml::to_binary_with_options(options, &element).map_err(display_err)?;
+      let options = Options::with_encoding(encoding);
+      let buf = kbinxml::to_binary_with_options(options, &element)?;
       eprintln!("data: {:02x?}", buf);
 
-      let encoded_collection = Printer::run(&buf).unwrap();
-      let (collection, _encoding) = kbinxml::from_text_xml(&contents).map_err(display_err)?;
-
-      if let Some(encoded_collection) = encoded_collection {
-        compare_collections(&encoded_collection, &collection);
+      if printer_enabled {
+        Printer::run(&buf)?;
       }
+
+      let (encoded_collection, _encoding) = kbinxml::from_binary(Bytes::from(buf.as_slice()))?;
+      compare_collections(&encoded_collection, &collection);
 
       io::stdout().write_all(&buf)?;
     }
-  } else {
+  } else if matches.is_present("serde") {
     test_serde()?;
+  } else {
+    eprintln!("No input file specified!");
   }
+
   Ok(())
+}
+
+fn main() {
+  pretty_env_logger::init();
+
+  if let Err(e) = run() {
+    eprintln!("Error: {}", e);
+
+    for cause in e.iter_causes() {
+      eprintln!("Cause: {}", cause);
+    }
+
+    eprintln!("{}", e.backtrace());
+  }
 }
