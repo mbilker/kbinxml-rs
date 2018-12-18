@@ -40,6 +40,12 @@ impl<'a> TextXmlReader<'a> {
   }
 
   fn parse_attribute(&self, key: &[u8], value: &[u8]) -> Result<NodeDefinition> {
+    let mut value = BytesMut::from(value.to_vec());
+
+    // Add the trailing null byte that kbin has at the end of strings
+    value.reserve(1);
+    value.put_u8(0);
+
     // `Attribute` nodes do not have the `is_array` flag set
     let node_type = (StandardType::Attribute, false);
     let data = NodeData::Some {
@@ -47,7 +53,7 @@ impl<'a> TextXmlReader<'a> {
         encoding: self.encoding,
         data: Bytes::from(key),
       },
-      value_data: Bytes::from(value),
+      value_data: value.freeze(),
     };
 
     Ok(NodeDefinition::with_data(self.encoding, node_type, data))
