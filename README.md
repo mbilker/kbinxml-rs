@@ -1,6 +1,6 @@
 # kbinxml-rs
 
-An encoder/decoder for Konami's binary XML format, used in some of their games.
+An encoder/decoder for Konami's binary XML format, used in many of their games.
 
 ### Setup
 

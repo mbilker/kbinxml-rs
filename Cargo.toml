@@ -2,6 +2,7 @@
 name = "kbinxml"
 version = "0.17.0"
 authors = ["Matt Bilker <me@mbilker.us>"]
+description = "An encoder/decoder for Konami's binary XML format used in many of their games."
 edition = "2018"
 
 [dependencies]
