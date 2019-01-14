@@ -253,7 +253,7 @@ impl Node {
     None
   }
 
-  pub fn pointer(&self, pointer: &[&str]) -> Option<&Node> {
+  pub fn pointer<'a>(&'a self, pointer: &[&str]) -> Option<&'a Node> {
     if pointer.is_empty() {
       return Some(self);
     }
@@ -265,7 +265,7 @@ impl Node {
         None => return None,
       };
 
-      let target_opt = if let Some(index) = parse_index(&token) {
+      let target_opt = if let Some(index) = parse_index(token) {
         eprintln!("index: {}", index);
         children.get(index)
       } else {
