@@ -1,6 +1,6 @@
 [package]
 name = "kbinxml"
-version = "0.20.0"
+version = "0.21.0"
 authors = ["Matt Bilker <me@mbilker.us>"]
 description = "An encoder/decoder for Konami's binary XML format used in many of their games."
 edition = "2018"
@@ -9,7 +9,7 @@ edition = "2018"
 byteorder = "1.2.3"
 bytes = "0.4.10"
 cfg-if = "0.1"
-encoding_rs = { version = "0.8.6", features = ["simd-accel"] }
+encoding_rs = "0.8.6"
 failure = "0.1.1"
 indexmap = "1.0.1"
 lazy_static = "1.0.0"
