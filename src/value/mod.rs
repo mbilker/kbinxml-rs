@@ -622,6 +622,18 @@ impl Value {
 }
 
 #[cfg(feature = "try_from")]
+impl TryFrom<Value> for Vec<Value> {
+  type Error = KbinError;
+
+  fn try_from(value: Value) -> Result<Self, Self::Error> {
+    match value {
+      Value::Array(_, values) => Ok(values),
+      value => Err(KbinErrorKind::ExpectedValueArray(value).into()),
+    }
+  }
+}
+
+#[cfg(feature = "try_from")]
 impl TryFrom<Value> for Vec<u8> {
   type Error = KbinError;
 
