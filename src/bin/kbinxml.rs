@@ -248,8 +248,8 @@ fn run() -> Fallible<()> {
         Printer::run(&buf)?;
       }
 
-      let (encoded_collection, _encoding) = kbinxml::from_binary(Bytes::from(buf.as_slice()))?;
-      compare_collections(&encoded_collection, &collection);
+      let (encoded_collection, _encoding) = kbinxml::from_binary(Bytes::from(buf.clone()))?;
+      compare_collections(&collection, &encoded_collection);
 
       io::stdout().write_all(&buf)?;
     }
