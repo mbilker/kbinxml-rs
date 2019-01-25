@@ -208,9 +208,15 @@ fn run() -> Fallible<()> {
   if let Some(file_name) = matches.value_of("input") {
     eprintln!("file_name: {}", file_name);
 
-    let mut file = File::open(file_name)?;
     let mut contents = Vec::new();
-    file.read_to_end(&mut contents)?;
+
+    // Read '-' as standard input.
+    if file_name == "-" {
+      io::stdin().read_to_end(&mut contents)?;
+    } else {
+      let mut file = File::open(file_name)?;
+      file.read_to_end(&mut contents)?;
+    }
 
     if kbinxml::is_binary_xml(&contents) {
       if printer_enabled {
