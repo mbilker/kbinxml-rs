@@ -1,6 +1,6 @@
 [package]
 name = "kbinxml"
-version = "0.21.0"
+version = "0.22.0"
 authors = ["Matt Bilker <me@mbilker.us>"]
 description = "An encoder/decoder for Konami's binary XML format used in many of their games."
 edition = "2018"
@@ -13,7 +13,7 @@ encoding_rs = "0.8.6"
 failure = "0.1.1"
 indexmap = "1.0.1"
 lazy_static = "1.0.0"
-log = "0.4.1"
+log = { version = "0.4.1", features = ["release_max_level_warn"] }
 minidom = "0.10.0"
 quick-xml = "0.13.1"
 rustc-hex = "2.0.1"
@@ -28,6 +28,9 @@ serde_derive = { version = "1.0.79", optional = true }
 build_binary = ["clap", "pretty_env_logger"]
 serde-1 = ["serde", "serde_bytes", "serde_derive", "indexmap/serde-1"]
 try_from = []
+
+[profile.release]
+lto = true
 
 [[bin]]
 name = "kbinxml"
