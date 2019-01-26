@@ -12,6 +12,8 @@ use crate::node::{Key, NodeData, NodeCollection, NodeDefinition};
 use crate::node_types::StandardType;
 use crate::value::Value;
 
+const EMPTY_STRING_DATA: &[u8] = &[0];
+
 pub struct TextXmlReader<'a> {
   xml_reader: Reader<&'a [u8]>,
   encoding: EncodingType,
@@ -28,7 +30,7 @@ impl<'a> TextXmlReader<'a> {
       xml_reader,
       encoding: EncodingType::UTF_8,
 
-      // Most kbinxml files that I (mbilker) have come across do not have too
+      // Most kbinxml files that I have come across do not have too
       // many inner layers.
       stack: Vec::with_capacity(6),
     }
@@ -112,15 +114,19 @@ impl<'a> TextXmlReader<'a> {
   fn handle_start(&self, e: BytesStart) -> Result<(NodeCollection, usize)> {
     let (node_type, count, attributes) = self.parse_attributes(e.attributes())?;
 
+    // Stub the value for now, handle with `Event::Text`.
+    let value_data = match node_type {
+      StandardType::String => Bytes::from(EMPTY_STRING_DATA),
+      _ => Bytes::new(),
+    };
+
     let node_type = (node_type, count > 0);
     let data = NodeData::Some {
       key: Key::Uncompressed {
         encoding: self.encoding,
         data: Bytes::from(e.name()),
       },
-
-      // Stub the value for now, handle with `Event::Text`
-      value_data: Bytes::new(),
+      value_data,
     };
 
     let base = NodeDefinition::with_data(self.encoding, node_type, data);
