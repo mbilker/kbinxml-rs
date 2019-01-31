@@ -123,7 +123,7 @@ impl Writeable<Element> for Element {
       },
 
       _ => {
-        let value = Value::from_string(node_type, &text, array_mask > 0, count as usize)?;
+        let value = Value::from_string(node_type, text.trim(), array_mask > 0, count as usize)?;
         let data = value.to_bytes()?;
 
         if array_mask > 0 {
