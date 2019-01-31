@@ -493,8 +493,8 @@ impl Value {
       read_u16_into write_u16 u16 => [U16_2, U16_3, U16_4, Vu16],
       read_u32_into write_u32 u32 => [U32_2, U32_3, U32_4],
       read_u64_into write_u64 u64 => [U64_2, U64_3, U64_4],
-      read_f32_into_unchecked write_f32 f32 => [Float2, Float3, Float4],
-      read_f64_into_unchecked write_f64 f64 => [Double2, Double3, Double4]
+      read_f32_into write_f32 f32 => [Float2, Float3, Float4],
+      read_f64_into write_f64 f64 => [Double2, Double3, Double4]
     ]
   }
 
