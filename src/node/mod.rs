@@ -266,10 +266,38 @@ impl Node {
       };
 
       let target_opt = if let Some(index) = parse_index(token) {
-        eprintln!("index: {}", index);
         children.get(index)
       } else {
         children.iter().find(|ref child| {
+          child.key() == *token
+        })
+      };
+
+      if let Some(t) = target_opt {
+        target = t;
+      } else {
+        return None;
+      }
+    }
+    Some(target)
+  }
+
+  pub fn pointer_mut<'a>(&'a mut self, pointer: &[&str]) -> Option<&'a mut Node> {
+    if pointer.is_empty() {
+      return Some(self);
+    }
+    let mut target = self;
+
+    for token in pointer {
+      let children = match target.children {
+        Some(ref mut v) => v,
+        None => return None,
+      };
+
+      let target_opt = if let Some(index) = parse_index(token) {
+        children.get_mut(index)
+      } else {
+        children.iter_mut().find(|ref child| {
           child.key() == *token
         })
       };
