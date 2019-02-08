@@ -61,11 +61,12 @@ impl ToTextXml for NodeCollection {
 
     for attribute in self.attributes() {
       let key = attribute.key()?.ok_or(KbinErrorKind::InvalidState)?.into_bytes();
-      let value = attribute.value()?.to_string().into_bytes();
+      let value = attribute.value()?.to_string();
+      let value = BytesText::from_plain_str(&value);
 
       elem.push_attribute(Attribute {
         key: &key,
-        value: Cow::Owned(value),
+        value: Cow::Borrowed(value.escaped()),
       });
     }
 

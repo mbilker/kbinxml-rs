@@ -53,9 +53,11 @@ impl ToTextXml for Node {
 
     if let Some(attributes) = self.attributes() {
       for (key, value) in attributes {
+        let value = BytesText::from_plain_str(&value);
+
         elem.push_attribute(Attribute {
           key: key.as_bytes(),
-          value: Cow::Borrowed(value.as_bytes()),
+          value: Cow::Borrowed(value.escaped()),
         });
       }
     }
