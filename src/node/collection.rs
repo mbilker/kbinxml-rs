@@ -138,10 +138,8 @@ impl NodeCollection {
 
     for token in pointer {
       let target_opt = if let Some(index) = parse_index(token) {
-        eprintln!("index: {}", index);
         target.children().get(index)
       } else {
-        eprintln!("token: {:?}", token);
         target.children().iter().find(|ref child| {
           child.base().key().ok().and_then(|x| x).expect("key not parseable") == *token
         })
