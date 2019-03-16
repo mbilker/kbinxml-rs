@@ -94,12 +94,11 @@ impl Sixbit {
 
 #[cfg(test)]
 mod tests {
-  extern crate pretty_env_logger;
   extern crate test;
 
   use std::io::{Cursor, Seek, SeekFrom};
 
-  use self::test::{Bencher, black_box};
+  use test::{Bencher, black_box};
 
   use super::Sixbit;
 
@@ -108,8 +107,6 @@ mod tests {
 
   #[test]
   fn test_pack() {
-    let _ = pretty_env_logger::try_init();
-
     let mut data: Cursor<Vec<u8>> = Cursor::new(Vec::new());
     Sixbit::pack(&mut data, TEST1_STR).expect("Failed to pack sixbit");
     assert_eq!(data.into_inner(), TEST1_BYTES);
@@ -117,8 +114,6 @@ mod tests {
 
   #[test]
   fn test_unpack() {
-    let _ = pretty_env_logger::try_init();
-
     let size = Sixbit::size(&mut Cursor::new(TEST1_BYTES)).expect("Failed to get size of sixbit string");
     let result = Sixbit::unpack(&TEST1_BYTES[1..], size).expect("Failed to unpack sixbit string");
     assert_eq!(result, TEST1_STR);
