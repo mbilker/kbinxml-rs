@@ -189,14 +189,14 @@ pub fn from_slice(input: &[u8]) -> Result<(NodeCollection, EncodingType)> {
 }
 
 pub fn to_binary<T>(input: &T) -> Result<Vec<u8>>
-  where T: Writeable<T>
+  where T: Writeable
 {
   let mut writer = Writer::new();
   writer.to_binary(input)
 }
 
 pub fn to_binary_with_options<T>(options: Options, input: &T) -> Result<Vec<u8>>
-  where T: Writeable<T>
+  where T: Writeable
 {
   let mut writer = Writer::with_options(options);
   writer.to_binary(input)

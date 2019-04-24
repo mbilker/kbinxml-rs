@@ -59,14 +59,14 @@ fn write_value(options: &Options, data_buf: &mut ByteBufferWrite, node_type: Sta
   Ok(())
 }
 
-pub trait Writeable<T> {
-  fn write_node(options: &Options, node_buf: &mut ByteBufferWrite, data_buf: &mut ByteBufferWrite, input: &T) -> Result<()>;
+pub trait Writeable {
+  fn write_node(&self, options: &Options, node_buf: &mut ByteBufferWrite, data_buf: &mut ByteBufferWrite) -> Result<()>;
 }
 
-impl Writeable<Element> for Element {
-  fn write_node(options: &Options, node_buf: &mut ByteBufferWrite, data_buf: &mut ByteBufferWrite, input: &Element) -> Result<()> {
-    let text = input.text();
-    let node_type = match input.attr("__type") {
+impl Writeable for Element {
+  fn write_node(&self, options: &Options, node_buf: &mut ByteBufferWrite, data_buf: &mut ByteBufferWrite) -> Result<()> {
+    let text = self.text();
+    let node_type = match self.attr("__type") {
       Some(name) => StandardType::from_name(name),
       None => {
         // Screw whitespace with pretty printed XML
@@ -78,7 +78,7 @@ impl Writeable<Element> for Element {
       },
     };
 
-    let (array_mask, count) = match input.attr("__count") {
+    let (array_mask, count) = match self.attr("__count") {
       Some(count) => {
         let count = count.parse::<u32>().context(KbinErrorKind::StringParse("array count"))?;
         debug!("write_node => __count = {}", count);
@@ -90,7 +90,7 @@ impl Writeable<Element> for Element {
     };
 
     debug!("write_node => name: {}, type: {:?}, type_size: {}, type_count: {}, is_array: {}, size: {}",
-      input.name(),
+      self.name(),
       node_type,
       node_type.size,
       node_type.count,
@@ -99,9 +99,9 @@ impl Writeable<Element> for Element {
 
     node_buf.write_u8(node_type.id | array_mask).context(KbinErrorKind::DataWrite(node_type.name))?;
     match options.compression {
-      Compression::Compressed => Sixbit::pack(&mut **node_buf, input.name())?,
+      Compression::Compressed => Sixbit::pack(&mut **node_buf, self.name())?,
       Compression::Uncompressed => {
-        let data = options.encoding.encode_bytes(input.name())?;
+        let data = options.encoding.encode_bytes(self.name())?;
         let len = (data.len() - 1) as u8;
         node_buf.write_u8(len | ARRAY_MASK).context(KbinErrorKind::DataWrite("node name length"))?;
         node_buf.write_all(&data).context(KbinErrorKind::DataWrite("node name bytes"))?;
@@ -139,7 +139,7 @@ impl Writeable<Element> for Element {
       },
     }
 
-    for (key, value) in input.attrs() {
+    for (key, value) in self.attrs() {
       match key {
         "__count" | "__size" | "__type" => continue,
         _ => {},
@@ -162,8 +162,8 @@ impl Writeable<Element> for Element {
       };
     }
 
-    for child in input.children() {
-      Self::write_node(options, node_buf, data_buf, child)?;
+    for child in self.children() {
+      child.write_node(options, node_buf, data_buf)?;
     }
 
     // Always has the array bit set
@@ -173,11 +173,11 @@ impl Writeable<Element> for Element {
   }
 }
 
-impl Writeable<NodeCollection> for NodeCollection {
-  fn write_node(options: &Options, node_buf: &mut ByteBufferWrite, data_buf: &mut ByteBufferWrite, input: &NodeCollection) -> Result<()> {
-    let (node_type, is_array) = input.base().node_type_tuple();
+impl Writeable for NodeCollection {
+  fn write_node(&self, options: &Options, node_buf: &mut ByteBufferWrite, data_buf: &mut ByteBufferWrite) -> Result<()> {
+    let (node_type, is_array) = self.base().node_type_tuple();
     let array_mask = if is_array { ARRAY_MASK } else { 0 };
-    let name = input.base().key()?.ok_or(KbinErrorKind::InvalidState)?;
+    let name = self.base().key()?.ok_or(KbinErrorKind::InvalidState)?;
 
     debug!("NodeCollection write_node => name: {}, type: {:?}, type_size: {}, type_count: {}, is_array: {}",
       name,
@@ -198,11 +198,11 @@ impl Writeable<NodeCollection> for NodeCollection {
     };
 
     if node_type != StandardType::NodeStart {
-      let value = input.base().value()?;
+      let value = self.base().value()?;
       write_value(options, data_buf, node_type, is_array, &value)?;
     }
 
-    for attr in input.attributes() {
+    for attr in self.attributes() {
       let key = attr.key()?.ok_or(KbinErrorKind::InvalidState)?;
       let value = attr.value_bytes().ok_or(KbinErrorKind::InvalidState)?;
 
@@ -222,8 +222,8 @@ impl Writeable<NodeCollection> for NodeCollection {
       };
     }
 
-    for child in input.children() {
-      Self::write_node(options, node_buf, data_buf, child)?;
+    for child in self.children() {
+      child.write_node(options, node_buf, data_buf)?;
     }
 
     // Always has the array bit set
@@ -233,9 +233,9 @@ impl Writeable<NodeCollection> for NodeCollection {
   }
 }
 
-impl Writeable<Node> for Node {
-  fn write_node(options: &Options, node_buf: &mut ByteBufferWrite, data_buf: &mut ByteBufferWrite, input: &Node) -> Result<()> {
-    let (node_type, is_array) = match input.value() {
+impl Writeable for Node {
+  fn write_node(&self, options: &Options, node_buf: &mut ByteBufferWrite, data_buf: &mut ByteBufferWrite) -> Result<()> {
+    let (node_type, is_array) = match self.value() {
       Some(Value::Array(node_type, _)) => (*node_type, true),
       Some(ref value) => (value.standard_type(), false),
       None => (StandardType::NodeStart, false),
@@ -243,7 +243,7 @@ impl Writeable<Node> for Node {
     let array_mask = if is_array { ARRAY_MASK } else { 0 };
 
     debug!("Node write_node => name: {}, type: {:?}, type_size: {}, type_count: {}, is_array: {}",
-      input.key(),
+      self.key(),
       node_type,
       node_type.size,
       node_type.count,
@@ -251,20 +251,20 @@ impl Writeable<Node> for Node {
 
     node_buf.write_u8(node_type.id | array_mask).context(KbinErrorKind::DataWrite(node_type.name))?;
     match options.compression {
-      Compression::Compressed => Sixbit::pack(&mut **node_buf, &input.key())?,
+      Compression::Compressed => Sixbit::pack(&mut **node_buf, &self.key())?,
       Compression::Uncompressed => {
-        let data = options.encoding.encode_bytes(&input.key())?;
+        let data = options.encoding.encode_bytes(&self.key())?;
         let len = (data.len() - 1) as u8;
         node_buf.write_u8(len | ARRAY_MASK).context(KbinErrorKind::DataWrite("node name length"))?;
         node_buf.write_all(&data).context(KbinErrorKind::DataWrite("node name bytes"))?;
       },
     };
 
-    if let Some(value) = input.value() {
+    if let Some(value) = self.value() {
       write_value(options, data_buf, node_type, is_array, value)?;
     }
 
-    if let Some(attributes) = input.attributes() {
+    if let Some(attributes) = self.attributes() {
       for (key, value) in attributes {
         trace!("Node write_node => attr: {}, value: {}", key, value);
 
@@ -283,9 +283,9 @@ impl Writeable<Node> for Node {
       }
     }
 
-    if let Some(children) = input.children() {
+    if let Some(children) = self.children() {
       for child in children {
-        Self::write_node(options, node_buf, data_buf, child)?;
+        child.write_node(options, node_buf, data_buf)?;
       }
     }
 
@@ -314,7 +314,7 @@ impl Writer {
   }
 
   pub fn to_binary<T>(&mut self, input: &T) -> Result<Vec<u8>>
-    where T: Writeable<T>
+    where T: Writeable
   {
     let mut header = Cursor::new(Vec::with_capacity(8));
     header.write_u8(SIGNATURE).context(KbinErrorKind::HeaderWrite("signature"))?;
@@ -329,7 +329,7 @@ impl Writer {
     let mut node_buf = ByteBufferWrite::new(Vec::new());
     let mut data_buf = ByteBufferWrite::new(Vec::new());
 
-    T::write_node(&self.options, &mut node_buf, &mut data_buf, input)?;
+    input.write_node(&self.options, &mut node_buf, &mut data_buf)?;
 
     node_buf.write_u8(StandardType::FileEnd.id | ARRAY_MASK).context(KbinErrorKind::DataWrite("file end"))?;
     node_buf.realign_writes(None)?;
