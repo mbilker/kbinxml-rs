@@ -1,8 +1,7 @@
+use std::collections::BTreeMap;
 use std::fmt;
 use std::iter::IntoIterator;
 use std::mem;
-
-use indexmap::IndexMap;
 
 use crate::value::Value;
 
@@ -25,12 +24,10 @@ cfg_if! {
 }
 
 // The attributes argument is very hard to generalize
-fn convert_attributes(attrs: &[(&str, &str)]) -> IndexMap<String, String> {
-  let mut attributes = IndexMap::with_capacity(attrs.len());
-  for (key, value) in attrs.iter() {
-    attributes.insert(String::from(*key), String::from(*value));
-  }
-  attributes
+fn convert_attributes(attrs: &[(&str, &str)]) -> BTreeMap<String, String> {
+  attrs.iter()
+    .map(|(key, value)| (String::from(*key), String::from(*value)))
+    .collect()
 }
 
 fn parse_index(s: &str) -> Option<usize> {
@@ -47,7 +44,7 @@ pub struct OptionIterator<T: IntoIterator> {
 #[derive(Clone, Default, PartialEq)]
 pub struct Node {
   key: String,
-  attributes: Option<IndexMap<String, String>>,
+  attributes: Option<BTreeMap<String, String>>,
   children: Option<Vec<Node>>,
   value: Option<Value>,
 }
@@ -146,12 +143,12 @@ impl Node {
   }
 
   #[inline]
-  pub fn attributes(&self) -> Option<&IndexMap<String, String>> {
+  pub fn attributes(&self) -> Option<&BTreeMap<String, String>> {
     self.attributes.as_ref()
   }
 
   #[inline]
-  pub fn attributes_mut(&mut self) -> Option<&mut IndexMap<String, String>> {
+  pub fn attributes_mut(&mut self) -> Option<&mut BTreeMap<String, String>> {
     self.attributes.as_mut()
   }
 
@@ -256,6 +253,25 @@ impl Node {
     }
 
     None
+  }
+
+  pub fn remove_child(&mut self, key: &str) -> Option<Node> {
+    if let Some(ref mut children) = self.children {
+      let index = children.iter()
+        .enumerate()
+        .find(|(_, child)| child.key() == key)
+        .map(|(index, _)| index);
+
+      if let Some(index) = index {
+        return Some(children.remove(index));
+      }
+    }
+
+    None
+  }
+
+  pub fn remove_child_at(&mut self, index: usize) -> Option<Node> {
+    self.children.as_mut().map(|children| children.remove(index))
   }
 
   pub fn pointer<'a>(&'a self, pointer: &[&str]) -> Option<&'a Node> {
