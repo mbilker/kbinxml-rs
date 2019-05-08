@@ -1,7 +1,8 @@
-use std::collections::BTreeMap;
 use std::fmt;
 use std::iter::IntoIterator;
 use std::mem;
+
+use indexmap::IndexMap;
 
 use crate::value::Value;
 
@@ -24,7 +25,7 @@ cfg_if! {
 }
 
 // The attributes argument is very hard to generalize
-fn convert_attributes(attrs: &[(&str, &str)]) -> BTreeMap<String, String> {
+fn convert_attributes(attrs: &[(&str, &str)]) -> IndexMap<String, String> {
   attrs.iter()
     .map(|(key, value)| (String::from(*key), String::from(*value)))
     .collect()
@@ -44,7 +45,7 @@ pub struct OptionIterator<T: IntoIterator> {
 #[derive(Clone, Default, PartialEq)]
 pub struct Node {
   key: String,
-  attributes: Option<BTreeMap<String, String>>,
+  attributes: Option<IndexMap<String, String>>,
   children: Option<Vec<Node>>,
   value: Option<Value>,
 }
@@ -143,12 +144,12 @@ impl Node {
   }
 
   #[inline]
-  pub fn attributes(&self) -> Option<&BTreeMap<String, String>> {
+  pub fn attributes(&self) -> Option<&IndexMap<String, String>> {
     self.attributes.as_ref()
   }
 
   #[inline]
-  pub fn attributes_mut(&mut self) -> Option<&mut BTreeMap<String, String>> {
+  pub fn attributes_mut(&mut self) -> Option<&mut IndexMap<String, String>> {
     self.attributes.as_mut()
   }
 
@@ -208,6 +209,12 @@ impl Node {
   {
     let attributes = self.attributes.get_or_insert_with(Default::default);
     attributes.insert(key.into(), value.into())
+  }
+
+  pub fn sort_attrs(&mut self) {
+    if let Some(ref mut attributes) = self.attributes {
+      attributes.sort_keys();
+    }
   }
 
   pub fn append_child(&mut self, value: Node) {
