@@ -211,7 +211,6 @@ impl<'a> TextXmlReader<'a> {
         Ok(Event::Eof) => break,
         Ok(_) => {},
         Err(e) => {
-          eprintln!("event error: {:?}", e);
           return Err(e.context(KbinErrorKind::InvalidState).into())
         },
       };
