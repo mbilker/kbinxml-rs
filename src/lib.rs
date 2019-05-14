@@ -1,15 +1,6 @@
 #![cfg_attr(test, feature(test))]
 #![cfg_attr(feature = "try_from", feature(try_from))]
 
-extern crate byteorder;
-extern crate bytes;
-extern crate encoding_rs;
-extern crate indexmap;
-extern crate minidom;
-extern crate quick_xml;
-extern crate rustc_hex;
-
-#[macro_use] extern crate cfg_if;
 #[macro_use] extern crate failure;
 #[macro_use] extern crate lazy_static;
 #[macro_use] extern crate log;
@@ -52,21 +43,6 @@ pub use crate::to_element::ToElement;
 pub use crate::to_text_xml::ToTextXml;
 pub use crate::value::Value;
 pub use crate::writer::{Writer, Writeable};
-
-cfg_if! {
-  if #[cfg(feature = "serde")] {
-    extern crate serde_bytes;
-
-    #[macro_use] extern crate serde;
-
-    mod de;
-    mod ser;
-
-    pub use crate::de::from_bytes as serde_from_bytes;
-    pub use crate::node::ExtraNodes;
-    pub use crate::ser::to_bytes as serde_to_bytes;
-  }
-}
 
 const SIGNATURE: u8 = 0xA0;
 

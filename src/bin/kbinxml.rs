@@ -1,5 +1,3 @@
-#[macro_use] extern crate cfg_if;
-
 use std::fs::File;
 use std::io::{self, Error as IoError, Read, Write};
 
@@ -10,42 +8,6 @@ use failure::Fallible;
 use kbinxml::{NodeCollection, Options, Printer};
 use minidom::Element;
 use quick_xml::Reader;
-
-cfg_if! {
-  if #[cfg(feature = "serde")] {
-    #[macro_use] extern crate serde_derive;
-
-    use std::net::Ipv4Addr;
-
-    use kbinxml::{ExtraNodes, Node};
-
-    #[derive(Debug, Deserialize, Serialize)]
-    #[serde(rename = "test2")]
-    pub struct Testing2 {
-      hi: u16,
-      ho: i16,
-      vu: Vec<u8>,
-      opt: Option<u8>,
-      opt2: Option<u8>,
-      ip: Ipv4Addr,
-
-      #[serde(flatten)]
-      extra: ExtraNodes,
-    }
-
-    #[derive(Debug, Deserialize, Serialize)]
-    #[serde(rename = "test")]
-    pub struct Testing {
-      #[serde(rename = "attr_the_attr")] the_attr: String,
-      hi: u8,
-      ok: [u8; 3],
-      hhh: (u8, u8),
-      hhg: (u32, u32),
-      foo: String,
-      testing2: Testing2,
-    }
-  }
-}
 
 fn display_buf(buf: &[u8]) -> Result<(), IoError> {
   io::stdout().write_all(&buf)?;
@@ -119,75 +81,6 @@ fn compare_slice(left: &[u8], right: &[u8]) {
   }
 }
 
-#[cfg(feature = "serde")]
-fn test_serde() -> std::io::Result<()> {
-  use kbinxml::{serde_from_bytes, serde_to_bytes};
-
-  let obj = Testing {
-    the_attr: "the_value".to_string(),
-    hi: 12,
-    ok: [12, 24, 48],
-    hhh: (55, 66),
-    hhg: (55, 66),
-    foo: "foobarbaz".to_string(),
-    testing2: Testing2 {
-      hi: 32423,
-      ho: 32000,
-      vu: vec![33, 255, 254],
-      opt: None,
-      opt2: Some(111),
-      ip: Ipv4Addr::new(127, 0, 0, 1),
-      extra: ExtraNodes::new(),
-    },
-  };
-  let bytes = serde_to_bytes(&obj).unwrap();
-  eprintln!("bytes: {:02x?}", bytes);
-
-  let mut file = File::create("testing.kbin")?;
-  file.write_all(&bytes)?;
-
-  let obj2 = serde_from_bytes::<Testing>(&bytes);
-  match &obj2 {
-    Ok(obj2) => eprintln!("obj2: {:#?}", obj2),
-    Err(e) => eprintln!("Unable to parse generated kbin back to struct: {:#?}", e),
-  };
-
-  let value = serde_from_bytes::<Node>(&bytes);
-  match &value {
-    Ok(obj2) => eprintln!("obj2: {:#?}", obj2),
-    Err(e) => eprintln!("Unable to parse generated kbin back to `Value`: {:#?}", e),
-  };
-
-  if obj2.is_ok() && value.is_ok() {
-    Printer::run(&bytes).unwrap();
-  }
-
-  Ok(())
-}
-
-#[cfg(not(feature = "serde"))]
-fn test_serde() -> std::io::Result<()> {
-  Ok(())
-}
-
-#[cfg(feature = "serde")]
-fn test_serde_node(contents: &[u8]) -> std::io::Result<()> {
-  let node = kbinxml::serde_from_bytes::<Node>(&contents);
-  match &node {
-    Ok(obj2) => {
-      eprintln!("obj2: {:#?}", obj2);
-    },
-    Err(e) => eprintln!("Unable to parse generated kbin back to `Node`: {:#?}", e),
-  };
-
-  Ok(())
-}
-
-#[cfg(not(feature = "serde"))]
-fn test_serde_node(_contents: &[u8]) -> std::io::Result<()> {
-  Ok(())
-}
-
 fn run() -> Fallible<()> {
   let matches = App::new("kbinxml")
     .about(env!("CARGO_PKG_DESCRIPTION"))
@@ -199,8 +92,6 @@ fn run() -> Fallible<()> {
     .arg(Arg::with_name("input")
       .help("The file to convert")
       .index(1))
-    .arg(Arg::with_name("serde")
-      .help("Test serialization and deserialization from kbin"))
     .get_matches();
 
   let printer_enabled = matches.is_present("printer");
@@ -232,8 +123,6 @@ fn run() -> Fallible<()> {
       let options = Options::with_encoding(encoding_original);
       let buf = kbinxml::to_binary_with_options(options, &element)?;
       compare_slice(&buf, &contents);
-
-      test_serde_node(&contents)?;
     } else {
       let (collection, encoding) = kbinxml::from_text_xml(&contents)?;
 
@@ -253,8 +142,6 @@ fn run() -> Fallible<()> {
 
       io::stdout().write_all(&buf)?;
     }
-  } else if matches.is_present("serde") {
-    test_serde()?;
   } else {
     eprintln!("No input file specified!");
   }

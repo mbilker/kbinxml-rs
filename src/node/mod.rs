@@ -12,18 +12,6 @@ mod definition;
 pub use self::collection::NodeCollection;
 pub use self::definition::{Key, NodeData, NodeDefinition};
 
-cfg_if! {
-  if #[cfg(feature = "serde")] {
-    pub(crate) mod de;
-    mod extra;
-    mod marshal;
-    mod ser;
-
-    pub use self::marshal::{Marshal, MarshalDeserializer};
-    pub use self::extra::ExtraNodes;
-  }
-}
-
 // The attributes argument is very hard to generalize
 fn convert_attributes(attrs: &[(&str, &str)]) -> IndexMap<String, String> {
   attrs.iter()

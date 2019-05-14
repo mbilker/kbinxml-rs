@@ -12,18 +12,6 @@ use crate::error::{KbinError, KbinErrorKind};
 use crate::node::Node;
 use crate::node_types::{self, StandardType};
 
-cfg_if! {
-  if #[cfg(feature = "serde")] {
-    use serde::de::{Deserialize, Deserializer, DeserializeSeed};
-    use serde_bytes::ByteBuf;
-
-    pub(crate) mod de;
-    mod ser;
-
-    use crate::node::de::NodeSeed;
-  }
-}
-
 macro_rules! tuple {
   (
     byte: [
@@ -454,28 +442,6 @@ macro_rules! construct_types {
         }
       }
     }
-
-    #[cfg(feature = "serde")]
-    impl<'de> DeserializeSeed<'de> for StandardType {
-      type Value = Value;
-
-      fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
-        where D: Deserializer<'de>
-      {
-        trace!("<StandardType as DeserializeSeed>::deserialize(self: {:?})", self);
-        match self {
-          $(
-            StandardType::$konst => <$($value_type)*>::deserialize(deserializer).map(Value::$konst),
-          )+
-          StandardType::Binary => ByteBuf::deserialize(deserializer).map(Vec::from).map(Value::Binary),
-          StandardType::Time => u32::deserialize(deserializer).map(Value::Time),
-          StandardType::Attribute => String::deserialize(deserializer).map(Value::Attribute),
-          StandardType::NodeStart => NodeSeed.deserialize(deserializer).map(Box::new).map(Value::Node),
-          StandardType::NodeEnd |
-          StandardType::FileEnd => unimplemented!(),
-        }
-      }
-    }
   }
 }
 
@@ -674,13 +640,6 @@ impl TryFrom<&Value> for Vec<u8> {
 impl From<Vec<u8>> for Value {
   fn from(value: Vec<u8>) -> Value {
     Value::Binary(value)
-  }
-}
-
-#[cfg(feature = "serde")]
-impl From<ByteBuf> for Value {
-  fn from(value: ByteBuf) -> Value {
-    Value::Binary(value.into())
   }
 }
 
