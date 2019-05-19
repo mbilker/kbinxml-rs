@@ -131,7 +131,6 @@ fn run() -> Fallible<()> {
 
       let options = Options::with_encoding(encoding);
       let buf = kbinxml::to_binary_with_options(options, &element)?;
-      eprintln!("data: {:02x?}", buf);
 
       if printer_enabled {
         Printer::run(&buf)?;
