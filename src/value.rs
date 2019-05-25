@@ -1,4 +1,3 @@
-#[cfg(feature = "try_from")]
 use std::convert::TryFrom;
 use std::fmt;
 use std::net::Ipv4Addr;
@@ -403,7 +402,6 @@ macro_rules! construct_types {
         }
       }
 
-      #[cfg(feature = "try_from")]
       impl TryFrom<Value> for $($value_type)* {
         type Error = KbinError;
 
@@ -415,7 +413,6 @@ macro_rules! construct_types {
         }
       }
 
-      #[cfg(feature = "try_from")]
       impl TryFrom<&Value> for $($value_type)* {
         type Error = KbinError;
 
@@ -587,7 +584,6 @@ impl Value {
   }
 }
 
-#[cfg(feature = "try_from")]
 impl TryFrom<Value> for Vec<Value> {
   type Error = KbinError;
 
@@ -599,7 +595,6 @@ impl TryFrom<Value> for Vec<Value> {
   }
 }
 
-#[cfg(feature = "try_from")]
 impl TryFrom<Value> for Vec<u8> {
   type Error = KbinError;
 
@@ -619,7 +614,6 @@ impl TryFrom<Value> for Vec<u8> {
   }
 }
 
-#[cfg(feature = "try_from")]
 impl TryFrom<&Value> for Vec<u8> {
   type Error = KbinError;
 

@@ -22,7 +22,6 @@ pretty_env_logger = { version = "0.3.0", optional = true }
 
 [features]
 build_binary = ["clap", "pretty_env_logger"]
-try_from = []
 
 [profile.release]
 lto = true

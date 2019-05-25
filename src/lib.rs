@@ -1,5 +1,4 @@
 #![cfg_attr(test, feature(test))]
-#![cfg_attr(feature = "try_from", feature(try_from))]
 
 #[macro_use] extern crate failure;
 #[macro_use] extern crate lazy_static;
