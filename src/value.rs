@@ -8,8 +8,71 @@ use failure::{Fail, ResultExt};
 use rustc_hex::FromHex;
 
 use crate::error::{KbinError, KbinErrorKind};
-use crate::node::Node;
 use crate::node_types::{self, StandardType};
+
+macro_rules! construct_types {
+  (
+    $(
+      ($konst:ident, $($value_type:tt)*);
+    )+
+  ) => {
+    #[derive(Clone, PartialEq)]
+    pub enum Value {
+      $(
+        $konst($($value_type)*),
+      )+
+      Binary(Vec<u8>),
+      Time(u32),
+      Attribute(String),
+
+      Array(StandardType, Vec<Value>),
+    }
+
+    $(
+      impl From<$($value_type)*> for Value {
+        fn from(value: $($value_type)*) -> Value {
+          Value::$konst(value)
+        }
+      }
+
+      impl TryFrom<Value> for $($value_type)* {
+        type Error = KbinError;
+
+        fn try_from(value: Value) -> Result<Self, Self::Error> {
+          match value {
+            Value::$konst(v) => Ok(v),
+            value => Err(KbinErrorKind::ValueTypeMismatch(StandardType::$konst, value).into()),
+          }
+        }
+      }
+
+      impl TryFrom<&Value> for $($value_type)* {
+        type Error = KbinError;
+
+        fn try_from(value: &Value) -> Result<Self, Self::Error> {
+          match value {
+            Value::$konst(ref v) => Ok(v.clone()),
+            value => Err(KbinErrorKind::ValueTypeMismatch(StandardType::$konst, value.clone()).into()),
+          }
+        }
+      }
+    )+
+
+    impl Value {
+      pub fn standard_type(&self) -> StandardType {
+        match *self {
+          $(
+            Value::$konst(_) => StandardType::$konst,
+          )+
+          Value::Binary(_) => StandardType::Binary,
+          Value::Time(_) => StandardType::Time,
+          Value::Attribute(_) => StandardType::Attribute,
+          Value::Array(node_type, _) => node_type,
+        }
+      }
+    }
+  }
+}
 
 macro_rules! tuple {
   (
@@ -333,8 +396,7 @@ macro_rules! tuple {
           }
         },
         Value::Attribute(_) |
-        Value::String(_) |
-        Value::Node(_) => return Err(KbinErrorKind::InvalidNodeType(self.standard_type()).into()),
+        Value::String(_) => return Err(KbinErrorKind::InvalidNodeType(self.standard_type()).into()),
         $(
           Value::$s8_konst(value) => {
             output.reserve(value.len());
@@ -374,72 +436,6 @@ macro_rules! tuple {
       Ok(())
     }
   };
-}
-
-macro_rules! construct_types {
-  (
-    $(
-      ($konst:ident, $($value_type:tt)*);
-    )+
-  ) => {
-    #[derive(Clone, PartialEq)]
-    pub enum Value {
-      $(
-        $konst($($value_type)*),
-      )+
-      Binary(Vec<u8>),
-      Time(u32),
-      Attribute(String),
-
-      Array(StandardType, Vec<Value>),
-      Node(Box<Node>),
-    }
-
-    $(
-      impl From<$($value_type)*> for Value {
-        fn from(value: $($value_type)*) -> Value {
-          Value::$konst(value)
-        }
-      }
-
-      impl TryFrom<Value> for $($value_type)* {
-        type Error = KbinError;
-
-        fn try_from(value: Value) -> Result<Self, Self::Error> {
-          match value {
-            Value::$konst(v) => Ok(v),
-            value => Err(KbinErrorKind::ValueTypeMismatch(StandardType::$konst, value).into()),
-          }
-        }
-      }
-
-      impl TryFrom<&Value> for $($value_type)* {
-        type Error = KbinError;
-
-        fn try_from(value: &Value) -> Result<Self, Self::Error> {
-          match value {
-            Value::$konst(ref v) => Ok(v.clone()),
-            value => Err(KbinErrorKind::ValueTypeMismatch(StandardType::$konst, value.clone()).into()),
-          }
-        }
-      }
-    )+
-
-    impl Value {
-      pub fn standard_type(&self) -> StandardType {
-        match *self {
-          $(
-            Value::$konst(_) => StandardType::$konst,
-          )+
-          Value::Binary(_) => StandardType::Binary,
-          Value::Time(_) => StandardType::Time,
-          Value::Attribute(_) => StandardType::Attribute,
-          Value::Array(node_type, _) => node_type,
-          Value::Node(_) => StandardType::NodeStart,
-        }
-      }
-    }
-  }
 }
 
 impl Value {
@@ -642,19 +638,11 @@ impl fmt::Debug for Value {
     macro_rules! field {
       (
         display: [$($konst_display:ident),*],
-        debug_alternate: [$($konst_alternate:ident),*],
         debug: [$($konst_debug:ident),*]
       ) => {
         match *self {
           $(
             Value::$konst_display(ref v) => write!(f, concat!(stringify!($konst_display), "({})"), v),
-          )*
-          $(
-            Value::$konst_alternate(ref v) => if f.alternate() {
-              write!(f, concat!(stringify!($konst_alternate), "({:#?})"), v)
-            } else {
-              write!(f, concat!(stringify!($konst_alternate), "({:?})"), v)
-            },
           )*
           $(
             Value::$konst_debug(ref v) => write!(f, concat!(stringify!($konst_debug), "({:?})"), v),
@@ -674,9 +662,6 @@ impl fmt::Debug for Value {
         S8, S16, S32, S64,
         U8, U16, U32, U64,
         Float, Double, Boolean
-      ],
-      debug_alternate: [
-        Node
       ],
       debug: [
         String, Time, Ip4,
@@ -756,7 +741,6 @@ impl fmt::Display for Value {
             false => f.write_str("0"),
           },
           Value::Array(_, values) => BorrowedValueArray(&values).fmt(f),
-          Value::Node(_) => Ok(()),
         }
       };
     }

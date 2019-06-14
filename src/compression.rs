@@ -18,7 +18,7 @@ impl Compression {
 
   pub fn to_byte(&self) -> u8 {
     match *self {
-      Compression::Compressed   => SIG_COMPRESSED,
+      Compression::Compressed => SIG_COMPRESSED,
       Compression::Uncompressed => SIG_UNCOMPRESSED,
     }
   }
