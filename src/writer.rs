@@ -34,8 +34,7 @@ fn write_value(options: &Options, data_buf: &mut ByteBufferWrite, node_type: Sta
         return Err(KbinErrorKind::InvalidState.into());
       }
 
-      let count = values.len();
-      let total_size = count * node_type.count * node_type.size;
+      let total_size = values.len() * node_type.count * node_type.size;
 
       let mut data = Vec::with_capacity(total_size);
       for value in values {
@@ -97,7 +96,7 @@ impl Writeable for Element {
       array_mask,
       count);
 
-    node_buf.write_u8(node_type.id | array_mask).context(KbinErrorKind::DataWrite(node_type.name))?;
+    node_buf.write_u8(node_type as u8 | array_mask).context(KbinErrorKind::DataWrite(node_type.name))?;
     match options.compression {
       Compression::Compressed => Sixbit::pack(&mut **node_buf, self.name())?,
       Compression::Uncompressed => {
@@ -150,7 +149,7 @@ impl Writeable for Element {
       data_buf.write_str(options.encoding, value)?;
 
       let node_type = StandardType::Attribute;
-      node_buf.write_u8(node_type.id).context(KbinErrorKind::DataWrite(node_type.name))?;
+      node_buf.write_u8(node_type as u8).context(KbinErrorKind::DataWrite(node_type.name))?;
       match options.compression {
         Compression::Compressed => Sixbit::pack(&mut **node_buf, key)?,
         Compression::Uncompressed => {
@@ -166,8 +165,8 @@ impl Writeable for Element {
       child.write_node(options, node_buf, data_buf)?;
     }
 
-    // Always has the array bit set
-    node_buf.write_u8(StandardType::NodeEnd.id | ARRAY_MASK).context(KbinErrorKind::DataWrite("node end"))?;
+    // node end always has the array bit set
+    node_buf.write_u8(StandardType::NodeEnd as u8 | ARRAY_MASK).context(KbinErrorKind::DataWrite("node end"))?;
 
     Ok(())
   }
@@ -186,7 +185,7 @@ impl Writeable for NodeCollection {
       node_type.count,
       is_array);
 
-    node_buf.write_u8(node_type.id | array_mask).context(KbinErrorKind::DataWrite(node_type.name))?;
+    node_buf.write_u8(node_type as u8 | array_mask).context(KbinErrorKind::DataWrite(node_type.name))?;
     match options.compression {
       Compression::Compressed => Sixbit::pack(&mut **node_buf, &name)?,
       Compression::Uncompressed => {
@@ -210,7 +209,7 @@ impl Writeable for NodeCollection {
 
       data_buf.buf_write(value)?;
 
-      node_buf.write_u8(StandardType::Attribute.id).context(KbinErrorKind::DataWrite(StandardType::Attribute.name))?;
+      node_buf.write_u8(StandardType::Attribute as u8).context(KbinErrorKind::DataWrite(StandardType::Attribute.name))?;
       match options.compression {
         Compression::Compressed => Sixbit::pack(&mut **node_buf, &key)?,
         Compression::Uncompressed => {
@@ -226,8 +225,8 @@ impl Writeable for NodeCollection {
       child.write_node(options, node_buf, data_buf)?;
     }
 
-    // Always has the array bit set
-    node_buf.write_u8(StandardType::NodeEnd.id | ARRAY_MASK).context(KbinErrorKind::DataWrite("node end"))?;
+    // node end always has the array bit set
+    node_buf.write_u8(StandardType::NodeEnd as u8 | ARRAY_MASK).context(KbinErrorKind::DataWrite("node end"))?;
 
     Ok(())
   }
@@ -249,7 +248,7 @@ impl Writeable for Node {
       node_type.count,
       is_array);
 
-    node_buf.write_u8(node_type.id | array_mask).context(KbinErrorKind::DataWrite(node_type.name))?;
+    node_buf.write_u8(node_type as u8 | array_mask).context(KbinErrorKind::DataWrite(node_type.name))?;
     match options.compression {
       Compression::Compressed => Sixbit::pack(&mut **node_buf, &self.key())?,
       Compression::Uncompressed => {
@@ -270,7 +269,7 @@ impl Writeable for Node {
 
         data_buf.write_str(options.encoding, value)?;
 
-        node_buf.write_u8(StandardType::Attribute.id).context(KbinErrorKind::DataWrite(StandardType::Attribute.name))?;
+        node_buf.write_u8(StandardType::Attribute as u8).context(KbinErrorKind::DataWrite(StandardType::Attribute.name))?;
         match options.compression {
           Compression::Compressed => Sixbit::pack(&mut **node_buf, &key)?,
           Compression::Uncompressed => {
@@ -289,8 +288,8 @@ impl Writeable for Node {
       }
     }
 
-    // Always has the array bit set
-    node_buf.write_u8(StandardType::NodeEnd.id | ARRAY_MASK).context(KbinErrorKind::DataWrite("node end"))?;
+    // node end always has the array bit set
+    node_buf.write_u8(StandardType::NodeEnd as u8 | ARRAY_MASK).context(KbinErrorKind::DataWrite("node end"))?;
 
     Ok(())
   }
@@ -331,7 +330,7 @@ impl Writer {
 
     input.write_node(&self.options, &mut node_buf, &mut data_buf)?;
 
-    node_buf.write_u8(StandardType::FileEnd.id | ARRAY_MASK).context(KbinErrorKind::DataWrite("file end"))?;
+    node_buf.write_u8(StandardType::FileEnd as u8 | ARRAY_MASK).context(KbinErrorKind::DataWrite("file end"))?;
     node_buf.realign_writes(None)?;
 
     let mut output = header.into_inner();

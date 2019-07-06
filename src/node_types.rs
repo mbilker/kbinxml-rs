@@ -26,7 +26,7 @@ macro_rules! construct_types {
     #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
     pub enum StandardType {
       $(
-        $konst,
+        $konst = $id,
       )+
     }
 
