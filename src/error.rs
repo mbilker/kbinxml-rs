@@ -5,7 +5,7 @@ use std::string::FromUtf8Error;
 use failure::{Backtrace, Context, Fail};
 use quick_xml::Error as QuickXmlError;
 
-use crate::node_types::{KbinType, StandardType};
+use crate::node_types::StandardType;
 use crate::value::Value;
 
 pub type Result<T> = StdResult<T, KbinError>;
@@ -90,7 +90,7 @@ pub enum KbinErrorKind {
   Encoding,
 
   #[fail(display = "Size Mismatch, type: {}, expected size: {}, actual size: {}", _0, _1, _2)]
-  SizeMismatch(KbinType, usize, usize),
+  SizeMismatch(&'static str, usize, usize),
 
   #[fail(display = "Unable to interpret input as {}", _0)]
   StringParse(&'static str),
