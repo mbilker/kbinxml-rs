@@ -22,6 +22,7 @@ mod sixbit;
 mod text_reader;
 mod to_element;
 mod to_text_xml;
+mod types;
 mod value;
 mod writer;
 
@@ -40,7 +41,7 @@ pub use crate::node_types::StandardType;
 pub use crate::options::Options;
 pub use crate::to_element::ToElement;
 pub use crate::to_text_xml::ToTextXml;
-pub use crate::value::Value;
+pub use crate::value::{Value, ValueArray};
 pub use crate::writer::{Writer, Writeable};
 
 const SIGNATURE: u8 = 0xA0;

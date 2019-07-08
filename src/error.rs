@@ -32,6 +32,9 @@ pub enum KbinErrorKind {
   #[fail(display = "Unable to write a {} to data buffer", _0)]
   DataWrite(&'static str),
 
+  #[fail(display = "Unable to read bytes or not enough data read")]
+  DataConvert,
+
   #[fail(display = "Unable to read data size")]
   DataReadSize,
 

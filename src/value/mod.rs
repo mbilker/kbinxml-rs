@@ -1,15 +1,15 @@
 use std::convert::TryFrom;
 use std::fmt;
+use std::io::Cursor;
 use std::net::Ipv4Addr;
 use std::str::FromStr;
 
-use byteorder::{BigEndian, ByteOrder, WriteBytesExt};
 use failure::{Fail, ResultExt};
 use rustc_hex::FromHex;
 
 use crate::error::{KbinError, KbinErrorKind};
 use crate::node_types::{self, StandardType};
-use crate::types::FromKbinBytes;
+use crate::types::{FromKbinBytes, IntoKbinBytes};
 
 mod array;
 
@@ -147,12 +147,13 @@ macro_rules! construct_types {
 macro_rules! tuple {
   (
     byte: [
-      s8: [$($s8_konst:ident),*],
-      u8: [$($u8_konst:ident),*],
+      int: [
+        $($int_konst:ident),*$(,)?
+      ],
       bool: [$($bool_konst:ident),*]
     ],
     multi: [
-      $($read_method:ident $write_method:ident $inner_type:ty => [$($multi_konst:ident),*]),*
+      $($inner_type:ty => [$($multi_konst:ident),*]),*
     ]
   ) => {
     pub fn from_standard_type(node_type: StandardType, is_array: bool, input: &[u8]) -> Result<Option<Value>, KbinError> {
@@ -183,62 +184,42 @@ macro_rules! tuple {
         },
       };
 
+      let mut reader = Cursor::new(input);
+
       let value = match node_type {
         StandardType::NodeStart |
         StandardType::NodeEnd |
         StandardType::FileEnd |
         StandardType::Attribute |
         StandardType::String => return Ok(None),
-        StandardType::S8 => i8::from_kbin_bytes(input).map(Value::S8)?,
-        StandardType::U8 => u8::from_kbin_bytes(input).map(Value::U8)?,
-        StandardType::S16 => i16::from_kbin_bytes(input).map(Value::S16)?,
-        StandardType::U16 => u16::from_kbin_bytes(input).map(Value::U16)?,
-        StandardType::S32 => i32::from_kbin_bytes(input).map(Value::S32)?,
-        StandardType::U32 => u32::from_kbin_bytes(input).map(Value::U32)?,
-        StandardType::S64 => i64::from_kbin_bytes(input).map(Value::S64)?,
-        StandardType::U64 => u64::from_kbin_bytes(input).map(Value::U64)?,
+        StandardType::S8 => i8::from_kbin_bytes(&mut reader).map(Value::S8)?,
+        StandardType::U8 => u8::from_kbin_bytes(&mut reader).map(Value::U8)?,
+        StandardType::S16 => i16::from_kbin_bytes(&mut reader).map(Value::S16)?,
+        StandardType::U16 => u16::from_kbin_bytes(&mut reader).map(Value::U16)?,
+        StandardType::S32 => i32::from_kbin_bytes(&mut reader).map(Value::S32)?,
+        StandardType::U32 => u32::from_kbin_bytes(&mut reader).map(Value::U32)?,
+        StandardType::S64 => i64::from_kbin_bytes(&mut reader).map(Value::S64)?,
+        StandardType::U64 => u64::from_kbin_bytes(&mut reader).map(Value::U64)?,
         StandardType::Binary => Value::Binary(input.to_vec()),
-        StandardType::Time => u32::from_kbin_bytes(input).map(Value::Time)?,
-        StandardType::Ip4 => Ipv4Addr::from_kbin_bytes(input).map(Value::Ip4)?,
-        StandardType::Float => f32::from_kbin_bytes(input).map(Value::Float)?,
-        StandardType::Double => f64::from_kbin_bytes(input).map(Value::Double)?,
-        StandardType::Boolean => bool::from_kbin_bytes(input).map(Value::Boolean)?,
+        StandardType::Time => u32::from_kbin_bytes(&mut reader).map(Value::Time)?,
+        StandardType::Ip4 => Ipv4Addr::from_kbin_bytes(&mut reader).map(Value::Ip4)?,
+        StandardType::Float => f32::from_kbin_bytes(&mut reader).map(Value::Float)?,
+        StandardType::Double => f64::from_kbin_bytes(&mut reader).map(Value::Double)?,
+        StandardType::Boolean => bool::from_kbin_bytes(&mut reader).map(Value::Boolean)?,
         $(
-          StandardType::$s8_konst => {
-            const COUNT: usize = node_types::$s8_konst.count;
-            let mut value = [0; COUNT];
-            for i in 0..COUNT {
-              value[i] = input[i] as i8;
-            }
-            Value::$s8_konst(value)
-          },
-        )*
-        $(
-          StandardType::$u8_konst => {
-            const COUNT: usize = node_types::$u8_konst.count;
-            let mut value = [0; COUNT];
-            value[0..COUNT].copy_from_slice(&input[0..COUNT]);
-            Value::$u8_konst(value)
+          StandardType::$int_konst => {
+            FromKbinBytes::from_kbin_bytes(&mut reader).map(Value::$int_konst)?
           },
         )*
         $(
           StandardType::$bool_konst => {
-            const COUNT: usize = node_types::$bool_konst.count;
-            let mut value: [_; COUNT] = Default::default();
-            for i in 0..COUNT {
-              value[i] = bool::from_kbin_bytes(&input[i..i + 1])?;
-            }
-            Value::$bool_konst(value)
+            FromKbinBytes::from_kbin_bytes(&mut reader).map(Value::$bool_konst)?
           },
         )*
         $(
           $(
             StandardType::$multi_konst => {
-              const COUNT: usize = node_types::$multi_konst.count;
-              const SIZE: usize = node_types::$multi_konst.size * COUNT;
-              let mut value: [_; COUNT] = Default::default();
-              BigEndian::$read_method(&input[0..SIZE], &mut value);
-              Value::$multi_konst(value)
+              FromKbinBytes::from_kbin_bytes(&mut reader).map(Value::$multi_konst)?
             },
           )*
         )*
@@ -311,19 +292,11 @@ macro_rules! tuple {
         StandardType::FileEnd |
         StandardType::NodeStart => return Err(KbinErrorKind::InvalidNodeType(node_type).into()),
         $(
-          StandardType::$s8_konst => {
-            const COUNT: usize = node_types::$s8_konst.count;
+          StandardType::$int_konst => {
+            const COUNT: usize = node_types::$int_konst.count;
             let mut value = [0; COUNT];
-            parse_tuple::<i8>(node_type, input, &mut value)?;
-            Value::$s8_konst(value)
-          },
-        )*
-        $(
-          StandardType::$u8_konst => {
-            const COUNT: usize = node_types::$u8_konst.count;
-            let mut value = [0; COUNT];
-            parse_tuple::<u8>(node_type, input, &mut value)?;
-            Value::$u8_konst(value)
+            parse_tuple(node_type, input, &mut value)?;
+            Value::$int_konst(value)
           },
         )*
         $(
@@ -366,27 +339,21 @@ macro_rules! tuple {
     fn to_bytes_inner(&self, output: &mut Vec<u8>) -> Result<(), KbinError> {
       debug!("Value::to_bytes_inner(self: {:?})", self);
 
-      macro_rules! gen_error {
-        ($konst:ident) => {
-          KbinErrorKind::DataWrite(StandardType::$konst.name)
-        };
-      }
-
       match self {
-        Value::S8(ref n) => output.push(*n as u8),
-        Value::U8(ref n) => output.push(*n),
-        Value::S16(ref n) => output.write_i16::<BigEndian>(*n).context(gen_error!(S16))?,
-        Value::U16(ref n) => output.write_u16::<BigEndian>(*n).context(gen_error!(U16))?,
-        Value::S32(ref n) => output.write_i32::<BigEndian>(*n).context(gen_error!(S32))?,
-        Value::U32(ref n) => output.write_u32::<BigEndian>(*n).context(gen_error!(U32))?,
-        Value::S64(ref n) => output.write_i64::<BigEndian>(*n).context(gen_error!(S64))?,
-        Value::U64(ref n) => output.write_u64::<BigEndian>(*n).context(gen_error!(U64))?,
+        Value::S8(ref n) => n.write_kbin_bytes(output),
+        Value::U8(ref n) => n.write_kbin_bytes(output),
+        Value::S16(ref n) => n.write_kbin_bytes(output),
+        Value::U16(ref n) => n.write_kbin_bytes(output),
+        Value::S32(ref n) => n.write_kbin_bytes(output),
+        Value::U32(ref n) => n.write_kbin_bytes(output),
+        Value::S64(ref n) => n.write_kbin_bytes(output),
+        Value::U64(ref n) => n.write_kbin_bytes(output),
         Value::Binary(ref data) => output.extend_from_slice(data),
-        Value::Time(ref n) => output.write_u32::<BigEndian>(*n).context(gen_error!(Time))?,
-        Value::Ip4(addr) => output.extend_from_slice(&addr.octets()),
-        Value::Float(ref n) => output.write_f32::<BigEndian>(*n).context(gen_error!(Float))?,
-        Value::Double(ref n) => output.write_f64::<BigEndian>(*n).context(gen_error!(Double))?,
-        Value::Boolean(ref v) => output.push(if *v { 0x01 } else { 0x00 }),
+        Value::Time(ref n) => n.write_kbin_bytes(output),
+        Value::Ip4(addr) => addr.write_kbin_bytes(output),
+        Value::Float(ref n) => n.write_kbin_bytes(output),
+        Value::Double(ref n) => n.write_kbin_bytes(output),
+        Value::Boolean(ref v) => v.write_kbin_bytes(output),
         Value::Array(_, values) => {
           for value in values {
             value.to_bytes_inner(output)?;
@@ -396,36 +363,22 @@ macro_rules! tuple {
         Value::Attribute(_) |
         Value::String(_) => return Err(KbinErrorKind::InvalidNodeType(self.standard_type()).into()),
         $(
-          Value::$s8_konst(value) => {
+          Value::$int_konst(value) => {
             output.reserve(value.len());
-            for n in value.into_iter() {
-              output.push(*n as u8);
-            }
-          },
-        )*
-        $(
-          Value::$u8_konst(value) => {
-            output.reserve(value.len());
-            for n in value.into_iter() {
-              output.push(*n);
-            }
+            value.write_kbin_bytes(output);
           },
         )*
         $(
           Value::$bool_konst(value) => {
             output.reserve(value.len());
-            for v in value.into_iter() {
-              output.push(if *v { 0x01 } else { 0x00 });
-            }
+            value.write_kbin_bytes(output);
           },
         )*
         $(
           $(
             Value::$multi_konst(value) => {
               output.reserve(value.len() * StandardType::$multi_konst.size);
-              for v in value.into_iter() {
-                output.$write_method::<BigEndian>(*v).context(gen_error!($multi_konst))?;
-              }
+              value.write_kbin_bytes(output);
             },
           )*
         )*
@@ -439,19 +392,21 @@ macro_rules! tuple {
 impl Value {
   tuple! {
     byte: [
-      s8: [S8_2, S8_3, S8_4, Vs8],
-      u8: [U8_2, U8_3, U8_4, Vu8],
+      int: [
+        S8_2, S8_3, S8_4, Vs8,
+        U8_2, U8_3, U8_4, Vu8,
+      ],
       bool: [Boolean2, Boolean3, Boolean4, Vb]
     ],
     multi: [
-      read_i16_into write_i16 i16 => [S16_2, S16_3, S16_4, Vs16],
-      read_i32_into write_i32 i32 => [S32_2, S32_3, S32_4],
-      read_i64_into write_i64 i64 => [S64_2, S64_3, S64_4],
-      read_u16_into write_u16 u16 => [U16_2, U16_3, U16_4, Vu16],
-      read_u32_into write_u32 u32 => [U32_2, U32_3, U32_4],
-      read_u64_into write_u64 u64 => [U64_2, U64_3, U64_4],
-      read_f32_into write_f32 f32 => [Float2, Float3, Float4],
-      read_f64_into write_f64 f64 => [Double2, Double3, Double4]
+      i16 => [S16_2, S16_3, S16_4, Vs16],
+      i32 => [S32_2, S32_3, S32_4],
+      i64 => [S64_2, S64_3, S64_4],
+      u16 => [U16_2, U16_3, U16_4, Vu16],
+      u32 => [U32_2, U32_3, U32_4],
+      u64 => [U64_2, U64_3, U64_4],
+      f32 => [Float2, Float3, Float4],
+      f64 => [Double2, Double3, Double4]
     ]
   }
 

@@ -1,14 +1,14 @@
 //use std::convert::TryFrom;
 use std::fmt;
+use std::io::Cursor;
 use std::net::Ipv4Addr;
 //use std::str::FromStr;
 
-use byteorder::{BigEndian, ByteOrder, WriteBytesExt};
-use failure::ResultExt;
 //use rustc_hex::FromHex;
 
 use crate::error::{KbinError, KbinErrorKind};
-use crate::node_types::{self, StandardType};
+use crate::node_types::StandardType;
+use crate::types::{FromKbinBytes, IntoKbinBytes};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum ValueArray {
@@ -66,14 +66,7 @@ pub enum ValueArray {
 
 macro_rules! tuple {
   (
-    byte: [
-      s8: [$($s8_konst:ident),*],
-      u8: [$($u8_konst:ident),*],
-      bool: [$($bool_konst:ident),*]
-    ],
-    multi: [
-      $($read_method:ident $write_method:ident $inner_type:ty => [$($multi_konst:ident),*]),*
-    ]
+    $($konst:ident),*$(,)?
   ) => {
     pub fn from_standard_type(node_type: StandardType, input: &[u8]) -> Result<Option<ValueArray>, KbinError> {
       let node_size = node_type.size * node_type.count;
@@ -84,6 +77,8 @@ macro_rules! tuple {
         return Err(KbinErrorKind::SizeMismatch(*node_type, node_size, input.len()).into());
       }
 
+      let mut reader = Cursor::new(input);
+
       let value = match node_type {
         StandardType::NodeStart |
         StandardType::NodeEnd |
@@ -92,142 +87,16 @@ macro_rules! tuple {
         StandardType::Binary |
         StandardType::String |
         StandardType::Time => return Ok(None),
-        StandardType::S8 => ValueArray::S8(input.iter().map(|v| *v as i8).collect()),
-        StandardType::U8 => ValueArray::U8(input.to_vec()),
-        StandardType::S16 => {
-          let mut values = vec![0; len];
-          BigEndian::read_i16_into(input, &mut values);
-          ValueArray::S16(values)
-        },
-        StandardType::U16 => {
-          let mut values = vec![0; len];
-          BigEndian::read_u16_into(input, &mut values);
-          ValueArray::U16(values)
-        },
-        StandardType::S32 => {
-          let mut values = vec![0; len];
-          BigEndian::read_i32_into(input, &mut values);
-          ValueArray::S32(values)
-        },
-        StandardType::U32 => {
-          let mut values = vec![0; len];
-          BigEndian::read_u32_into(input, &mut values);
-          ValueArray::U32(values)
-        },
-        StandardType::S64 => {
-          let mut values = vec![0; len];
-          BigEndian::read_i64_into(input, &mut values);
-          ValueArray::S64(values)
-        },
-        StandardType::U64 => {
-          let mut values = vec![0; len];
-          BigEndian::read_u64_into(input, &mut values);
-          ValueArray::U64(values)
-        },
-        StandardType::Ip4 => {
-          let mut values = Vec::with_capacity(len);
-
-          for chunk in input.chunks(4) {
-            let mut octets = [0; 4];
-            octets.copy_from_slice(chunk);
-            values.push(Ipv4Addr::from(octets));
-          }
-
-          ValueArray::Ip4(values)
-        },
-        StandardType::Float => {
-          let mut values = vec![0.0; len];
-          BigEndian::read_f32_into(input, &mut values);
-          ValueArray::Float(values)
-        },
-        StandardType::Double => {
-          let mut values = vec![0.0; len];
-          BigEndian::read_f64_into(input, &mut values);
-          ValueArray::Double(values)
-        },
-        StandardType::Boolean => {
-          let mut values = Vec::with_capacity(len);
-
-          for value in input {
-            match value {
-              0x00 => values.push(false),
-              0x01 => values.push(true),
-              input => return Err(KbinErrorKind::InvalidBooleanInput(*input).into()),
-            };
-          }
-
-          ValueArray::Boolean(values)
-        },
         $(
-          StandardType::$s8_konst => {
-            const COUNT: usize = node_types::$s8_konst.count;
-
+          StandardType::$konst => {
             let mut values = Vec::with_capacity(len);
 
-            for chunk in input.chunks(COUNT) {
-              let mut value = [0; COUNT];
-              for i in 0..COUNT {
-                value[i] = chunk[i] as i8;
-              }
-              values.push(value);
+            for _ in 0..len {
+              values.push(FromKbinBytes::from_kbin_bytes(&mut reader)?);
             }
 
-            ValueArray::$s8_konst(values)
+            ValueArray::$konst(values)
           },
-        )*
-        $(
-          StandardType::$u8_konst => {
-            const COUNT: usize = node_types::$u8_konst.count;
-
-            let mut values = Vec::with_capacity(len);
-
-            for chunk in input.chunks(COUNT) {
-              let mut value = [0; COUNT];
-              value[0..COUNT].copy_from_slice(&chunk[0..COUNT]);
-              values.push(value);
-            }
-
-            ValueArray::$u8_konst(values)
-          },
-        )*
-        $(
-          StandardType::$bool_konst => {
-            const COUNT: usize = node_types::$bool_konst.count;
-
-            let mut values = Vec::with_capacity(len);
-
-            for chunk in input.chunks(COUNT) {
-              let mut value: [_; COUNT] = Default::default();
-              for i in 0..COUNT {
-                value[i] = match chunk[i] {
-                  0x00 => false,
-                  0x01 => true,
-                  input => return Err(KbinErrorKind::InvalidBooleanInput(input).into()),
-                };
-              }
-              values.push(value);
-            }
-
-            ValueArray::$bool_konst(values)
-          },
-        )*
-        $(
-          $(
-            StandardType::$multi_konst => {
-              const COUNT: usize = node_types::$multi_konst.count;
-              const SIZE: usize = node_types::$multi_konst.size * COUNT;
-
-              let mut values = Vec::with_capacity(len);
-
-              for chunk in input.chunks(SIZE) {
-                let mut value: [_; COUNT] = Default::default();
-                BigEndian::$read_method(chunk, &mut value);
-                values.push(value);
-              }
-
-              ValueArray::$multi_konst(values)
-            },
-          )*
         )*
       };
 
@@ -235,122 +104,16 @@ macro_rules! tuple {
     }
 
     pub(super) fn to_bytes_inner(&self, output: &mut Vec<u8>) -> Result<(), KbinError> {
-      macro_rules! gen_error {
-        ($konst:ident) => {
-          KbinErrorKind::DataWrite(StandardType::$konst.name)
-        };
-      }
-
       let node_size = self.standard_type().size;
 
       match self {
-        ValueArray::S8(ref values) => {
-          output.reserve(values.len());
-          for n in values {
-            output.push(*n as u8);
-          }
-        },
-        ValueArray::U8(ref values) => output.extend(values),
-        ValueArray::S16(ref values) => {
-          output.reserve(values.len() * node_size);
-          for n in values {
-            output.write_i16::<BigEndian>(*n).context(gen_error!(S16))?;
-          }
-        },
-        ValueArray::U16(ref values) => {
-          output.reserve(values.len() * node_size);
-          for n in values {
-            output.write_u16::<BigEndian>(*n).context(gen_error!(U16))?;
-          }
-        },
-        ValueArray::S32(ref values) => {
-          output.reserve(values.len() * node_size);
-          for n in values {
-            output.write_i32::<BigEndian>(*n).context(gen_error!(S32))?;
-          }
-        },
-        ValueArray::U32(ref values) => {
-          output.reserve(values.len() * node_size);
-          for n in values {
-            output.write_u32::<BigEndian>(*n).context(gen_error!(U32))?;
-          }
-        },
-        ValueArray::S64(ref values) => {
-          output.reserve(values.len() * node_size);
-          for n in values {
-            output.write_i64::<BigEndian>(*n).context(gen_error!(S64))?;
-          }
-        },
-        ValueArray::U64(ref values) => {
-          output.reserve(values.len() * node_size);
-          for n in values {
-            output.write_u64::<BigEndian>(*n).context(gen_error!(U64))?;
-          }
-        },
-        ValueArray::Ip4(ref values) => {
-          for addr in values {
-            output.extend_from_slice(&addr.octets());
-          }
-        },
-        ValueArray::Float(ref values) => {
-          output.reserve(values.len() * node_size);
-          for n in values {
-            output.write_f32::<BigEndian>(*n).context(gen_error!(Float))?;
-          }
-        },
-        ValueArray::Double(ref values) => {
-          output.reserve(values.len() * node_size);
-          for n in values {
-            output.write_f64::<BigEndian>(*n).context(gen_error!(Double))?;
-          }
-        },
-        ValueArray::Boolean(ref values) => {
-          output.reserve(values.len() * node_size);
-          for v in values {
-            output.push(if *v { 0x01 } else { 0x00 });
-          }
-        },
         $(
-          ValueArray::$s8_konst(values) => {
+          ValueArray::$konst(values) => {
             output.reserve(values.len() * node_size);
             for value in values {
-              for n in value.into_iter() {
-                output.push(*n as u8);
-              }
+              value.write_kbin_bytes(output);
             }
           },
-        )*
-        $(
-          ValueArray::$u8_konst(values) => {
-            output.reserve(values.len() * node_size);
-            for value in values {
-              for n in value.into_iter() {
-                output.push(*n);
-              }
-            }
-          },
-        )*
-        $(
-          ValueArray::$bool_konst(values) => {
-            output.reserve(values.len() * node_size);
-            for value in values {
-              for v in value.into_iter() {
-                output.push(if *v { 0x01 } else { 0x00 });
-              }
-            }
-          },
-        )*
-        $(
-          $(
-            ValueArray::$multi_konst(values) => {
-              output.reserve(values.len() * node_size);
-              for value in values {
-                for v in value.into_iter() {
-                  output.$write_method::<BigEndian>(*v).context(gen_error!($multi_konst))?;
-                }
-              }
-            },
-          )*
         )*
       };
 
@@ -361,21 +124,29 @@ macro_rules! tuple {
 
 impl ValueArray {
   tuple! {
-    byte: [
-      s8: [S8_2, S8_3, S8_4, Vs8],
-      u8: [U8_2, U8_3, U8_4, Vu8],
-      bool: [Boolean2, Boolean3, Boolean4, Vb]
-    ],
-    multi: [
-      read_i16_into write_i16 i16 => [S16_2, S16_3, S16_4, Vs16],
-      read_i32_into write_i32 i32 => [S32_2, S32_3, S32_4],
-      read_i64_into write_i64 i64 => [S64_2, S64_3, S64_4],
-      read_u16_into write_u16 u16 => [U16_2, U16_3, U16_4, Vu16],
-      read_u32_into write_u32 u32 => [U32_2, U32_3, U32_4],
-      read_u64_into write_u64 u64 => [U64_2, U64_3, U64_4],
-      read_f32_into write_f32 f32 => [Float2, Float3, Float4],
-      read_f64_into write_f64 f64 => [Double2, Double3, Double4]
-    ]
+    S8,
+    U8,
+    S16,
+    U16,
+    S32,
+    U32,
+    S64,
+    U64,
+    Ip4,
+    Float,
+    Double,
+    Boolean,
+    S8_2, S8_3, S8_4, Vs8,
+    U8_2, U8_3, U8_4, Vu8,
+    Boolean2, Boolean3, Boolean4, Vb,
+    S16_2, S16_3, S16_4, Vs16,
+    S32_2, S32_3, S32_4,
+    S64_2, S64_3, S64_4,
+    U16_2, U16_3, U16_4, Vu16,
+    U32_2, U32_3, U32_4,
+    U64_2, U64_3, U64_4,
+    Float2, Float3, Float4,
+    Double2, Double3, Double4,
   }
 
   pub fn standard_type(&self) -> StandardType {
