@@ -27,13 +27,7 @@ impl ToElement for Node {
         Value::String(value) => {
           elem.append_text_node(value.as_str());
         },
-        Value::Array(_, values) => {
-          elem.set_attr("__count", values.len());
-
-          let value = Value::array_as_string(values);
-          elem.append_text_node(value);
-        },
-        Value::ArrayNew(values) => {
+        Value::Array(values) => {
           elem.set_attr("__count", values.len());
 
           let value = value.to_string();

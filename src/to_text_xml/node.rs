@@ -33,13 +33,7 @@ impl ToTextXml for Node {
             value: Cow::Owned(data.len().to_string().into_bytes()),
           });
         },
-        Value::Array(_, ref values) => {
-          elem.push_attribute(Attribute {
-            key: b"__count",
-            value: Cow::Owned(values.len().to_string().into_bytes()),
-          });
-        },
-        Value::ArrayNew(ref values) => {
+        Value::Array(ref values) => {
           elem.push_attribute(Attribute {
             key: b"__count",
             value: Cow::Owned(values.len().to_string().into_bytes()),

@@ -5,12 +5,6 @@ use failure::{Fail, ResultExt};
 
 use crate::error::{KbinError, KbinErrorKind};
 
-/*
-pub trait IntoKbinString {
-  fn write_kbin_string(self, output: &mut String);
-}
-*/
-
 pub trait FromKbinString: Sized {
   fn from_kbin_string(input: &str) -> Result<Self, KbinError>;
 }

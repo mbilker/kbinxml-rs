@@ -29,7 +29,7 @@ fn write_value(options: &Options, data_buf: &mut ByteBufferWrite, node_type: Sta
     Value::String(text) => {
       data_buf.write_str(options.encoding, &text)?;
     },
-    Value::Array(node_type, values) => {
+    Value::Array(values) => {
       if !is_array {
         return Err(KbinErrorKind::InvalidState.into());
       }
@@ -37,9 +37,7 @@ fn write_value(options: &Options, data_buf: &mut ByteBufferWrite, node_type: Sta
       let total_size = values.len() * node_type.count * node_type.size;
 
       let mut data = Vec::with_capacity(total_size);
-      for value in values {
-        value.to_bytes_into(&mut data)?;
-      }
+      values.to_bytes_into(&mut data)?;
 
       data_buf.write_u32::<BigEndian>(total_size as u32).context(KbinErrorKind::DataWrite("node size"))?;
       data_buf.write_all(&data).context(KbinErrorKind::DataWrite(node_type.name))?;
@@ -235,7 +233,7 @@ impl Writeable for NodeCollection {
 impl Writeable for Node {
   fn write_node(&self, options: &Options, node_buf: &mut ByteBufferWrite, data_buf: &mut ByteBufferWrite) -> Result<()> {
     let (node_type, is_array) = match self.value() {
-      Some(Value::Array(node_type, _)) => (*node_type, true),
+      Some(Value::Array(ref values)) => (values.standard_type(), true),
       Some(ref value) => (value.standard_type(), false),
       None => (StandardType::NodeStart, false),
     };

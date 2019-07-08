@@ -9,6 +9,7 @@ use std::net::Ipv4Addr;
 use crate::error::{KbinError, KbinErrorKind};
 use crate::node_types::StandardType;
 use crate::types::{FromKbinBytes, IntoKbinBytes};
+use crate::types::FromKbinString;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum ValueArray {
@@ -103,7 +104,56 @@ macro_rules! type_impl {
       Ok(Some(value))
     }
 
-    pub(super) fn to_bytes_inner(&self, output: &mut Vec<u8>) -> Result<(), KbinError> {
+    pub(super) fn from_string(node_type: StandardType, count: usize, input: &str, arr_count: usize) -> Result<Self, KbinError> {
+      trace!("from_string(count: {}, input: {:?}, arr_count: {})", count, input, arr_count);
+
+      // counter of the number of space characters encountered
+      let mut i = 0;
+
+      let iter = input.split(|c| {
+        if c == ' ' {
+          // increment ths space counter
+          i += 1;
+
+          // if the space counter is equal to count, then split
+          let res = i == count;
+
+          // if splitting, then reset the counter
+          if res {
+            i = 0;
+          }
+
+          res
+        } else {
+          false
+        }
+      });
+
+      let value = match node_type {
+        StandardType::NodeStart |
+        StandardType::NodeEnd |
+        StandardType::FileEnd |
+        StandardType::Attribute |
+        StandardType::Binary |
+        StandardType::String |
+        StandardType::Time => return Err(KbinErrorKind::InvalidState.into()),
+        $(
+          StandardType::$konst => {
+            let mut values = Vec::new();
+
+            for part in iter {
+              values.push(FromKbinString::from_kbin_string(part)?);
+            }
+
+            ValueArray::$konst(values)
+          },
+        )*
+      };
+
+      Ok(value)
+    }
+
+    pub fn to_bytes_into(&self, output: &mut Vec<u8>) -> Result<(), KbinError> {
       let node_size = self.standard_type().size;
 
       match self {

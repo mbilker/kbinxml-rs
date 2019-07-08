@@ -14,38 +14,6 @@ mod array;
 
 pub use self::array::ValueArray;
 
-fn to_array(node_type: StandardType, count: usize, input: &str, arr_count: usize) -> Result<Value, KbinError> {
-  let mut i = 0;
-  trace!("to_array(count: {}, input: {:?}, arr_count: {})", count, input, arr_count);
-  let iter = input.split(|c| {
-    if c == ' ' {
-      // Increment the space counter
-      i += 1;
-
-      // If the space counter is equal to count, then split
-      let res = i == count;
-
-      // If splitting, reset the counter
-      if res {
-        i = 0;
-      }
-
-      res
-    } else {
-      false
-    }
-  });
-
-  let mut values = Vec::new();
-
-  for part in iter {
-    trace!("part: {:?}", part);
-    values.push(Value::from_string(node_type, part, false, 1)?);
-  }
-
-  Ok(Value::Array(node_type, values))
-}
-
 macro_rules! construct_types {
   (
     $(
@@ -61,8 +29,7 @@ macro_rules! construct_types {
       Time(u32),
       Attribute(String),
 
-      Array(StandardType, Vec<Value>),
-      ArrayNew(ValueArray),
+      Array(ValueArray),
     }
 
     $(
@@ -104,8 +71,7 @@ macro_rules! construct_types {
           Value::Binary(_) => StandardType::Binary,
           Value::Time(_) => StandardType::Time,
           Value::Attribute(_) => StandardType::Attribute,
-          Value::Array(node_type, _) => node_type,
-          Value::ArrayNew(ref value) => value.standard_type(),
+          Value::Array(ref value) => value.standard_type(),
         }
       }
     }
@@ -126,7 +92,7 @@ macro_rules! tuple {
         };
         debug!("Value::from_standard_type({:?}) input: 0x{:02x?} => {:?}", node_type, input, value);
 
-        return Ok(Some(Value::ArrayNew(value)));
+        return Ok(Some(Value::Array(value)));
       }
 
       match node_type {
@@ -173,19 +139,12 @@ macro_rules! tuple {
     }
 
     pub fn from_string(node_type: StandardType, input: &str, is_array: bool, arr_count: usize) -> Result<Value, KbinError> {
+      trace!("Value::from_string({:?}, is_array: {}, arr_count: {}) => input: {:?}", node_type, is_array, arr_count, input);
+
       if is_array {
         let value = match node_type.count {
-          1 => {
-            // May have a node (i.e. `Ip4`) that is only a single count, but it
-            // can be part of an array
-            match arr_count {
-              0 => return Err(KbinErrorKind::InvalidState.into()),
-              1 => Value::from_string(node_type, input, false, arr_count)?,
-              _ => to_array(node_type, node_type.count, input, arr_count)?,
-            }
-          },
-          count if count > 1 => to_array(node_type, count, input, arr_count)?,
-          _ => return Err(KbinErrorKind::InvalidState.into()),
+          0 => return Err(KbinErrorKind::InvalidState.into()),
+          count => Value::Array(ValueArray::from_string(node_type, count, input, arr_count)?),
         };
         debug!("Value::from_string({:?}) input: {:?} => {:?}", node_type, input, value);
 
@@ -193,6 +152,9 @@ macro_rules! tuple {
       }
 
       let value = match node_type {
+        StandardType::NodeStart |
+        StandardType::NodeEnd |
+        StandardType::FileEnd => return Err(KbinErrorKind::InvalidNodeType(node_type).into()),
         StandardType::S8 => i8::from_kbin_string(input).map(Value::S8)?,
         StandardType::U8 => u8::from_kbin_string(input).map(Value::U8)?,
         StandardType::S16 => i16::from_kbin_string(input).map(Value::S16)?,
@@ -212,9 +174,6 @@ macro_rules! tuple {
         StandardType::Float => f32::from_kbin_string(input).map(Value::Float)?,
         StandardType::Double => f64::from_kbin_string(input).map(Value::Double)?,
         StandardType::Boolean => bool::from_kbin_string(input).map(Value::Boolean)?,
-        StandardType::NodeEnd |
-        StandardType::FileEnd |
-        StandardType::NodeStart => return Err(KbinErrorKind::InvalidNodeType(node_type).into()),
         $(
           StandardType::$konst => FromKbinString::from_kbin_string(input).map(Value::$konst)?,
         )*
@@ -242,12 +201,7 @@ macro_rules! tuple {
         Value::Float(n) => n.write_kbin_bytes(output),
         Value::Double(n) => n.write_kbin_bytes(output),
         Value::Boolean(v) => v.write_kbin_bytes(output),
-        Value::Array(_, values) => {
-          for value in values {
-            value.to_bytes_inner(output)?;
-          }
-        },
-        Value::ArrayNew(value) => value.to_bytes_inner(output)?,
+        Value::Array(value) => value.to_bytes_into(output)?,
         Value::Attribute(_) |
         Value::String(_) => return Err(KbinErrorKind::InvalidNodeType(self.standard_type()).into()),
         $(
@@ -288,11 +242,6 @@ impl Value {
   #[inline]
   pub fn to_bytes_into(&self, output: &mut Vec<u8>) -> Result<(), KbinError> {
     self.to_bytes_inner(output)
-  }
-
-  #[inline]
-  pub fn array_as_string(values: &[Value]) -> String {
-    BorrowedValueArray(values).to_string()
   }
 
   pub fn as_i8(&self) -> Result<i8, KbinError> {
@@ -388,7 +337,7 @@ impl Value {
 
   pub fn as_array(&self) -> Result<&ValueArray, KbinError> {
     match self {
-      Value::ArrayNew(ref values) => Ok(values),
+      Value::Array(ref values) => Ok(values),
       value => Err(KbinErrorKind::ExpectedValueArray(value.clone()).into()),
     }
   }
@@ -401,16 +350,18 @@ impl Value {
   }
 }
 
+/*
 impl TryFrom<Value> for Vec<Value> {
   type Error = KbinError;
 
   fn try_from(value: Value) -> Result<Self, Self::Error> {
     match value {
-      Value::Array(_, values) => Ok(values),
+      Value::Array(values) => Ok(values),
       value => Err(KbinErrorKind::ExpectedValueArray(value).into()),
     }
   }
 }
+*/
 
 impl TryFrom<Value> for Vec<u8> {
   type Error = KbinError;
@@ -420,11 +371,9 @@ impl TryFrom<Value> for Vec<u8> {
     // array of unsigned 8-bit integers.
     match value {
       Value::Binary(data) => Ok(data),
-      Value::Array(node_type, values) => {
-        if node_type != StandardType::U8 {
-          return Err(KbinErrorKind::ValueTypeMismatch(StandardType::U8, Value::Array(node_type, values)).into());
-        }
-        values.iter().map(Value::as_u8).collect()
+      Value::Array(values) => match values {
+        ValueArray::U8(values) => Ok(values),
+        values => Err(KbinErrorKind::ValueTypeMismatch(StandardType::U8, Value::Array(values)).into()),
       },
       value => Err(KbinErrorKind::ValueTypeMismatch(StandardType::Binary, value).into()),
     }
@@ -437,11 +386,9 @@ impl TryFrom<&Value> for Vec<u8> {
   fn try_from(value: &Value) -> Result<Self, Self::Error> {
     match value {
       Value::Binary(ref data) => Ok(data.to_vec()),
-      Value::Array(ref node_type, ref values) => {
-        if *node_type != StandardType::U8 {
-          return Err(KbinErrorKind::ValueTypeMismatch(StandardType::U8, value.clone()).into());
-        }
-        values.iter().map(Value::as_u8).collect()
+      Value::Array(ref values) => match values.clone() {
+        ValueArray::U8(values) => Ok(values),
+        values => Err(KbinErrorKind::ValueTypeMismatch(StandardType::U8, Value::Array(values)).into()),
       },
       value => Err(KbinErrorKind::ValueTypeMismatch(StandardType::Binary, value.clone()).into()),
     }
@@ -469,12 +416,7 @@ impl fmt::Debug for Value {
             Value::$konst_debug(ref v) => write!(f, concat!(stringify!($konst_debug), "({:?})"), v),
           )*
           Value::Binary(ref v) => write!(f, "Binary(0x{:02x?})", v),
-          Value::Array(ref node_type, ref a) => if f.alternate() {
-            write!(f, "Array({:?}, {:#?})", node_type, a)
-          } else {
-            write!(f, "Array({:?}, {:?})", node_type, a)
-          },
-          Value::ArrayNew(ref value) => if f.alternate() {
+          Value::Array(ref value) => if f.alternate() {
             write!(f, "Array({:#?})", value)
           } else {
             write!(f, "Array({:?})", value)
@@ -499,22 +441,6 @@ impl fmt::Debug for Value {
         Vs8, Vu8, Vb
       ]
     }
-  }
-}
-
-/// A separate wrapper struct so `Value::Array` can be formatted by
-/// `<Value as fmt::Display>` and `Value::array_as_string`
-struct BorrowedValueArray<'a>(&'a [Value]);
-
-impl<'a> fmt::Display for BorrowedValueArray<'a> {
-  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    for (i, v) in self.0.iter().enumerate() {
-      if i > 0 {
-        f.write_str(" ")?;
-      }
-      fmt::Display::fmt(v, f)?;
-    }
-    Ok(())
   }
 }
 
@@ -566,7 +492,6 @@ impl fmt::Display for Value {
             true => f.write_str("1"),
             false => f.write_str("0"),
           },
-          Value::Array(_, values) => BorrowedValueArray(&values).fmt(f),
         }
       };
     }
@@ -575,7 +500,7 @@ impl fmt::Display for Value {
       simple: [
         S8, U8, S16, U16, S32, U32, S64, U64,
         String, Ip4, Time, Attribute,
-        ArrayNew
+        Array
       ],
       tuple: [
         S8_2, U8_2, S16_2, U16_2, S32_2, U32_2, S64_2, U64_2,
