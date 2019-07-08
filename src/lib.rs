@@ -87,6 +87,13 @@ fn read_node(reader: &mut Reader, def: NodeDefinition) -> Result<Element> {
         debug!("KbinXml::read_node(name: {}) => value: {:?}", elem.name(), value);
         elem.append_text_node(value);
       },
+      Value::ArrayNew(values) => {
+        elem.set_attr("__count", values.len());
+
+        let value = values.to_string();
+        debug!("KbinXml::read_node(name: {}) => value: {:?}", elem.name(), value);
+        elem.append_text_node(value);
+      },
       value => {
         let value = value.to_string();
         debug!("KbinXml::read_node(name: {}) => value: {:?}", elem.name(), value);

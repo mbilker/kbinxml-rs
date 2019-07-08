@@ -160,18 +160,13 @@ macro_rules! tuple {
       let node_size = node_type.size * node_type.count;
 
       if is_array {
-        let mut values = Vec::new();
-
-        for chunk in input.chunks(node_size) {
-          match Value::from_standard_type(node_type, false, chunk)? {
-            Some(value) => values.push(value),
-            None => return Err(KbinErrorKind::InvalidState.into()),
-          }
-        }
-        let value = Value::Array(node_type, values);
+        let value = match ValueArray::from_standard_type(node_type, input)? {
+          Some(value) => value,
+          None => return Err(KbinErrorKind::InvalidState.into()),
+        };
         debug!("Value::from_standard_type({:?}) input: 0x{:02x?} => {:?}", node_type, input, value);
 
-        return Ok(Some(value));
+        return Ok(Some(Value::ArrayNew(value)));
       }
 
       match node_type {
@@ -518,9 +513,9 @@ impl Value {
     }
   }
 
-  pub fn as_array(&self) -> Result<&[Value], KbinError> {
+  pub fn as_array(&self) -> Result<&ValueArray, KbinError> {
     match self {
-      Value::Array(_, ref values) => Ok(values),
+      Value::ArrayNew(ref values) => Ok(values),
       value => Err(KbinErrorKind::ExpectedValueArray(value.clone()).into()),
     }
   }

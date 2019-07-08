@@ -33,6 +33,12 @@ impl ToElement for Node {
           let value = Value::array_as_string(values);
           elem.append_text_node(value);
         },
+        Value::ArrayNew(values) => {
+          elem.set_attr("__count", values.len());
+
+          let value = value.to_string();
+          elem.append_text_node(value);
+        },
         value => {
           let value = value.to_string();
           elem.append_text_node(value);

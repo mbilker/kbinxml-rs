@@ -64,7 +64,7 @@ pub enum ValueArray {
   Vb(Vec<[bool; 16]>),
 }
 
-macro_rules! tuple {
+macro_rules! type_impl {
   (
     $($konst:ident),*$(,)?
   ) => {
@@ -119,11 +119,27 @@ macro_rules! tuple {
 
       Ok(())
     }
+
+    pub fn standard_type(&self) -> StandardType {
+      match self {
+        $(
+          ValueArray::$konst(_) => StandardType::$konst,
+        )*
+      }
+    }
+
+    pub fn len(&self) -> usize {
+      match self {
+        $(
+          ValueArray::$konst(values) => values.len(),
+        )*
+      }
+    }
   };
 }
 
 impl ValueArray {
-  tuple! {
+  type_impl! {
     S8,
     U8,
     S16,
@@ -147,61 +163,6 @@ impl ValueArray {
     U64_2, U64_3, U64_4,
     Float2, Float3, Float4,
     Double2, Double3, Double4,
-  }
-
-  pub fn standard_type(&self) -> StandardType {
-    match self {
-      ValueArray::S8(_) => StandardType::S8,
-      ValueArray::U8(_) => StandardType::U8,
-      ValueArray::S16(_) => StandardType::S16,
-      ValueArray::U16(_) => StandardType::U16,
-      ValueArray::S32(_) => StandardType::S32,
-      ValueArray::U32(_) => StandardType::U32,
-      ValueArray::S64(_) => StandardType::S64,
-      ValueArray::U64(_) => StandardType::U64,
-      ValueArray::Ip4(_) => StandardType::Ip4,
-      ValueArray::Float(_) => StandardType::Float,
-      ValueArray::Double(_) => StandardType::Double,
-      ValueArray::S8_2(_) => StandardType::S8_2,
-      ValueArray::U8_2(_) => StandardType::U8_2,
-      ValueArray::S16_2(_) => StandardType::S16_2,
-      ValueArray::U16_2(_) => StandardType::U16_2,
-      ValueArray::S32_2(_) => StandardType::S32_2,
-      ValueArray::U32_2(_) => StandardType::U32_2,
-      ValueArray::S64_2(_) => StandardType::S64_2,
-      ValueArray::U64_2(_) => StandardType::U64_2,
-      ValueArray::Float2(_) => StandardType::Float2,
-      ValueArray::Double2(_) => StandardType::Double2,
-      ValueArray::S8_3(_) => StandardType::S8_3,
-      ValueArray::U8_3(_) => StandardType::U8_3,
-      ValueArray::S16_3(_) => StandardType::S16_3,
-      ValueArray::U16_3(_) => StandardType::U16_3,
-      ValueArray::S32_3(_) => StandardType::S32_3,
-      ValueArray::U32_3(_) => StandardType::U32_3,
-      ValueArray::S64_3(_) => StandardType::S64_3,
-      ValueArray::U64_3(_) => StandardType::U64_3,
-      ValueArray::Float3(_) => StandardType::Float3,
-      ValueArray::Double3(_) => StandardType::Double3,
-      ValueArray::S8_4(_) => StandardType::S8_4,
-      ValueArray::U8_4(_) => StandardType::U8_4,
-      ValueArray::S16_4(_) => StandardType::S16_4,
-      ValueArray::U16_4(_) => StandardType::U16_4,
-      ValueArray::S32_4(_) => StandardType::S32_4,
-      ValueArray::U32_4(_) => StandardType::U32_4,
-      ValueArray::S64_4(_) => StandardType::S64_4,
-      ValueArray::U64_4(_) => StandardType::U64_4,
-      ValueArray::Float4(_) => StandardType::Float4,
-      ValueArray::Double4(_) => StandardType::Double4,
-      ValueArray::Vs8(_) => StandardType::Vs8,
-      ValueArray::Vu8(_) => StandardType::Vu8,
-      ValueArray::Vs16(_) => StandardType::Vs16,
-      ValueArray::Vu16(_) => StandardType::Vu16,
-      ValueArray::Boolean(_) => StandardType::Boolean,
-      ValueArray::Boolean2(_) => StandardType::Boolean2,
-      ValueArray::Boolean3(_) => StandardType::Boolean3,
-      ValueArray::Boolean4(_) => StandardType::Boolean4,
-      ValueArray::Vb(_) => StandardType::Vb,
-    }
   }
 }
 
