@@ -2,49 +2,17 @@ use std::convert::TryFrom;
 use std::fmt;
 use std::io::Cursor;
 use std::net::Ipv4Addr;
-use std::str::FromStr;
 
-use failure::{Fail, ResultExt};
+use failure::ResultExt;
 use rustc_hex::FromHex;
 
 use crate::error::{KbinError, KbinErrorKind};
-use crate::node_types::{self, StandardType};
-use crate::types::{FromKbinBytes, IntoKbinBytes};
+use crate::node_types::StandardType;
+use crate::types::{FromKbinBytes, FromKbinString, IntoKbinBytes};
 
 mod array;
 
 pub use self::array::ValueArray;
-
-#[inline]
-fn parse<T>(node_type: StandardType, input: &str) -> Result<T, KbinError>
-  where T: FromStr,
-        T::Err: Fail
-{
-  // Check for space character
-  if input.find(' ').is_some() {
-    return Err(KbinErrorKind::InvalidState.into());
-  }
-
-  let n = input.parse::<T>().context(KbinErrorKind::StringParse(node_type.name))?;
-  Ok(n)
-}
-
-#[inline]
-fn parse_tuple<T>(node_type: StandardType, input: &str, output: &mut [T]) -> Result<(), KbinError>
-  where T: FromStr,
-        T::Err: Fail
-{
-  let count = input.split(' ').count();
-  if count != node_type.count {
-    return Err(KbinErrorKind::SizeMismatch(*node_type, node_type.count, count).into());
-  }
-
-  for (i, part) in input.split(' ').enumerate() {
-    output[i] = part.parse::<T>().context(KbinErrorKind::StringParse(node_type.name))?;
-  }
-
-  Ok(())
-}
 
 fn to_array(node_type: StandardType, count: usize, input: &str, arr_count: usize) -> Result<Value, KbinError> {
   let mut i = 0;
@@ -146,15 +114,7 @@ macro_rules! construct_types {
 
 macro_rules! tuple {
   (
-    byte: [
-      int: [
-        $($int_konst:ident),*$(,)?
-      ],
-      bool: [$($bool_konst:ident),*]
-    ],
-    multi: [
-      $($inner_type:ty => [$($multi_konst:ident),*]),*
-    ]
+    $($konst:ident),*$(,)?
   ) => {
     pub fn from_standard_type(node_type: StandardType, is_array: bool, input: &[u8]) -> Result<Option<Value>, KbinError> {
       let node_size = node_type.size * node_type.count;
@@ -174,7 +134,7 @@ macro_rules! tuple {
         StandardType::Binary => {},
         _ => {
           if input.len() != node_size {
-            return Err(KbinErrorKind::SizeMismatch(*node_type, node_size, input.len()).into());
+            return Err(KbinErrorKind::SizeMismatch(node_type.name, node_size, input.len()).into());
           }
         },
       };
@@ -202,21 +162,9 @@ macro_rules! tuple {
         StandardType::Double => f64::from_kbin_bytes(&mut reader).map(Value::Double)?,
         StandardType::Boolean => bool::from_kbin_bytes(&mut reader).map(Value::Boolean)?,
         $(
-          StandardType::$int_konst => {
-            FromKbinBytes::from_kbin_bytes(&mut reader).map(Value::$int_konst)?
+          StandardType::$konst => {
+            FromKbinBytes::from_kbin_bytes(&mut reader).map(Value::$konst)?
           },
-        )*
-        $(
-          StandardType::$bool_konst => {
-            FromKbinBytes::from_kbin_bytes(&mut reader).map(Value::$bool_konst)?
-          },
-        )*
-        $(
-          $(
-            StandardType::$multi_konst => {
-              FromKbinBytes::from_kbin_bytes(&mut reader).map(Value::$multi_konst)?
-            },
-          )*
         )*
       };
       debug!("Value::from_standard_type({:?}) input: 0x{:02x?} => {:?}", node_type, input, value);
@@ -245,85 +193,30 @@ macro_rules! tuple {
       }
 
       let value = match node_type {
-        StandardType::S8 => Value::S8(parse::<i8>(node_type, input)?),
-        StandardType::U8 => Value::U8(parse::<u8>(node_type, input)?),
-        StandardType::S16 => Value::S16(parse::<i16>(node_type, input)?),
-        StandardType::U16 => Value::U16(parse::<u16>(node_type, input)?),
-        StandardType::S32 => Value::S32(parse::<i32>(node_type, input)?),
-        StandardType::U32 => Value::U32(parse::<u32>(node_type, input)?),
-        StandardType::S64 => Value::S64(parse::<i64>(node_type, input)?),
-        StandardType::U64 => Value::U64(parse::<u64>(node_type, input)?),
+        StandardType::S8 => i8::from_kbin_string(input).map(Value::S8)?,
+        StandardType::U8 => u8::from_kbin_string(input).map(Value::U8)?,
+        StandardType::S16 => i16::from_kbin_string(input).map(Value::S16)?,
+        StandardType::U16 => u16::from_kbin_string(input).map(Value::U16)?,
+        StandardType::S32 => i32::from_kbin_string(input).map(Value::S32)?,
+        StandardType::U32 => u32::from_kbin_string(input).map(Value::U32)?,
+        StandardType::S64 => i64::from_kbin_string(input).map(Value::S64)?,
+        StandardType::U64 => u64::from_kbin_string(input).map(Value::U64)?,
         StandardType::Binary => {
           let data: Vec<u8> = input.from_hex().context(KbinErrorKind::HexError)?;
           Value::Binary(data)
         },
         StandardType::String => Value::String(input.to_owned()),
         StandardType::Attribute => Value::Attribute(input.to_owned()),
-        StandardType::Ip4 => {
-          let mut i = 0;
-          let mut octets = [0; 4];
-
-          // IP Addresses are split by a period, don't use `parse_tuple`
-          for part in input.split('.') {
-            octets[i] = parse::<u8>(node_type, part)?;
-            i += 1;
-          }
-
-          if i != 4 {
-            return Err(KbinErrorKind::SizeMismatch(*node_type, 4, i).into());
-          }
-
-          Value::Ip4(Ipv4Addr::from(octets))
-        },
-        StandardType::Time => Value::Time(parse::<u32>(node_type, input)?),
-        StandardType::Float => Value::Float(parse::<f32>(node_type, input)?),
-        StandardType::Double => Value::Double(parse::<f64>(node_type, input)?),
-        StandardType::Boolean => Value::Boolean(match input {
-          "0" => false,
-          "1" => true,
-          v => return Err(KbinErrorKind::InvalidBooleanInput(parse::<u8>(node_type, v)?).into()),
-        }),
+        StandardType::Ip4 => Ipv4Addr::from_kbin_string(input).map(Value::Ip4)?,
+        StandardType::Time => u32::from_kbin_string(input).map(Value::Time)?,
+        StandardType::Float => f32::from_kbin_string(input).map(Value::Float)?,
+        StandardType::Double => f64::from_kbin_string(input).map(Value::Double)?,
+        StandardType::Boolean => bool::from_kbin_string(input).map(Value::Boolean)?,
         StandardType::NodeEnd |
         StandardType::FileEnd |
         StandardType::NodeStart => return Err(KbinErrorKind::InvalidNodeType(node_type).into()),
         $(
-          StandardType::$int_konst => {
-            const COUNT: usize = node_types::$int_konst.count;
-            let mut value = [0; COUNT];
-            parse_tuple(node_type, input, &mut value)?;
-            Value::$int_konst(value)
-          },
-        )*
-        $(
-          StandardType::$bool_konst => {
-            const COUNT: usize = node_types::$bool_konst.count;
-            let mut i = 0;
-            let mut value: [_; COUNT] = Default::default();
-            for part in input.split(' ') {
-              value[i] = match part {
-                "0" => false,
-                "1" => true,
-                v => return Err(KbinErrorKind::InvalidBooleanInput(parse::<u8>(node_type, v)?).into()),
-              };
-              i += 1;
-            }
-
-            if i != COUNT {
-              return Err(KbinErrorKind::SizeMismatch(*node_type, COUNT, i).into());
-            }
-
-            Value::$bool_konst(value)
-          },
-        )*
-        $(
-          $(
-            StandardType::$multi_konst => {
-              const COUNT: usize = node_types::$multi_konst.count;
-              let mut value: [_; COUNT] = Default::default();
-              parse_tuple::<$inner_type>(node_type, input, &mut value)?;
-              Value::$multi_konst(value)
-            },
-          )*
+          StandardType::$konst => FromKbinString::from_kbin_string(input).map(Value::$konst)?,
         )*
       };
       debug!("Value::from_string({:?}) input: {:?} => {:?}", node_type, input, value);
@@ -335,20 +228,20 @@ macro_rules! tuple {
       debug!("Value::to_bytes_inner(self: {:?})", self);
 
       match self {
-        Value::S8(ref n) => n.write_kbin_bytes(output),
-        Value::U8(ref n) => n.write_kbin_bytes(output),
-        Value::S16(ref n) => n.write_kbin_bytes(output),
-        Value::U16(ref n) => n.write_kbin_bytes(output),
-        Value::S32(ref n) => n.write_kbin_bytes(output),
-        Value::U32(ref n) => n.write_kbin_bytes(output),
-        Value::S64(ref n) => n.write_kbin_bytes(output),
-        Value::U64(ref n) => n.write_kbin_bytes(output),
-        Value::Binary(ref data) => output.extend_from_slice(data),
-        Value::Time(ref n) => n.write_kbin_bytes(output),
+        Value::S8(n) => n.write_kbin_bytes(output),
+        Value::U8(n) => n.write_kbin_bytes(output),
+        Value::S16(n) => n.write_kbin_bytes(output),
+        Value::U16(n) => n.write_kbin_bytes(output),
+        Value::S32(n) => n.write_kbin_bytes(output),
+        Value::U32(n) => n.write_kbin_bytes(output),
+        Value::S64(n) => n.write_kbin_bytes(output),
+        Value::U64(n) => n.write_kbin_bytes(output),
+        Value::Binary(data) => output.extend_from_slice(data),
+        Value::Time(n) => n.write_kbin_bytes(output),
         Value::Ip4(addr) => addr.write_kbin_bytes(output),
-        Value::Float(ref n) => n.write_kbin_bytes(output),
-        Value::Double(ref n) => n.write_kbin_bytes(output),
-        Value::Boolean(ref v) => v.write_kbin_bytes(output),
+        Value::Float(n) => n.write_kbin_bytes(output),
+        Value::Double(n) => n.write_kbin_bytes(output),
+        Value::Boolean(v) => v.write_kbin_bytes(output),
         Value::Array(_, values) => {
           for value in values {
             value.to_bytes_inner(output)?;
@@ -358,24 +251,10 @@ macro_rules! tuple {
         Value::Attribute(_) |
         Value::String(_) => return Err(KbinErrorKind::InvalidNodeType(self.standard_type()).into()),
         $(
-          Value::$int_konst(value) => {
-            output.reserve(value.len());
+          Value::$konst(value) => {
+            output.reserve(value.len() * StandardType::$konst.size);
             value.write_kbin_bytes(output);
           },
-        )*
-        $(
-          Value::$bool_konst(value) => {
-            output.reserve(value.len());
-            value.write_kbin_bytes(output);
-          },
-        )*
-        $(
-          $(
-            Value::$multi_konst(value) => {
-              output.reserve(value.len() * StandardType::$multi_konst.size);
-              value.write_kbin_bytes(output);
-            },
-          )*
         )*
       };
 
@@ -386,23 +265,17 @@ macro_rules! tuple {
 
 impl Value {
   tuple! {
-    byte: [
-      int: [
-        S8_2, S8_3, S8_4, Vs8,
-        U8_2, U8_3, U8_4, Vu8,
-      ],
-      bool: [Boolean2, Boolean3, Boolean4, Vb]
-    ],
-    multi: [
-      i16 => [S16_2, S16_3, S16_4, Vs16],
-      i32 => [S32_2, S32_3, S32_4],
-      i64 => [S64_2, S64_3, S64_4],
-      u16 => [U16_2, U16_3, U16_4, Vu16],
-      u32 => [U32_2, U32_3, U32_4],
-      u64 => [U64_2, U64_3, U64_4],
-      f32 => [Float2, Float3, Float4],
-      f64 => [Double2, Double3, Double4]
-    ]
+    S8_2, S8_3, S8_4, Vs8,
+    U8_2, U8_3, U8_4, Vu8,
+    Boolean2, Boolean3, Boolean4, Vb,
+    S16_2, S16_3, S16_4, Vs16,
+    S32_2, S32_3, S32_4,
+    S64_2, S64_3, S64_4,
+    U16_2, U16_3, U16_4, Vu16,
+    U32_2, U32_3, U32_4,
+    U64_2, U64_3, U64_4,
+    Float2, Float3, Float4,
+    Double2, Double3, Double4,
   }
 
   pub fn to_bytes(&self) -> Result<Vec<u8>, KbinError> {

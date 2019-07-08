@@ -68,13 +68,13 @@ macro_rules! type_impl {
   (
     $($konst:ident),*$(,)?
   ) => {
-    pub fn from_standard_type(node_type: StandardType, input: &[u8]) -> Result<Option<ValueArray>, KbinError> {
+    pub fn from_standard_type(node_type: StandardType, input: &[u8]) -> Result<Option<Self>, KbinError> {
       let node_size = node_type.size * node_type.count;
       let len = input.len() / node_size;
 
       // Prevent reading incomplete input data
       if node_size * len != input.len() {
-        return Err(KbinErrorKind::SizeMismatch(*node_type, node_size, input.len()).into());
+        return Err(KbinErrorKind::SizeMismatch(node_type.name, node_size, input.len()).into());
       }
 
       let mut reader = Cursor::new(input);
@@ -140,14 +140,10 @@ macro_rules! type_impl {
 
 impl ValueArray {
   type_impl! {
-    S8,
-    U8,
-    S16,
-    U16,
-    S32,
-    U32,
-    S64,
-    U64,
+    S8, U8,
+    S16, U16,
+    S32, U32,
+    S64, U64,
     Ip4,
     Float,
     Double,
