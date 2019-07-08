@@ -9,6 +9,74 @@ use rustc_hex::FromHex;
 
 use crate::error::{KbinError, KbinErrorKind};
 use crate::node_types::{self, StandardType};
+use crate::types::FromKbinBytes;
+
+mod array;
+
+pub use self::array::ValueArray;
+
+#[inline]
+fn parse<T>(node_type: StandardType, input: &str) -> Result<T, KbinError>
+  where T: FromStr,
+        T::Err: Fail
+{
+  // Check for space character
+  if input.find(' ').is_some() {
+    return Err(KbinErrorKind::InvalidState.into());
+  }
+
+  let n = input.parse::<T>().context(KbinErrorKind::StringParse(node_type.name))?;
+  Ok(n)
+}
+
+#[inline]
+fn parse_tuple<T>(node_type: StandardType, input: &str, output: &mut [T]) -> Result<(), KbinError>
+  where T: FromStr,
+        T::Err: Fail
+{
+  let count = input.split(' ').count();
+  if count != node_type.count {
+    return Err(KbinErrorKind::SizeMismatch(*node_type, node_type.count, count).into());
+  }
+
+  for (i, part) in input.split(' ').enumerate() {
+    output[i] = part.parse::<T>().context(KbinErrorKind::StringParse(node_type.name))?;
+  }
+
+  Ok(())
+}
+
+fn to_array(node_type: StandardType, count: usize, input: &str, arr_count: usize) -> Result<Value, KbinError> {
+  let mut i = 0;
+  trace!("to_array(count: {}, input: {:?}, arr_count: {})", count, input, arr_count);
+  let iter = input.split(|c| {
+    if c == ' ' {
+      // Increment the space counter
+      i += 1;
+
+      // If the space counter is equal to count, then split
+      let res = i == count;
+
+      // If splitting, reset the counter
+      if res {
+        i = 0;
+      }
+
+      res
+    } else {
+      false
+    }
+  });
+
+  let mut values = Vec::new();
+
+  for part in iter {
+    trace!("part: {:?}", part);
+    values.push(Value::from_string(node_type, part, false, 1)?);
+  }
+
+  Ok(Value::Array(node_type, values))
+}
 
 macro_rules! construct_types {
   (
@@ -26,6 +94,7 @@ macro_rules! construct_types {
       Attribute(String),
 
       Array(StandardType, Vec<Value>),
+      ArrayNew(ValueArray),
     }
 
     $(
@@ -68,6 +137,7 @@ macro_rules! construct_types {
           Value::Time(_) => StandardType::Time,
           Value::Attribute(_) => StandardType::Attribute,
           Value::Array(node_type, _) => node_type,
+          Value::ArrayNew(ref value) => value.standard_type(),
         }
       }
     }
@@ -119,28 +189,20 @@ macro_rules! tuple {
         StandardType::FileEnd |
         StandardType::Attribute |
         StandardType::String => return Ok(None),
-        StandardType::S8 => Value::S8(input[0] as i8),
-        StandardType::U8 => Value::U8(input[0]),
-        StandardType::S16 => Value::S16(BigEndian::read_i16(input)),
-        StandardType::U16 => Value::U16(BigEndian::read_u16(input)),
-        StandardType::S32 => Value::S32(BigEndian::read_i32(input)),
-        StandardType::U32 => Value::U32(BigEndian::read_u32(input)),
-        StandardType::S64 => Value::S64(BigEndian::read_i64(input)),
-        StandardType::U64 => Value::U64(BigEndian::read_u64(input)),
+        StandardType::S8 => i8::from_kbin_bytes(input).map(Value::S8)?,
+        StandardType::U8 => u8::from_kbin_bytes(input).map(Value::U8)?,
+        StandardType::S16 => i16::from_kbin_bytes(input).map(Value::S16)?,
+        StandardType::U16 => u16::from_kbin_bytes(input).map(Value::U16)?,
+        StandardType::S32 => i32::from_kbin_bytes(input).map(Value::S32)?,
+        StandardType::U32 => u32::from_kbin_bytes(input).map(Value::U32)?,
+        StandardType::S64 => i64::from_kbin_bytes(input).map(Value::S64)?,
+        StandardType::U64 => u64::from_kbin_bytes(input).map(Value::U64)?,
         StandardType::Binary => Value::Binary(input.to_vec()),
-        StandardType::Time => Value::Time(BigEndian::read_u32(input)),
-        StandardType::Ip4 => {
-          let mut octets = [0; 4];
-          octets[0..4].copy_from_slice(&input[0..4]);
-          Value::Ip4(Ipv4Addr::from(octets))
-        },
-        StandardType::Float => Value::Float(BigEndian::read_f32(input)),
-        StandardType::Double => Value::Double(BigEndian::read_f64(input)),
-        StandardType::Boolean => Value::Boolean(match input[0] {
-          0x00 => false,
-          0x01 => true,
-          input => return Err(KbinErrorKind::InvalidBooleanInput(input).into()),
-        }),
+        StandardType::Time => u32::from_kbin_bytes(input).map(Value::Time)?,
+        StandardType::Ip4 => Ipv4Addr::from_kbin_bytes(input).map(Value::Ip4)?,
+        StandardType::Float => f32::from_kbin_bytes(input).map(Value::Float)?,
+        StandardType::Double => f64::from_kbin_bytes(input).map(Value::Double)?,
+        StandardType::Boolean => bool::from_kbin_bytes(input).map(Value::Boolean)?,
         $(
           StandardType::$s8_konst => {
             const COUNT: usize = node_types::$s8_konst.count;
@@ -164,11 +226,7 @@ macro_rules! tuple {
             const COUNT: usize = node_types::$bool_konst.count;
             let mut value: [_; COUNT] = Default::default();
             for i in 0..COUNT {
-              value[i] = match input[i] {
-                0x00 => false,
-                0x01 => true,
-                input => return Err(KbinErrorKind::InvalidBooleanInput(input).into()),
-              };
+              value[i] = bool::from_kbin_bytes(&input[i..i + 1])?;
             }
             Value::$bool_konst(value)
           },
@@ -191,67 +249,6 @@ macro_rules! tuple {
     }
 
     pub fn from_string(node_type: StandardType, input: &str, is_array: bool, arr_count: usize) -> Result<Value, KbinError> {
-      #[inline]
-      fn parse<T>(node_type: StandardType, input: &str) -> Result<T, KbinError>
-        where T: FromStr,
-              T::Err: Fail
-      {
-        // TODO(mbilker): Add string check for spaces
-        let n = input.parse::<T>().context(KbinErrorKind::StringParse(node_type.name))?;
-        Ok(n)
-      }
-
-      #[inline]
-      fn parse_tuple<T>(node_type: StandardType, input: &str, output: &mut [T]) -> Result<(), KbinError>
-        where T: FromStr,
-              T::Err: Fail
-      {
-
-        let mut i = 0;
-        for part in input.split(' ') {
-          output[i] = part.parse::<T>().context(KbinErrorKind::StringParse(node_type.name))?;
-          i += 1;
-        }
-
-        if i != node_type.count {
-          return Err(KbinErrorKind::SizeMismatch(*node_type, node_type.count, i).into());
-        }
-
-        Ok(())
-      }
-
-      fn to_array(node_type: StandardType, count: usize, input: &str, arr_count: usize) -> Result<Value, KbinError> {
-        let mut i = 0;
-        trace!("to_array(count: {}, input: {:?}, arr_count: {})", count, input, arr_count);
-        let iter = input.split(|c| {
-          if c == ' ' {
-            // Increment the space counter
-            i += 1;
-
-            // If the space counter is equal to count, then split
-            let res = i == count;
-
-            // If splitting, reset the counter
-            if res {
-              i = 0;
-            }
-
-            res
-          } else {
-            false
-          }
-        });
-
-        let mut values = Vec::new();
-
-        for part in iter {
-          trace!("part: {:?}", part);
-          values.push(Value::from_string(node_type, part, false, 1)?);
-        }
-
-        Ok(Value::Array(node_type, values))
-      }
-
       if is_array {
         let value = match node_type.count {
           1 => {
@@ -395,6 +392,7 @@ macro_rules! tuple {
             value.to_bytes_inner(output)?;
           }
         },
+        Value::ArrayNew(value) => value.to_bytes_inner(output)?,
         Value::Attribute(_) |
         Value::String(_) => return Err(KbinErrorKind::InvalidNodeType(self.standard_type()).into()),
         $(
@@ -649,9 +647,14 @@ impl fmt::Debug for Value {
           )*
           Value::Binary(ref v) => write!(f, "Binary(0x{:02x?})", v),
           Value::Array(ref node_type, ref a) => if f.alternate() {
-            write!(f, "Array({:?}, {:#?}", node_type, a)
+            write!(f, "Array({:?}, {:#?})", node_type, a)
           } else {
-            write!(f, "Array({:?}, {:?}", node_type, a)
+            write!(f, "Array({:?}, {:?})", node_type, a)
+          },
+          Value::ArrayNew(ref value) => if f.alternate() {
+            write!(f, "Array({:#?})", value)
+          } else {
+            write!(f, "Array({:?})", value)
           },
         }
       };
@@ -748,7 +751,8 @@ impl fmt::Display for Value {
     display_value! {
       simple: [
         S8, U8, S16, U16, S32, U32, S64, U64,
-        String, Ip4, Time, Attribute
+        String, Ip4, Time, Attribute,
+        ArrayNew
       ],
       tuple: [
         S8_2, U8_2, S16_2, U16_2, S32_2, U32_2, S64_2, U64_2,
