@@ -1,11 +1,14 @@
-use std::fs::File;
+#[macro_use] extern crate failure;
+
+use std::fs;
 use std::io::{self, Error as IoError, Read, Write};
 
 use byteorder::{BigEndian, ByteOrder};
 use bytes::Bytes;
 use clap::{App, Arg};
+use encoding_rs::Encoding;
 use failure::Fallible;
-use kbinxml::{NodeCollection, Options, Printer};
+use kbinxml::{EncodingType, NodeCollection, Options, Printer};
 use minidom::Element;
 use quick_xml::Reader;
 
@@ -88,61 +91,73 @@ fn run() -> Fallible<()> {
     .author("Matt Bilker <me@mbilker.us>")
     .arg(Arg::with_name("printer")
       .help("Turn on the NodeCollection and NodeDefinition debug printer")
-      .short("p"))
+      .short("p")
+      .long("printer"))
+    .arg(Arg::with_name("encoding")
+      .help("Set the encoding used when encoding kbin data")
+      .short("e")
+      .long("encoding")
+      .takes_value(true))
     .arg(Arg::with_name("input")
       .help("The file to convert")
-      .index(1))
+      .index(1)
+      .required(true))
     .get_matches();
 
   let printer_enabled = matches.is_present("printer");
+  let file_name = matches.value_of("input").unwrap();
+  let output_encoding = if let Some(label) = matches.value_of("encoding") {
+    let encoding = Encoding::for_label(label.as_bytes())
+      .ok_or_else(|| format_err!("No encoding found for label"))?;
 
-  if let Some(file_name) = matches.value_of("input") {
-    eprintln!("file_name: {}", file_name);
-
-    let mut contents = Vec::new();
-
-    // Read '-' as standard input.
-    if file_name == "-" {
-      io::stdin().read_to_end(&mut contents)?;
-    } else {
-      let mut file = File::open(file_name)?;
-      file.read_to_end(&mut contents)?;
-    }
-
-    if kbinxml::is_binary_xml(&contents) {
-      if printer_enabled {
-        Printer::run(&contents).unwrap();
-      }
-
-      let (collection, _encoding) = kbinxml::from_slice(&contents)?;
-      let text_original = kbinxml::to_text_xml(&collection)?;
-      display_buf(&text_original)?;
-
-      let (element, encoding_original) = kbinxml::element_from_binary(&contents)?;
-
-      let options = Options::with_encoding(encoding_original);
-      let buf = kbinxml::to_binary_with_options(options, &element)?;
-      compare_slice(&buf, &contents);
-    } else {
-      let (collection, encoding) = kbinxml::from_text_xml(&contents)?;
-
-      let mut reader = Reader::from_reader(contents.as_slice());
-      let element = Element::from_reader(&mut reader).expect("Unable to construct DOM for input text XML");
-
-      let options = Options::with_encoding(encoding);
-      let buf = kbinxml::to_binary_with_options(options, &element)?;
-
-      if printer_enabled {
-        Printer::run(&buf)?;
-      }
-
-      let (encoded_collection, _encoding) = kbinxml::from_binary(Bytes::from(buf.clone()))?;
-      compare_collections(&collection, &encoded_collection);
-
-      io::stdout().write_all(&buf)?;
-    }
+    Some(EncodingType::from_encoding(encoding)?)
   } else {
-    eprintln!("No input file specified!");
+    None
+  };
+
+  eprintln!("file_name: {}", file_name);
+
+  // Read '-' as standard input.
+  let contents = if file_name == "-" {
+    let mut contents = Vec::new();
+    io::stdin().read_to_end(&mut contents)?;
+
+    contents
+  } else {
+    fs::read(file_name)?
+  };
+
+  if kbinxml::is_binary_xml(&contents) {
+    if printer_enabled {
+      Printer::run(&contents).unwrap();
+    }
+
+    let (collection, _encoding) = kbinxml::from_slice(&contents)?;
+    let text_original = kbinxml::to_text_xml(&collection)?;
+    display_buf(&text_original)?;
+
+    let (element, encoding_original) = kbinxml::element_from_binary(&contents)?;
+
+    let options = Options::with_encoding(output_encoding.unwrap_or(encoding_original));
+    let buf = kbinxml::to_binary_with_options(options, &element)?;
+    compare_slice(&buf, &contents);
+  } else {
+    let (collection, encoding) = kbinxml::from_text_xml(&contents)?;
+
+    let mut reader = Reader::from_reader(contents.as_slice());
+    let element = Element::from_reader(&mut reader).expect("Unable to construct DOM for input text XML");
+
+    let options = Options::with_encoding(output_encoding.unwrap_or(encoding));
+    let buf = kbinxml::to_binary_with_options(options, &element)?;
+
+    if printer_enabled {
+      Printer::run(&buf)?;
+    }
+
+    let (encoded_collection, _encoding) = kbinxml::from_binary(Bytes::from(buf.clone()))?;
+    compare_collections(&collection, &encoded_collection);
+
+    io::stdout().write_all(&buf)?;
   }
 
   Ok(())
