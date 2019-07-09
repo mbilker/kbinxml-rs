@@ -18,7 +18,7 @@ pub struct TextXmlReader<'a> {
   xml_reader: Reader<&'a [u8]>,
   encoding: EncodingType,
 
-  stack: Vec<(NodeCollection, usize)>,
+  stack: Vec<(NodeCollection, usize, usize)>,
 }
 
 impl<'a> TextXmlReader<'a> {
@@ -61,9 +61,10 @@ impl<'a> TextXmlReader<'a> {
     Ok(NodeDefinition::with_data(self.encoding, node_type, data))
   }
 
-  fn parse_attributes(&self, attrs: Attributes<'a>) -> Result<(StandardType, usize, Vec<NodeDefinition>)> {
+  fn parse_attributes(&self, attrs: Attributes<'a>) -> Result<(StandardType, usize, usize, Vec<NodeDefinition>)> {
     let mut node_type = None;
     let mut count = 0;
+    let mut size = 0;
     let mut attributes = Vec::new();
 
     for attr in attrs {
@@ -87,7 +88,9 @@ impl<'a> TextXmlReader<'a> {
 
             count = num_count as usize;
           } else if attr.key == b"__size" {
-            //let value = str::from_utf8(&*value).context(KbinErrorKind::Utf8)?;
+            let value = str::from_utf8(&*value).context(KbinErrorKind::Utf8)?;
+
+            size = value.parse::<usize>().context(KbinErrorKind::StringParse("binary size"))?;
           } else {
             let definition = self.parse_attribute(attr.key, &value)?;
             attributes.push(definition);
@@ -108,11 +111,11 @@ impl<'a> TextXmlReader<'a> {
       },
     };
 
-    Ok((node_type, count, attributes))
+    Ok((node_type, count, size, attributes))
   }
 
-  fn handle_start(&self, e: BytesStart) -> Result<(NodeCollection, usize)> {
-    let (node_type, count, attributes) = self.parse_attributes(e.attributes())?;
+  fn handle_start(&self, e: BytesStart) -> Result<(NodeCollection, usize, usize)> {
+    let (node_type, count, size, attributes) = self.parse_attributes(e.attributes())?;
 
     // Stub the value for now, handle with `Event::Text`.
     let value_data = match node_type {
@@ -132,10 +135,10 @@ impl<'a> TextXmlReader<'a> {
     let base = NodeDefinition::with_data(self.encoding, node_type, data);
     let collection = NodeCollection::with_attributes(base, attributes.into());
 
-    Ok((collection, count))
+    Ok((collection, count, size))
   }
 
-  fn handle_text(event: BytesText, definition: &mut NodeDefinition, count: usize) -> Result<()> {
+  fn handle_text(event: BytesText, definition: &mut NodeDefinition, count: usize, size: usize) -> Result<()> {
     let data = event.unescaped().context(KbinErrorKind::Utf8)?;
     let data = match definition.node_type {
       StandardType::String |
@@ -151,6 +154,13 @@ impl<'a> TextXmlReader<'a> {
       _ => {
         let text = str::from_utf8(&*data).context(KbinErrorKind::Utf8)?;
         let value = Value::from_string(definition.node_type, text, definition.is_array, count)?;
+
+        if let Value::Binary(data) = &value {
+          // The read number of bytes must match the size attribute
+          if data.len() != size {
+            return Err(KbinErrorKind::InvalidState.into());
+          }
+        }
 
         Bytes::from(value.to_bytes()?)
       },
@@ -182,14 +192,14 @@ impl<'a> TextXmlReader<'a> {
           self.stack.push(start);
         },
         Ok(Event::Text(e)) => {
-          if let Some((ref mut collection, ref count)) = self.stack.last_mut() {
+          if let Some((ref mut collection, ref count, ref size)) = self.stack.last_mut() {
             let base = collection.base_mut();
-            Self::handle_text(e, base, *count)?;
+            Self::handle_text(e, base, *count, *size)?;
           }
         },
         Ok(Event::End(_)) => {
-          if let Some((collection, _count)) = self.stack.pop() {
-            if let Some((parent_collection, _count)) = self.stack.last_mut() {
+          if let Some((collection, _count, _size)) = self.stack.pop() {
+            if let Some((parent_collection, _count, _size)) = self.stack.last_mut() {
               parent_collection.children_mut().push_back(collection);
             } else {
               // The end of the structure has been reached.
@@ -198,10 +208,11 @@ impl<'a> TextXmlReader<'a> {
           }
         },
         Ok(Event::Empty(e)) => {
-          let (collection, count) = self.handle_start(e)?;
+          let (collection, count, size) = self.handle_start(e)?;
           assert!(count == 0, "empty node should not signal an array");
+          assert!(size == 0, "empty node should not signal binary data");
 
-          if let Some((ref mut parent_collection, _count)) = self.stack.last_mut() {
+          if let Some((ref mut parent_collection, _count, _size)) = self.stack.last_mut() {
             parent_collection.children_mut().push_back(collection);
           }
         },
