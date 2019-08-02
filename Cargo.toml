@@ -13,7 +13,6 @@ failure = "0.1.1"
 indexmap = "1.0.1"
 lazy_static = "1.0.0"
 log = "0.4.6"
-minidom = "0.11.0"
 quick-xml = "0.14.0"
 rustc-hex = "2.0.1"
 
