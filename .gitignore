@@ -1,3 +1,6 @@
 /Cargo.lock
 /target
 **/*.rs.bk
+
+# IDE Files
+/.idea
