@@ -199,6 +199,10 @@ impl Node {
     attributes.insert(key.into(), value.into())
   }
 
+  pub fn remove_attr(&mut self, key: &str) -> Option<String> {
+    self.attributes.as_mut().and_then(|attributes| attributes.remove(key))
+  }
+
   pub fn sort_attrs(&mut self) {
     if let Some(ref mut attributes) = self.attributes {
       attributes.sort_keys();
