@@ -216,8 +216,10 @@ impl<'a> TextXmlReader<'a> {
             parent_collection.children_mut().push_back(collection);
           }
         },
-        Ok(Event::Decl(_)) => {
-          self.encoding = EncodingType::from_encoding(self.xml_reader.encoding())?;
+        Ok(Event::Decl(e)) => {
+          if let Some(encoding) = e.encoding() {
+            self.encoding = EncodingType::from_label(&encoding?)?;
+          }
         },
         Ok(Event::Eof) => break,
         Ok(_) => {},

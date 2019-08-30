@@ -68,6 +68,12 @@ impl EncodingType {
     Ok(val)
   }
 
+  pub fn from_label(label: &[u8]) -> Result<Self, KbinError> {
+    Encoding::for_label(label)
+      .ok_or(KbinErrorKind::UnknownEncoding.into())
+      .and_then(Self::from_encoding)
+  }
+
   pub fn to_byte(&self) -> u8 {
     match *self {
       EncodingType::None       => 0x00, // 0x00 >> 5 = 0
