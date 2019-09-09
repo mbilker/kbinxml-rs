@@ -33,7 +33,7 @@ pub use crate::reader::Reader;
 pub use crate::error::{KbinError, KbinErrorKind, Result};
 pub use crate::node::{Node, NodeCollection};
 pub use crate::node_types::StandardType;
-pub use crate::options::Options;
+pub use crate::options::{Options, OptionsBuilder};
 pub use crate::to_text_xml::ToTextXml;
 pub use crate::value::{Value, ValueArray};
 pub use crate::writer::{Writer, Writeable};
