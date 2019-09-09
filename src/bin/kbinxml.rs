@@ -4,13 +4,10 @@ use std::fs;
 use std::io::{self, Error as IoError, Read, Write};
 
 use byteorder::{BigEndian, ByteOrder};
-use bytes::Bytes;
 use clap::{App, Arg};
 use encoding_rs::Encoding;
 use failure::Fallible;
-use kbinxml::{EncodingType, NodeCollection, Options, Printer};
-use minidom::Element;
-use quick_xml::Reader;
+use kbinxml::{EncodingType, Options, Printer};
 
 fn display_buf(buf: &[u8]) -> Result<(), IoError> {
   io::stdout().write_all(&buf)?;
@@ -19,44 +16,9 @@ fn display_buf(buf: &[u8]) -> Result<(), IoError> {
   Ok(())
 }
 
-fn compare_collections(left: &NodeCollection, right: &NodeCollection) -> bool {
-  if left.base() != right.base() {
-    eprintln!("left.base() != right.base()");
-    eprintln!("left.base(): {:#?}", left.base());
-    eprintln!("right.base(): {:#?}", right.base());
-
-    return false;
-  }
-
-  for (left, right) in left.attributes().iter().zip(right.attributes().iter()) {
-    if left != right {
-      eprintln!("left attribute != right attribute");
-      eprintln!("left: {:#?}", left);
-      eprintln!("right: {:#?}", right);
-
-      return false;
-    }
-  }
-
-  for (left, right) in left.children().iter().zip(right.children().iter()) {
-    if !compare_collections(left, right) {
-      return false;
-    }
-  }
-
-  true
-}
-
 fn compare_slice(left: &[u8], right: &[u8]) {
   let node_buf_length = BigEndian::read_u32(&left[4..8]);
-  //println!("node_buf_length: {}", node_buf_length);
-
   let data_buf_start = 8 + node_buf_length as usize;
-  //let data_buf_len_end = data_buf_start + 4;
-  //println!("data_buf start: {} + 8 = {}", node_buf_length, data_buf_start);
-
-  //let data_buf_length = BigEndian::read_u32(&left[data_buf_start..data_buf_len_end]);
-  //println!("data_buf_length: {}", data_buf_length);
 
   let mut i = 0;
   let mut mismatches = Vec::new();
@@ -136,26 +98,18 @@ fn run() -> Fallible<()> {
     let text_original = kbinxml::to_text_xml(&collection)?;
     display_buf(&text_original)?;
 
-    let (element, encoding_original) = kbinxml::element_from_binary(&contents)?;
-
+    let (collection, encoding_original) = kbinxml::from_slice(&contents)?;
     let options = Options::with_encoding(output_encoding.unwrap_or(encoding_original));
-    let buf = kbinxml::to_binary_with_options(options, &element)?;
+    let buf = kbinxml::to_binary_with_options(options, &collection)?;
     compare_slice(&buf, &contents);
   } else {
     let (collection, encoding) = kbinxml::from_text_xml(&contents)?;
-
-    let mut reader = Reader::from_reader(contents.as_slice());
-    let element = Element::from_reader(&mut reader).expect("Unable to construct DOM for input text XML");
-
     let options = Options::with_encoding(output_encoding.unwrap_or(encoding));
-    let buf = kbinxml::to_binary_with_options(options, &element)?;
+    let buf = kbinxml::to_binary_with_options(options, &collection)?;
 
     if printer_enabled {
       Printer::run(&buf)?;
     }
-
-    let (encoded_collection, _encoding) = kbinxml::from_binary(Bytes::from(buf.clone()))?;
-    compare_collections(&collection, &encoded_collection);
 
     io::stdout().write_all(&buf)?;
   }
