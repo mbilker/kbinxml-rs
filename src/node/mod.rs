@@ -200,7 +200,7 @@ impl Node {
   }
 
   pub fn remove_attr(&mut self, key: &str) -> Option<String> {
-    self.attributes.as_mut().and_then(|attributes| attributes.remove(key))
+    self.attributes.as_mut().and_then(|attributes| attributes.swap_remove(key))
   }
 
   pub fn sort_attrs(&mut self) {
