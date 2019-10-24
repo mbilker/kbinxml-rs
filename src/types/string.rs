@@ -37,7 +37,9 @@ fn parse_tuple<T>(node_type: &'static str, input: &str, output: &mut [T]) -> Res
 impl FromKbinString for bool {
   fn from_kbin_string(input: &str) -> Result<Self, KbinError> {
     match input {
+      "false" |
       "0" => Ok(false),
+      "true" |
       "1" => Ok(true),
       input => Err(KbinErrorKind::InvalidBooleanInput(u8::from_kbin_string(input)?).into()),
     }
