@@ -66,7 +66,7 @@ impl FromKbinString for Ipv4Addr {
   }
 }
 
-macro_rules! basic_parse {
+macro_rules! basic_int_parse {
   (
     $($type:ty),*$(,)?
   ) => {
@@ -75,7 +75,33 @@ macro_rules! basic_parse {
         fn from_kbin_string(input: &str) -> Result<Self, KbinError> {
           space_check(input)?;
 
-          input.parse::<$type>().context(KbinErrorKind::StringParse(stringify!($type))).map_err(Into::into)
+          if input.starts_with("0x") {
+            <$type>::from_str_radix(&input[2..], 16)
+              .context(KbinErrorKind::StringParse(stringify!($type)))
+              .map_err(Into::into)
+          } else {
+            input.parse::<$type>()
+              .context(KbinErrorKind::StringParse(stringify!($type)))
+              .map_err(Into::into)
+          }
+        }
+      }
+    )*
+  };
+}
+
+macro_rules! basic_float_parse {
+  (
+    $($type:ty),*$(,)?
+  ) => {
+    $(
+      impl FromKbinString for $type {
+        fn from_kbin_string(input: &str) -> Result<Self, KbinError> {
+          space_check(input)?;
+
+          input.parse::<$type>()
+            .context(KbinErrorKind::StringParse(stringify!($type)))
+            .map_err(Into::into)
         }
       }
     )*
@@ -124,11 +150,14 @@ macro_rules! tuple_parse {
   };
 }
 
-basic_parse! {
+basic_int_parse! {
   i8, u8,
   i16, u16,
   i32, u32,
   i64, u64,
+}
+
+basic_float_parse! {
   f32, f64,
 }
 
