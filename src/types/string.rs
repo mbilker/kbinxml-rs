@@ -7,66 +7,78 @@ use snafu::ResultExt;
 use crate::error::*;
 
 pub trait FromKbinString: Sized {
-  fn from_kbin_string(input: &str) -> Result<Self>;
+    fn from_kbin_string(input: &str) -> Result<Self>;
 }
 
 fn space_check(input: &str) -> Result<()> {
-  // check for space character
-  if input.find(' ').is_some() {
-    return Err(KbinError::InvalidState.into());
-  }
+    // check for space character
+    if input.find(' ').is_some() {
+        return Err(KbinError::InvalidState.into());
+    }
 
-  Ok(())
+    Ok(())
 }
 
 fn parse_tuple<T>(node_type: &'static str, input: &str, output: &mut [T]) -> Result<()>
-  where T: FromStr,
-        T::Err: Error + Send + Sync + 'static,
+where
+    T: FromStr,
+    T::Err: Error + Send + Sync + 'static,
 {
-  let count = input.split(' ').count();
-  if count != output.len() {
-    return Err(KbinError::SizeMismatch { node_type, expected: output.len(), actual: count });
-  }
+    let count = input.split(' ').count();
+    if count != output.len() {
+        return Err(KbinError::SizeMismatch {
+            node_type,
+            expected: output.len(),
+            actual: count,
+        });
+    }
 
-  for (i, part) in input.split(' ').enumerate() {
-    output[i] = part.parse::<T>()
-      .map_err(|e| Box::new(e) as Box<(dyn Error + Send + Sync + 'static)>)
-      .context(StringParse { node_type })?;
-  }
+    for (i, part) in input.split(' ').enumerate() {
+        output[i] = part
+            .parse::<T>()
+            .map_err(|e| Box::new(e) as Box<(dyn Error + Send + Sync + 'static)>)
+            .context(StringParse { node_type })?;
+    }
 
-  Ok(())
+    Ok(())
 }
 
 impl FromKbinString for bool {
-  fn from_kbin_string(input: &str) -> Result<Self> {
-    match input {
-      "false" |
-      "0" => Ok(false),
-      "true" |
-      "1" => Ok(true),
-      input => Err(KbinError::InvalidBooleanInput { input: u8::from_kbin_string(input)? }),
+    fn from_kbin_string(input: &str) -> Result<Self> {
+        match input {
+            "false" | "0" => Ok(false),
+            "true" | "1" => Ok(true),
+            input => Err(KbinError::InvalidBooleanInput {
+                input: u8::from_kbin_string(input)?,
+            }),
+        }
     }
-  }
 }
 
 impl FromKbinString for Ipv4Addr {
-  fn from_kbin_string(input: &str) -> Result<Self> {
-    space_check(input)?;
+    fn from_kbin_string(input: &str) -> Result<Self> {
+        space_check(input)?;
 
-    let count = input.split('.').count();
-    if count != 4 {
-      return Err(KbinError::SizeMismatch { node_type: "Ipv4Addr", expected: 4, actual: count });
+        let count = input.split('.').count();
+        if count != 4 {
+            return Err(KbinError::SizeMismatch {
+                node_type: "Ipv4Addr",
+                expected: 4,
+                actual: count,
+            });
+        }
+
+        let mut octets = [0; 4];
+
+        // IP addresses are split by a period, so do not use `parse_tuple`
+        for (i, part) in input.split('.').enumerate() {
+            octets[i] = part.parse::<u8>().context(StringParseInt {
+                node_type: "Ipv4Addr",
+            })?;
+        }
+
+        Ok(Ipv4Addr::from(octets))
     }
-
-    let mut octets = [0; 4];
-
-    // IP addresses are split by a period, so do not use `parse_tuple`
-    for (i, part) in input.split('.').enumerate() {
-      octets[i] = part.parse::<u8>().context(StringParseInt { node_type: "Ipv4Addr" })?;
-    }
-
-    Ok(Ipv4Addr::from(octets))
-  }
 }
 
 macro_rules! basic_int_parse {

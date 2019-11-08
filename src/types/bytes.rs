@@ -8,74 +8,74 @@ use snafu::ResultExt;
 use crate::error::*;
 
 pub trait IntoKbinBytes {
-  fn write_kbin_bytes<B: BufMut>(self, buf: &mut B);
+    fn write_kbin_bytes<B: BufMut>(self, buf: &mut B);
 }
 
 pub trait FromKbinBytes: Sized {
-  fn from_kbin_bytes<R: Read>(input: &mut R) -> Result<Self>;
+    fn from_kbin_bytes<R: Read>(input: &mut R) -> Result<Self>;
 }
 
 impl IntoKbinBytes for i8 {
-  fn write_kbin_bytes<B: BufMut>(self, buf: &mut B) {
-    buf.put_i8(self);
-  }
+    fn write_kbin_bytes<B: BufMut>(self, buf: &mut B) {
+        buf.put_i8(self);
+    }
 }
 
 impl FromKbinBytes for i8 {
-  fn from_kbin_bytes<R: Read>(input: &mut R) -> Result<Self> {
-    input.read_i8().context(DataConvert)
-  }
+    fn from_kbin_bytes<R: Read>(input: &mut R) -> Result<Self> {
+        input.read_i8().context(DataConvert)
+    }
 }
 
 impl IntoKbinBytes for u8 {
-  fn write_kbin_bytes<B: BufMut>(self, buf: &mut B) {
-    buf.put_u8(self);
-  }
+    fn write_kbin_bytes<B: BufMut>(self, buf: &mut B) {
+        buf.put_u8(self);
+    }
 }
 
 impl FromKbinBytes for u8 {
-  fn from_kbin_bytes<R: Read>(input: &mut R) -> Result<Self> {
-    input.read_u8().context(DataConvert)
-  }
+    fn from_kbin_bytes<R: Read>(input: &mut R) -> Result<Self> {
+        input.read_u8().context(DataConvert)
+    }
 }
 
 impl IntoKbinBytes for bool {
-  fn write_kbin_bytes<B: BufMut>(self, buf: &mut B) {
-    buf.put_u8(if self { 0x01 } else { 0x00 })
-  }
+    fn write_kbin_bytes<B: BufMut>(self, buf: &mut B) {
+        buf.put_u8(if self { 0x01 } else { 0x00 })
+    }
 }
 
 impl FromKbinBytes for bool {
-  fn from_kbin_bytes<R: Read>(input: &mut R) -> Result<Self> {
-    match u8::from_kbin_bytes(input)? {
-      0x00 => Ok(false),
-      0x01 => Ok(true),
-      input => Err(KbinError::InvalidBooleanInput { input }),
+    fn from_kbin_bytes<R: Read>(input: &mut R) -> Result<Self> {
+        match u8::from_kbin_bytes(input)? {
+            0x00 => Ok(false),
+            0x01 => Ok(true),
+            input => Err(KbinError::InvalidBooleanInput { input }),
+        }
     }
-  }
 }
 
 impl<'a> IntoKbinBytes for &'a [u8] {
-  fn write_kbin_bytes<B: BufMut>(self, buf: &mut B) {
-    buf.put(self);
-  }
+    fn write_kbin_bytes<B: BufMut>(self, buf: &mut B) {
+        buf.put(self);
+    }
 }
 
 impl IntoKbinBytes for Ipv4Addr {
-  fn write_kbin_bytes<B: BufMut>(self, buf: &mut B) {
-    let octets = self.octets();
+    fn write_kbin_bytes<B: BufMut>(self, buf: &mut B) {
+        let octets = self.octets();
 
-    buf.put(&octets[..])
-  }
+        buf.put(&octets[..])
+    }
 }
 
 impl FromKbinBytes for Ipv4Addr {
-  fn from_kbin_bytes<R: Read>(input: &mut R) -> Result<Self> {
-    let mut octets = [0; 4];
-    input.read_exact(&mut octets).context(DataConvert)?;
+    fn from_kbin_bytes<R: Read>(input: &mut R) -> Result<Self> {
+        let mut octets = [0; 4];
+        input.read_exact(&mut octets).context(DataConvert)?;
 
-    Ok(Ipv4Addr::from(octets))
-  }
+        Ok(Ipv4Addr::from(octets))
+    }
 }
 
 macro_rules! multibyte_impl {

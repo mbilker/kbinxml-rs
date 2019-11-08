@@ -8,51 +8,57 @@ use crate::reader::Reader;
 pub struct Printer;
 
 impl Printer {
-  pub fn run(input: &[u8]) -> Result<()> {
-    let mut reader = Reader::new(Bytes::from(input))?;
-    let mut nodes = Vec::new();
-    let mut definitions = Vec::new();
+    pub fn run(input: &[u8]) -> Result<()> {
+        let mut reader = Reader::new(Bytes::from(input))?;
+        let mut nodes = Vec::new();
+        let mut definitions = Vec::new();
 
-    while let Ok(def) = reader.read_node_definition() {
-      trace!("definition: {:?}", def);
+        while let Ok(def) = reader.read_node_definition() {
+            trace!("definition: {:?}", def);
 
-      let node_type = def.node_type;
-      let key = match def.key() {
-        Ok(v) => v,
-        Err(e) => {
-          error!("error processing key for definition {:?}: {}", def, e);
-          None
-        },
-      };
-      nodes.push((node_type, def.is_array, key));
-      definitions.push(def);
+            let node_type = def.node_type;
+            let key = match def.key() {
+                Ok(v) => v,
+                Err(e) => {
+                    error!("error processing key for definition {:?}: {}", def, e);
+                    None
+                },
+            };
+            nodes.push((node_type, def.is_array, key));
+            definitions.push(def);
 
-      if node_type == StandardType::FileEnd {
-        break;
-      }
+            if node_type == StandardType::FileEnd {
+                break;
+            }
+        }
+
+        let mut indent = 0;
+        for (node_type, is_array, identifier) in nodes {
+            eprint!(
+                "{:indent$} - {:?} (is_array: {}",
+                "",
+                node_type,
+                is_array,
+                indent = indent
+            );
+            if let Some(identifier) = identifier {
+                eprint!(", identifier: {}", identifier);
+            }
+            eprintln!(")");
+
+            match node_type {
+                StandardType::Attribute => {},
+                StandardType::NodeEnd => indent -= 2,
+                _ => indent += 2,
+            };
+        }
+
+        let collection = NodeCollection::from_iter(&mut definitions.into_iter());
+        match collection {
+            Some(ref collection) => eprintln!("collection: {:#}", collection),
+            None => eprintln!("collection: {:?}", collection),
+        };
+
+        Ok(())
     }
-
-    let mut indent = 0;
-    for (node_type, is_array, identifier) in nodes {
-      eprint!("{:indent$} - {:?} (is_array: {}", "", node_type, is_array, indent = indent);
-      if let Some(identifier) = identifier {
-        eprint!(", identifier: {}", identifier);
-      }
-      eprintln!(")");
-
-      match node_type {
-        StandardType::Attribute => {},
-        StandardType::NodeEnd => indent -= 2,
-        _ => indent += 2,
-      };
-    }
-
-    let collection = NodeCollection::from_iter(&mut definitions.into_iter());
-    match collection {
-      Some(ref collection) => eprintln!("collection: {:#}", collection),
-      None => eprintln!("collection: {:?}", collection),
-    };
-
-    Ok(())
-  }
 }

@@ -3,18 +3,18 @@ use std::ops::Deref;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub struct KbinType {
-  pub id: u8,
-  pub konst: &'static str,
-  pub name: &'static str,
-  pub alt_name: Option<&'static str>,
-  pub size: usize,
-  pub count: usize
+    pub id: u8,
+    pub konst: &'static str,
+    pub name: &'static str,
+    pub alt_name: Option<&'static str>,
+    pub size: usize,
+    pub count: usize,
 }
 
 impl fmt::Display for KbinType {
-  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    write!(f, "{} ({})", self.konst, self.name)
-  }
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{} ({})", self.konst, self.name)
+    }
 }
 
 macro_rules! construct_types {
