@@ -1,12 +1,10 @@
-#[macro_use] extern crate failure;
-
 use std::fs;
 use std::io::{self, Error as IoError, Read, Write};
 
+use anyhow::Context;
 use byteorder::{BigEndian, ByteOrder};
 use clap::{App, Arg};
 use encoding_rs::Encoding;
-use failure::Fallible;
 use kbinxml::{EncodingType, Options, Printer};
 
 fn display_buf(buf: &[u8]) -> Result<(), IoError> {
@@ -46,7 +44,9 @@ fn compare_slice(left: &[u8], right: &[u8]) {
   }
 }
 
-fn run() -> Fallible<()> {
+fn main() -> Result<(), anyhow::Error> {
+  pretty_env_logger::init();
+
   let matches = App::new("kbinxml")
     .about(env!("CARGO_PKG_DESCRIPTION"))
     .version(env!("CARGO_PKG_VERSION"))
@@ -70,7 +70,7 @@ fn run() -> Fallible<()> {
   let file_name = matches.value_of("input").unwrap();
   let output_encoding = if let Some(label) = matches.value_of("encoding") {
     let encoding = Encoding::for_label(label.as_bytes())
-      .ok_or_else(|| format_err!("No encoding found for label"))?;
+      .with_context(|| "No encoding found for label")?;
 
     Some(EncodingType::from_encoding(encoding)?)
   } else {
@@ -115,18 +115,4 @@ fn run() -> Fallible<()> {
   }
 
   Ok(())
-}
-
-fn main() {
-  pretty_env_logger::init();
-
-  if let Err(e) = run() {
-    eprintln!("Error: {}", e);
-
-    for cause in e.iter_causes() {
-      eprintln!("Cause: {}", cause);
-    }
-
-    eprintln!("{}", e.backtrace());
-  }
 }

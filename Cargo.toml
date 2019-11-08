@@ -16,11 +16,12 @@ quick-xml = "0.17.0"
 rustc-hex = "2.0.1"
 snafu = "0.6.0"
 
+anyhow = { version = "1.0.19", optional = true }
 clap = { version = "2.32.0", optional = true }
 pretty_env_logger = { version = "0.3.0", optional = true }
 
 [features]
-build_binary = ["clap", "pretty_env_logger"]
+build_binary = ["anyhow", "clap", "pretty_env_logger"]
 
 [profile.release]
 lto = true
