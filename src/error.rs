@@ -76,7 +76,7 @@ pub enum KbinError {
   #[snafu(display("Unable to interpret input as {}", node_type))]
   StringParse {
     node_type: &'static str,
-    source: Box<dyn Error>,
+    source: Box<dyn Error + Send + Sync>,
   },
 
   #[snafu(display("Unable to interpret integer input as {}", node_type))]

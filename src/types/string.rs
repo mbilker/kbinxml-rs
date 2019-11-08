@@ -21,7 +21,7 @@ fn space_check(input: &str) -> Result<()> {
 
 fn parse_tuple<T>(node_type: &'static str, input: &str, output: &mut [T]) -> Result<()>
   where T: FromStr,
-        T::Err: Error + 'static,
+        T::Err: Error + Send + Sync + 'static,
 {
   let count = input.split(' ').count();
   if count != output.len() {
@@ -29,7 +29,9 @@ fn parse_tuple<T>(node_type: &'static str, input: &str, output: &mut [T]) -> Res
   }
 
   for (i, part) in input.split(' ').enumerate() {
-    output[i] = part.parse::<T>().map_err(|e| Box::new(e) as Box<dyn Error>).context(StringParse { node_type })?;
+    output[i] = part.parse::<T>()
+      .map_err(|e| Box::new(e) as Box<(dyn Error + Send + Sync + 'static)>)
+      .context(StringParse { node_type })?;
   }
 
   Ok(())
