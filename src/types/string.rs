@@ -1,65 +1,66 @@
+use std::error::Error;
 use std::net::Ipv4Addr;
 use std::str::FromStr;
 
-use failure::{Fail, ResultExt};
+use snafu::ResultExt;
 
-use crate::error::{KbinError, KbinErrorKind};
+use crate::error::*;
 
 pub trait FromKbinString: Sized {
-  fn from_kbin_string(input: &str) -> Result<Self, KbinError>;
+  fn from_kbin_string(input: &str) -> Result<Self>;
 }
 
-fn space_check(input: &str) -> Result<(), KbinError> {
+fn space_check(input: &str) -> Result<()> {
   // check for space character
   if input.find(' ').is_some() {
-    return Err(KbinErrorKind::InvalidState.into());
+    return Err(KbinError::InvalidState.into());
   }
 
   Ok(())
 }
 
-fn parse_tuple<T>(node_type: &'static str, input: &str, output: &mut [T]) -> Result<(), KbinError>
+fn parse_tuple<T>(node_type: &'static str, input: &str, output: &mut [T]) -> Result<()>
   where T: FromStr,
-        T::Err: Fail
+        T::Err: Error + 'static,
 {
   let count = input.split(' ').count();
   if count != output.len() {
-    return Err(KbinErrorKind::SizeMismatch(node_type, output.len(), count).into());
+    return Err(KbinError::SizeMismatch { node_type, expected: output.len(), actual: count });
   }
 
   for (i, part) in input.split(' ').enumerate() {
-    output[i] = part.parse::<T>().context(KbinErrorKind::StringParse(node_type))?;
+    output[i] = part.parse::<T>().map_err(|e| Box::new(e) as Box<dyn Error>).context(StringParse { node_type })?;
   }
 
   Ok(())
 }
 
 impl FromKbinString for bool {
-  fn from_kbin_string(input: &str) -> Result<Self, KbinError> {
+  fn from_kbin_string(input: &str) -> Result<Self> {
     match input {
       "false" |
       "0" => Ok(false),
       "true" |
       "1" => Ok(true),
-      input => Err(KbinErrorKind::InvalidBooleanInput(u8::from_kbin_string(input)?).into()),
+      input => Err(KbinError::InvalidBooleanInput { input: u8::from_kbin_string(input)? }),
     }
   }
 }
 
 impl FromKbinString for Ipv4Addr {
-  fn from_kbin_string(input: &str) -> Result<Self, KbinError> {
+  fn from_kbin_string(input: &str) -> Result<Self> {
     space_check(input)?;
 
     let count = input.split('.').count();
     if count != 4 {
-      return Err(KbinErrorKind::SizeMismatch("Ipv4Addr", 4, count).into());
+      return Err(KbinError::SizeMismatch { node_type: "Ipv4Addr", expected: 4, actual: count });
     }
 
     let mut octets = [0; 4];
 
     // IP addresses are split by a period, so do not use `parse_tuple`
     for (i, part) in input.split('.').enumerate() {
-      octets[i] = part.parse::<u8>().context(KbinErrorKind::StringParse("Ipv4Addr"))?;
+      octets[i] = part.parse::<u8>().context(StringParseInt { node_type: "Ipv4Addr" })?;
     }
 
     Ok(Ipv4Addr::from(octets))
@@ -72,17 +73,15 @@ macro_rules! basic_int_parse {
   ) => {
     $(
       impl FromKbinString for $type {
-        fn from_kbin_string(input: &str) -> Result<Self, KbinError> {
+        fn from_kbin_string(input: &str) -> Result<Self> {
           space_check(input)?;
 
           if input.starts_with("0x") {
             <$type>::from_str_radix(&input[2..], 16)
-              .context(KbinErrorKind::StringParse(stringify!($type)))
-              .map_err(Into::into)
+              .context(StringParseInt { node_type: stringify!($type) })
           } else {
             input.parse::<$type>()
-              .context(KbinErrorKind::StringParse(stringify!($type)))
-              .map_err(Into::into)
+              .context(StringParseInt { node_type: stringify!($type) })
           }
         }
       }
@@ -96,12 +95,11 @@ macro_rules! basic_float_parse {
   ) => {
     $(
       impl FromKbinString for $type {
-        fn from_kbin_string(input: &str) -> Result<Self, KbinError> {
+        fn from_kbin_string(input: &str) -> Result<Self> {
           space_check(input)?;
 
           input.parse::<$type>()
-            .context(KbinErrorKind::StringParse(stringify!($type)))
-            .map_err(Into::into)
+            .context(StringParseFloat { node_type: stringify!($type) })
         }
       }
     )*
@@ -117,12 +115,12 @@ macro_rules! tuple_parse {
   ) => {
     $(
       impl FromKbinString for [bool; $bool_count] {
-        fn from_kbin_string(input: &str) -> Result<Self, KbinError> {
+        fn from_kbin_string(input: &str) -> Result<Self> {
           const TYPE_NAME: &'static str = concat!("[bool; ", stringify!($bool_count), "]");
 
           let count = input.split(' ').count();
           if count != $bool_count {
-            return Err(KbinErrorKind::SizeMismatch(TYPE_NAME, $bool_count, count).into());
+            return Err(KbinError::SizeMismatch { node_type: TYPE_NAME, expected: $bool_count, actual: count });
           }
 
           let mut value = Self::default();
@@ -138,7 +136,7 @@ macro_rules! tuple_parse {
     $(
       $(
         impl FromKbinString for [$type; $count] {
-          fn from_kbin_string(input: &str) -> Result<Self, KbinError> {
+          fn from_kbin_string(input: &str) -> Result<Self> {
             let mut value = Self::default();
             parse_tuple(concat!("[", stringify!($type), "; ", stringify!($count), "]"), input, &mut value)?;
 

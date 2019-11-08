@@ -1,175 +1,206 @@
-use std::fmt;
+use std::error::Error;
+//use std::fmt;
+use std::io;
+use std::num::{ParseFloatError, ParseIntError};
 use std::result::Result as StdResult;
+use std::str::Utf8Error;
 use std::string::FromUtf8Error;
 
-use failure::{Backtrace, Context, Fail};
+use rustc_hex::FromHexError;
 use quick_xml::Error as QuickXmlError;
+use snafu::Snafu;
 
+use crate::byte_buffer::ByteBufferError;
+use crate::encoding_type::EncodingError;
 use crate::node_types::StandardType;
+use crate::reader::ReaderError;
+use crate::sixbit::SixbitError;
 use crate::value::Value;
 
 pub type Result<T> = StdResult<T, KbinError>;
 
-#[derive(Debug)]
-pub struct KbinError {
-  inner: Context<KbinErrorKind>,
-}
+#[derive(Debug, Snafu)]
+#[snafu(visibility = "pub(crate)")]
+pub enum KbinError {
+  #[snafu(display("Unable to write {} header field", field))]
+  HeaderWrite {
+    field: &'static str,
+    source: io::Error,
+  },
 
-#[derive(Debug, Fail)]
-pub enum KbinErrorKind {
-  #[fail(display = "Unable to read {} byte from header", _0)]
-  HeaderRead(&'static str),
+  #[snafu(display("Invalid byte value for {} header field", field))]
+  HeaderValue {
+    field: &'static str,
+  },
 
-  #[fail(display = "Unable to write {} header field", _0)]
-  HeaderWrite(&'static str),
+  #[snafu(display("Unable to read {} bytes from data buffer", size))]
+  DataRead {
+    size: usize,
+    source: io::Error,
+  },
 
-  #[fail(display = "Invalid byte value for {} header field", _0)]
-  HeaderValue(&'static str),
+  #[snafu(display("Unable to write a {} to data buffer", node_type))]
+  DataWrite {
+    node_type: &'static str,
+    source: io::Error,
+  },
 
-  #[fail(display = "Unable to read {} bytes from data buffer", _0)]
-  DataRead(usize),
+  #[snafu(display("Unable to read bytes or not enough data read"))]
+  DataConvert {
+    source: io::Error,
+  },
 
-  #[fail(display = "Unable to write a {} to data buffer", _0)]
-  DataWrite(&'static str),
-
-  #[fail(display = "Unable to read bytes or not enough data read")]
-  DataConvert,
-
-  #[fail(display = "Unable to read data size")]
-  DataReadSize,
-
-  #[fail(display = "Unable to read aligned data from data buffer")]
-  DataReadAligned,
-
-  #[fail(display = "Unable to seek data buffer")]
-  Seek,
-
-  #[fail(display = "Reached the end of the node buffer")]
-  EndOfNodeBuffer,
-
-  #[fail(display = "Unable to read len_node")]
-  LenNodeRead,
-
-  #[fail(display = "Unable to read len_data")]
-  LenDataRead,
-
-  #[fail(display = "Unable to read node type")]
-  NodeTypeRead,
-
-  #[fail(display = "Unable to read binary/string byte length")]
-  BinaryLengthRead,
-
-  #[fail(display = "Unable to read array node length")]
-  ArrayLengthRead,
-
-  #[fail(display = "Unable to read sixbit string length")]
-  SixbitLengthRead,
-
-  #[fail(display = "Unable to read sixbit string content")]
-  SixbitRead,
-
-  #[fail(display = "Unable to write sixbit string length")]
-  SixbitLengthWrite,
-
-  #[fail(display = "Unable to write sixbit string content")]
-  SixbitWrite,
-
-  #[fail(display = "No node collection found")]
+  #[snafu(display("No node collection found"))]
   NoNodeCollection,
 
-  #[fail(display = "Unable to interpret string as UTF-8")]
-  Utf8,
+  #[snafu(display("Failed to interpret string as UTF-8"))]
+  Utf8 {
+    source: FromUtf8Error,
+  },
 
-  #[fail(display = "Unknown compression value")]
+  #[snafu(display("Failed to interpret slice as UTF-8"))]
+  Utf8Slice {
+    source: Utf8Error,
+  },
+
+  #[snafu(display("Unknown compression value"))]
   UnknownCompression,
 
-  #[fail(display = "Unknown encoding")]
-  UnknownEncoding,
+  #[snafu(display("Size Mismatch, type: {}, expected size: {}, actual size: {}", node_type, expected, actual))]
+  SizeMismatch {
+    node_type: &'static str,
+    expected: usize,
+    actual: usize,
+  },
 
-  #[fail(display = "Unable to interpret string as alternate encoding")]
-  Encoding,
+  #[snafu(display("Unable to interpret input as {}", node_type))]
+  StringParse {
+    node_type: &'static str,
+    source: Box<dyn Error>,
+  },
 
-  #[fail(display = "Size Mismatch, type: {}, expected size: {}, actual size: {}", _0, _1, _2)]
-  SizeMismatch(&'static str, usize, usize),
+  #[snafu(display("Unable to interpret integer input as {}", node_type))]
+  StringParseInt {
+    node_type: &'static str,
+    source: ParseIntError,
+  },
 
-  #[fail(display = "Unable to interpret input as {}", _0)]
-  StringParse(&'static str),
+  #[snafu(display("Unable to interpret float input as {}", node_type))]
+  StringParseFloat {
+    node_type: &'static str,
+    source: ParseFloatError,
+  },
 
-  #[fail(display = "Unable to convert from hexadecimal")]
-  HexError,
+  #[snafu(display("Unable to convert from hexadecimal"))]
+  HexError {
+    source: FromHexError,
+  },
 
-  #[fail(display = "Missing base kbin type where one is required")]
-  MissingBaseType,
+  #[snafu(display("Type mismatch, expected: {}, found: {}", expected, found))]
+  TypeMismatch {
+    expected: StandardType,
+    found: StandardType,
+  },
 
-  #[fail(display = "Missing type hint where one is required")]
-  MissingTypeHint,
+  #[snafu(display("Value mismatch, expected {}, but found {:?}", node_type, value))]
+  ValueTypeMismatch {
+    node_type: StandardType,
+    value: Value,
+  },
 
-  #[fail(display = "Type mismatch, expected: {}, found: {}", _0, _1)]
-  TypeMismatch(StandardType, StandardType),
+  #[snafu(display("Value mismatch, expected an array, but found {:?}", value))]
+  ExpectedValueArray {
+    value: Value,
+  },
 
-  #[fail(display = "Value mismatch, expected {}, but found {:?}", _0, _1)]
-  ValueTypeMismatch(StandardType, Value),
+  #[snafu(display("Invalid input for boolean: {}", input))]
+  InvalidBooleanInput {
+    input: u8,
+  },
 
-  #[fail(display = "Value mismatch, expected an array, but found {:?}", _0)]
-  ExpectedValueArray(Value),
+  #[snafu(display("Invalid node type for operation: {:?}", node_type))]
+  InvalidNodeType {
+    node_type: StandardType,
+  },
 
-  #[fail(display = "Invalid input for boolean: {}", _0)]
-  InvalidBooleanInput(u8),
-
-  #[fail(display = "Invalid node type for operation: {:?}", _0)]
-  InvalidNodeType(StandardType),
-
-  #[fail(display = "Invalid state")]
+  #[snafu(display("Invalid state"))]
   InvalidState,
 
-  #[fail(display = "Error handling XML")]
-  XmlError(#[cause] QuickXmlError),
-}
+  #[snafu(display("Failed to handle byte buffer operation"))]
+  ByteBuffer {
+    #[snafu(backtrace)]
+    source: ByteBufferError,
+  },
 
-impl KbinError {
-  pub fn get_context(&self) -> &KbinErrorKind {
-    self.inner.get_context()
-  }
-}
+  #[snafu(display("Failed to handle string encoding operation"))]
+  Encoding {
+    #[snafu(backtrace)]
+    source: EncodingError,
+  },
 
-impl fmt::Display for KbinError {
-  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    fmt::Display::fmt(&self.inner, f)
-  }
-}
+  #[snafu(display("Failed to read binary XML"))]
+  Reader {
+    #[snafu(backtrace)]
+    source: ReaderError,
+  },
 
-impl Fail for KbinError {
-  fn cause(&self) -> Option<&dyn Fail> {
-    self.inner.cause()
-  }
+  #[snafu(display("Failed to handle sixbit string operation"))]
+  Sixbit {
+    #[snafu(backtrace)]
+    source: SixbitError,
+  },
 
-  fn backtrace(&self) -> Option<&Backtrace> {
-    self.inner.backtrace()
-  }
-}
-
-impl From<KbinErrorKind> for KbinError {
-  fn from(kind: KbinErrorKind) -> Self {
-    Self { inner: Context::new(kind) }
-  }
-}
-
-impl From<Context<KbinErrorKind>> for KbinError {
-  fn from(inner: Context<KbinErrorKind>) -> Self {
-    Self { inner }
-  }
+  #[snafu(display("Error handling XML"))]
+  XmlError {
+    source: QuickXmlError,
+  },
 }
 
 impl From<FromUtf8Error> for KbinError {
-  fn from(inner: FromUtf8Error) -> Self {
-    inner.context(KbinErrorKind::Utf8).into()
+  #[inline]
+  fn from(source: FromUtf8Error) -> Self {
+    KbinError::Utf8 { source }
+  }
+}
+
+impl From<Utf8Error> for KbinError {
+  #[inline]
+  fn from(source: Utf8Error) -> Self {
+    KbinError::Utf8Slice { source }
+  }
+}
+
+impl From<ByteBufferError> for KbinError {
+  #[inline]
+  fn from(source: ByteBufferError) -> Self {
+    KbinError::ByteBuffer { source }
+  }
+}
+
+impl From<EncodingError> for KbinError {
+  #[inline]
+  fn from(source: EncodingError) -> Self {
+    KbinError::Encoding { source }
+  }
+}
+
+impl From<ReaderError> for KbinError {
+  #[inline]
+  fn from(source: ReaderError) -> Self {
+    KbinError::Reader { source }
+  }
+}
+
+impl From<SixbitError> for KbinError {
+  #[inline]
+  fn from(source: SixbitError) -> Self {
+    KbinError::Sixbit { source }
   }
 }
 
 impl From<QuickXmlError> for KbinError {
-  fn from(inner: QuickXmlError) -> Self {
-    Self {
-      inner: Context::new(KbinErrorKind::XmlError(inner)),
-    }
+  #[inline]
+  fn from(source: QuickXmlError) -> Self {
+    KbinError::XmlError { source }
   }
 }

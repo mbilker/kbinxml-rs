@@ -1,6 +1,5 @@
 #![cfg_attr(test, feature(test))]
 
-#[macro_use] extern crate failure;
 #[macro_use] extern crate lazy_static;
 #[macro_use] extern crate log;
 
@@ -30,7 +29,7 @@ pub use crate::compression::Compression;
 pub use crate::encoding_type::EncodingType;
 pub use crate::printer::Printer;
 pub use crate::reader::Reader;
-pub use crate::error::{KbinError, KbinErrorKind, Result};
+pub use crate::error::{KbinError, Result};
 pub use crate::node::{Node, NodeCollection};
 pub use crate::node_types::StandardType;
 pub use crate::options::{Options, OptionsBuilder};
@@ -51,7 +50,7 @@ pub fn is_binary_xml(input: &[u8]) -> bool {
 
 pub fn from_binary(input: Bytes) -> Result<(NodeCollection, EncodingType)> {
   let mut reader = Reader::new(input)?;
-  let collection = NodeCollection::from_iter(&mut reader).ok_or(KbinErrorKind::NoNodeCollection)?;
+  let collection = NodeCollection::from_iter(&mut reader).ok_or(KbinError::NoNodeCollection)?;
   let encoding = reader.encoding();
 
   Ok((collection, encoding))
@@ -59,7 +58,7 @@ pub fn from_binary(input: Bytes) -> Result<(NodeCollection, EncodingType)> {
 
 pub fn from_text_xml(input: &[u8]) -> Result<(NodeCollection, EncodingType)> {
   let mut reader = TextXmlReader::new(input);
-  let collection = reader.as_node_collection()?.ok_or(KbinErrorKind::NoNodeCollection)?;
+  let collection = reader.as_node_collection()?.ok_or(KbinError::NoNodeCollection)?;
   let encoding = reader.encoding();
 
   Ok((collection, encoding))

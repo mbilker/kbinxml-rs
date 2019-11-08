@@ -2,7 +2,7 @@ use std::collections::VecDeque;
 use std::fmt;
 use std::iter::Iterator;
 
-use crate::error::{KbinError, KbinErrorKind};
+use crate::error::KbinError;
 use crate::node::{Node, NodeDefinition};
 use crate::node_types::StandardType;
 use crate::value::Value;
@@ -114,12 +114,12 @@ impl NodeCollection {
     let mut node = self.base.as_node()?;
 
     for attr in &self.attributes {
-      let key = attr.key()?.ok_or(KbinErrorKind::InvalidState)?;
+      let key = attr.key()?.ok_or(KbinError::InvalidState)?;
 
       if let Value::Attribute(value) = attr.value()? {
         node.set_attr(key, value);
       } else {
-        return Err(KbinErrorKind::InvalidState.into());
+        return Err(KbinError::InvalidState.into());
       }
     }
 

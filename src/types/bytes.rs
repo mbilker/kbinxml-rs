@@ -3,16 +3,16 @@ use std::net::Ipv4Addr;
 
 use byteorder::ReadBytesExt;
 use bytes::{BigEndian, BufMut};
-use failure::ResultExt;
+use snafu::ResultExt;
 
-use crate::error::{KbinError, KbinErrorKind};
+use crate::error::*;
 
 pub trait IntoKbinBytes {
   fn write_kbin_bytes<B: BufMut>(self, buf: &mut B);
 }
 
 pub trait FromKbinBytes: Sized {
-  fn from_kbin_bytes<R: Read>(input: &mut R) -> Result<Self, KbinError>;
+  fn from_kbin_bytes<R: Read>(input: &mut R) -> Result<Self>;
 }
 
 impl IntoKbinBytes for i8 {
@@ -22,8 +22,8 @@ impl IntoKbinBytes for i8 {
 }
 
 impl FromKbinBytes for i8 {
-  fn from_kbin_bytes<R: Read>(input: &mut R) -> Result<Self, KbinError> {
-    input.read_i8().context(KbinErrorKind::DataConvert).map_err(Into::into)
+  fn from_kbin_bytes<R: Read>(input: &mut R) -> Result<Self> {
+    input.read_i8().context(DataConvert)
   }
 }
 
@@ -34,8 +34,8 @@ impl IntoKbinBytes for u8 {
 }
 
 impl FromKbinBytes for u8 {
-  fn from_kbin_bytes<R: Read>(input: &mut R) -> Result<Self, KbinError> {
-    input.read_u8().context(KbinErrorKind::DataConvert).map_err(Into::into)
+  fn from_kbin_bytes<R: Read>(input: &mut R) -> Result<Self> {
+    input.read_u8().context(DataConvert)
   }
 }
 
@@ -46,11 +46,11 @@ impl IntoKbinBytes for bool {
 }
 
 impl FromKbinBytes for bool {
-  fn from_kbin_bytes<R: Read>(input: &mut R) -> Result<Self, KbinError> {
+  fn from_kbin_bytes<R: Read>(input: &mut R) -> Result<Self> {
     match u8::from_kbin_bytes(input)? {
       0x00 => Ok(false),
       0x01 => Ok(true),
-      input => Err(KbinErrorKind::InvalidBooleanInput(input).into()),
+      input => Err(KbinError::InvalidBooleanInput { input }),
     }
   }
 }
@@ -70,9 +70,9 @@ impl IntoKbinBytes for Ipv4Addr {
 }
 
 impl FromKbinBytes for Ipv4Addr {
-  fn from_kbin_bytes<R: Read>(input: &mut R) -> Result<Self, KbinError> {
+  fn from_kbin_bytes<R: Read>(input: &mut R) -> Result<Self> {
     let mut octets = [0; 4];
-    input.read_exact(&mut octets).context(KbinErrorKind::DataConvert)?;
+    input.read_exact(&mut octets).context(DataConvert)?;
 
     Ok(Ipv4Addr::from(octets))
   }
@@ -90,8 +90,8 @@ macro_rules! multibyte_impl {
       }
 
       impl FromKbinBytes for $type {
-        fn from_kbin_bytes<R: Read>(input: &mut R) -> Result<Self, KbinError> {
-          input.$read_method::<BigEndian>().context(KbinErrorKind::DataConvert).map_err(Into::into)
+        fn from_kbin_bytes<R: Read>(input: &mut R) -> Result<Self> {
+          input.$read_method::<BigEndian>().context(DataConvert)
         }
       }
     )*
@@ -117,9 +117,9 @@ macro_rules! tuple_impl {
       }
 
       impl FromKbinBytes for [i8; $i8_count] {
-        fn from_kbin_bytes<R: Read>(input: &mut R) -> Result<Self, KbinError> {
+        fn from_kbin_bytes<R: Read>(input: &mut R) -> Result<Self> {
           let mut values = Self::default();
-          input.read_i8_into(&mut values).context(KbinErrorKind::DataConvert)?;
+          input.read_i8_into(&mut values).context(DataConvert)?;
 
           Ok(values)
         }
@@ -133,9 +133,9 @@ macro_rules! tuple_impl {
       }
 
       impl FromKbinBytes for [u8; $u8_count] {
-        fn from_kbin_bytes<R: Read>(input: &mut R) -> Result<Self, KbinError> {
+        fn from_kbin_bytes<R: Read>(input: &mut R) -> Result<Self> {
           let mut values = Self::default();
-          input.read_exact(&mut values).context(KbinErrorKind::DataConvert)?;
+          input.read_exact(&mut values).context(DataConvert)?;
 
           Ok(values)
         }
@@ -151,7 +151,7 @@ macro_rules! tuple_impl {
       }
 
       impl FromKbinBytes for [bool; $bool_count] {
-        fn from_kbin_bytes<R: Read>(input: &mut R) -> Result<Self, KbinError> {
+        fn from_kbin_bytes<R: Read>(input: &mut R) -> Result<Self> {
           let mut values = Self::default();
 
           for i in 0..$bool_count {
@@ -173,9 +173,9 @@ macro_rules! tuple_impl {
         }
 
         impl FromKbinBytes for [$type; $count] {
-          fn from_kbin_bytes<R: Read>(input: &mut R) -> Result<Self, KbinError> {
+          fn from_kbin_bytes<R: Read>(input: &mut R) -> Result<Self> {
             let mut values = Self::default();
-            input.$read_method::<BigEndian>(&mut values).context(KbinErrorKind::DataConvert)?;
+            input.$read_method::<BigEndian>(&mut values).context(DataConvert)?;
 
             Ok(values)
           }

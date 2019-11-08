@@ -1,13 +1,44 @@
 use std::fmt;
-
-use crate::error::{KbinError, KbinErrorKind};
-use failure::ResultExt;
+use std::string::FromUtf8Error;
 
 /// The `encoding_rs` crate uses the following to describe their counterparts:
 ///
 /// `SHIFT_JIS`    => `WINDOWS_31J`
 /// `WINDOWS_1252` => `ISO-8859-1`
 use encoding_rs::{Encoding, EUC_JP, SHIFT_JIS, UTF_8, WINDOWS_1252};
+use snafu::{ResultExt, Snafu};
+
+#[derive(Debug, Snafu)]
+pub enum EncodingError {
+  #[snafu(display("Unknown encoding"))]
+  UnknownEncoding,
+
+  #[snafu(display("Another encoding was used to decode the input: {:?}", actual))]
+  MismatchedDecode {
+    actual: &'static Encoding,
+  },
+
+  #[snafu(display("Another encoding was used to encode the output: {:?}", actual))]
+  MismatchedEncode {
+    actual: &'static Encoding,
+  },
+
+  #[snafu(display("Unmappable characters found in input"))]
+  UnmappableCharacters,
+
+  #[snafu(display("Invalid ASCII character at index: {}", index))]
+  InvalidAscii {
+    index: usize,
+  },
+
+  #[snafu(display("Failed to interpret string as UTF-8"))]
+  InvalidUtf8 {
+    source: FromUtf8Error,
+  },
+
+  #[snafu(display("Failed to convert string to alternate encoding"))]
+  Convert,
+}
 
 #[allow(non_camel_case_types)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -42,7 +73,7 @@ impl fmt::Display for EncodingType {
 }
 
 impl EncodingType {
-  pub fn from_byte(byte: u8) -> Result<Self, KbinError> {
+  pub fn from_byte(byte: u8) -> Result<Self, EncodingError> {
     let val = match byte {
       0x00 => EncodingType::None,
       0x20 => EncodingType::ASCII,
@@ -50,27 +81,25 @@ impl EncodingType {
       0x60 => EncodingType::EUC_JP,
       0x80 => EncodingType::SHIFT_JIS,
       0xA0 => EncodingType::UTF_8,
-      _ => return Err(KbinErrorKind::UnknownEncoding.into()),
+      _ => return Err(EncodingError::UnknownEncoding),
     };
 
     Ok(val)
   }
 
-  pub fn from_encoding(encoding: &'static Encoding) -> Result<Self, KbinError> {
-    let val = match encoding {
-      e if e == WINDOWS_1252 => EncodingType::ISO_8859_1,
-      e if e == EUC_JP       => EncodingType::EUC_JP,
-      e if e == SHIFT_JIS    => EncodingType::SHIFT_JIS,
-      e if e == UTF_8        => EncodingType::UTF_8,
-      _ => return Err(KbinErrorKind::UnknownEncoding.into()),
-    };
-
-    Ok(val)
+  pub fn from_encoding(encoding: &'static Encoding) -> Result<Self, EncodingError> {
+    match encoding {
+      e if e == WINDOWS_1252 => Ok(EncodingType::ISO_8859_1),
+      e if e == EUC_JP       => Ok(EncodingType::EUC_JP),
+      e if e == SHIFT_JIS    => Ok(EncodingType::SHIFT_JIS),
+      e if e == UTF_8        => Ok(EncodingType::UTF_8),
+      _ => return Err(EncodingError::UnknownEncoding),
+    }
   }
 
-  pub fn from_label(label: &[u8]) -> Result<Self, KbinError> {
+  pub fn from_label(label: &[u8]) -> Result<Self, EncodingError> {
     Encoding::for_label(label)
-      .ok_or(KbinErrorKind::UnknownEncoding.into())
+      .ok_or(EncodingError::UnknownEncoding)
       .and_then(Self::from_encoding)
   }
 
@@ -96,29 +125,23 @@ impl EncodingType {
     }
   }
 
-  fn decode_ascii(input: &[u8]) -> Result<String, KbinError> {
+  fn decode_ascii(input: &[u8]) -> Result<String, EncodingError> {
     // ASCII only goes up to 0x7F
     match input.iter().position(|&ch| ch >= 0x80) {
-      Some(first_error) => {
-        Err(format_err!("Invalid ASCII character at index: {}", first_error)
-          .context(KbinErrorKind::Encoding)
-          .into())
+      Some(index) => {
+        Err(EncodingError::InvalidAscii { index })
       },
       None => {
-        let output = String::from_utf8(input.to_vec()).context(KbinErrorKind::Utf8)?;
-
-        Ok(output)
+        String::from_utf8(input.to_vec()).context(InvalidUtf8)
       },
     }
   }
 
-  fn encode_ascii(input: &str) -> Result<Vec<u8>, KbinError> {
+  fn encode_ascii(input: &str) -> Result<Vec<u8>, EncodingError> {
     // ASCII only goes up to 0x7F
     match input.as_bytes().iter().position(|&ch| ch >= 0x80) {
-      Some(first_error) => {
-        Err(format_err!("Unrepresentable character found at index: {}", first_error)
-          .context(KbinErrorKind::Encoding)
-          .into())
+      Some(index) => {
+        Err(EncodingError::InvalidAscii { index })
       },
       None => {
         Ok(input.as_bytes().to_vec())
@@ -126,8 +149,8 @@ impl EncodingType {
     }
   }
 
-  fn decode_with_encoding(encoding: &'static Encoding, input: &[u8]) -> Result<String, KbinError> {
-    let (output, actual_encoding, character_replaced) = encoding.decode(input);
+  fn decode_with_encoding(encoding: &'static Encoding, input: &[u8]) -> Result<String, EncodingError> {
+    let (output, actual, character_replaced) = encoding.decode(input);
 
     //eprintln!("character replaced: {}", character_replaced);
 
@@ -137,26 +160,22 @@ impl EncodingType {
 
     // `EncodingType::SHIFT_JIS` will ignore invalid characters because Konami's
     // implementation will include invalid characters.
-    if encoding != actual_encoding {
-      Err(format_err!("Another encoding was used to decode the output: {:?}", actual_encoding)
-        .context(KbinErrorKind::Encoding)
-        .into())
+    if encoding != actual {
+      Err(EncodingError::MismatchedDecode { actual })
     } else if !character_replaced || encoding == SHIFT_JIS {
       Ok(output.into_owned())
     } else {
-      Err(KbinErrorKind::Encoding.into())
+      Err(EncodingError::UnmappableCharacters)
     }
   }
 
-  fn encode_with_encoding(encoding: &'static Encoding, input: &str) -> Result<Vec<u8>, KbinError> {
-    let (output, actual_encoding, had_unmappable_characters) = encoding.encode(input);
+  fn encode_with_encoding(encoding: &'static Encoding, input: &str) -> Result<Vec<u8>, EncodingError> {
+    let (output, actual, had_unmappable_characters) = encoding.encode(input);
 
-    if encoding != actual_encoding {
-      Err(format_err!("Another encoding was used to encode the output: {:?}", actual_encoding)
-        .context(KbinErrorKind::Encoding)
-        .into())
+    if encoding != actual {
+      Err(EncodingError::MismatchedEncode { actual })
     } else if had_unmappable_characters {
-      Err(format_err!("had unmappable characters").context(KbinErrorKind::Encoding).into())
+      Err(EncodingError::UnmappableCharacters)
     } else {
       Ok(output.into_owned())
     }
@@ -169,10 +188,10 @@ impl EncodingType {
   ///
   /// `EncodingType::SHIFT_JIS` will ignore invalid characters because Konami's
   /// implementation will include invalid characters.
-  pub fn decode_bytes(&self, input: &[u8]) -> Result<String, KbinError> {
+  pub fn decode_bytes(&self, input: &[u8]) -> Result<String, EncodingError> {
     match *self {
       EncodingType::None |
-      EncodingType::UTF_8 => String::from_utf8(input.to_vec()).map_err(KbinError::from),
+      EncodingType::UTF_8 => String::from_utf8(input.to_vec()).context(InvalidUtf8),
 
       EncodingType::ASCII      => Self::decode_ascii(input),
       EncodingType::ISO_8859_1 => Self::decode_with_encoding(WINDOWS_1252, input),
@@ -185,7 +204,7 @@ impl EncodingType {
   ///
   /// A `Some` value indicates the encoding should be used from the `encoding`
   /// crate. A `None` value indicates Rust's own UTF-8 handling should be used.
-  pub fn encode_bytes(&self, input: &str) -> Result<Vec<u8>, KbinError> {
+  pub fn encode_bytes(&self, input: &str) -> Result<Vec<u8>, EncodingError> {
     let mut result = match *self {
       EncodingType::None |
       EncodingType::UTF_8 => input.as_bytes().to_vec(),

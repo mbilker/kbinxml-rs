@@ -4,7 +4,7 @@ use bytes::Bytes;
 
 use crate::byte_buffer::strip_trailing_null_bytes;
 use crate::encoding_type::EncodingType;
-use crate::error::{KbinError, KbinErrorKind};
+use crate::error::KbinError;
 use crate::node::Node;
 use crate::node_types::StandardType;
 use crate::sixbit::{Sixbit, SixbitSize};
@@ -44,10 +44,10 @@ impl Key {
   fn to_string(&self) -> Result<String, KbinError> {
     match self {
       Key::Compressed { ref size, ref data } => {
-        Sixbit::unpack(data, *size)
+        Sixbit::unpack(data, *size).map_err(Into::into)
       },
       Key::Uncompressed { encoding, ref data } => {
-        encoding.decode_bytes(data)
+        encoding.decode_bytes(data).map_err(Into::into)
       },
     }
   }
@@ -119,11 +119,11 @@ impl NodeDefinition {
         let value = Value::from_standard_type(node_type, self.is_array, value_data)?;
         match value {
           Some(value) => Ok(value),
-          None => Err(KbinErrorKind::InvalidNodeType(node_type).into()),
+          None => Err(KbinError::InvalidNodeType { node_type }),
         }
       },
       (node_type, NodeData::None) => {
-        Err(KbinErrorKind::InvalidNodeType(node_type).into())
+        Err(KbinError::InvalidNodeType { node_type })
       },
     }
   }
@@ -140,7 +140,7 @@ impl NodeDefinition {
     match (self.node_type, &self.data) {
       (StandardType::NodeEnd, _) |
       (StandardType::FileEnd, _) => {
-        Err(KbinErrorKind::InvalidNodeType(self.node_type).into())
+        Err(KbinError::InvalidNodeType { node_type: self.node_type })
       },
       (StandardType::NodeStart, NodeData::Some { key, .. }) => {
         let key = key.to_string()?;
@@ -152,7 +152,7 @@ impl NodeDefinition {
         Ok(Node::with_value(key, value))
       },
       (node_type, NodeData::None) => {
-        Err(KbinErrorKind::InvalidNodeType(node_type).into())
+        Err(KbinError::InvalidNodeType { node_type })
       },
     }
   }

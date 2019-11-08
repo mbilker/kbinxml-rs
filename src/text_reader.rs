@@ -1,13 +1,13 @@
 use std::str;
 
 use bytes::{BufMut, Bytes, BytesMut};
-use failure::{Fail, ResultExt};
 use quick_xml::Reader;
 use quick_xml::events::{BytesStart, BytesText, Event};
 use quick_xml::events::attributes::Attributes;
+use snafu::ResultExt;
 
 use crate::encoding_type::EncodingType;
-use crate::error::{KbinErrorKind, Result};
+use crate::error::*;
 use crate::node::{Key, NodeData, NodeCollection, NodeDefinition};
 use crate::node_types::StandardType;
 use crate::value::Value;
@@ -79,19 +79,18 @@ impl<'a> TextXmlReader<'a> {
           };
 
           if attr.key == b"__type" {
-            let value = str::from_utf8(&*value).context(KbinErrorKind::Utf8)?;
+            let value = str::from_utf8(&*value)?;
 
             node_type = Some(StandardType::from_name(value));
           } else if attr.key == b"__count" {
-            let value = str::from_utf8(&*value).context(KbinErrorKind::Utf8)?;
-            let num_count = value.parse::<u32>().context(KbinErrorKind::StringParse("array count"))?;
+            let value = str::from_utf8(&*value)?;
+            let num_count = value.parse::<u32>().context(StringParseInt { node_type: "array count" })?;
 
             count = num_count as usize;
           } else if attr.key == b"__size" {
-            let value = str::from_utf8(&*value)
-                .context(KbinErrorKind::Utf8)?
+            let value = str::from_utf8(&*value)?
                 .parse::<usize>()
-                .context(KbinErrorKind::StringParse("binary size"))?;
+                .context(StringParseInt { node_type: "binary size" })?;
 
             size = Some(value);
           } else {
@@ -142,7 +141,7 @@ impl<'a> TextXmlReader<'a> {
   }
 
   fn handle_text(event: BytesText, definition: &mut NodeDefinition, count: usize, size: Option<usize>) -> Result<()> {
-    let data = event.unescaped().context(KbinErrorKind::Utf8)?;
+    let data = event.unescaped()?;
     let data = match definition.node_type {
       StandardType::String |
       StandardType::NodeStart => {
@@ -155,14 +154,14 @@ impl<'a> TextXmlReader<'a> {
         data.freeze()
       },
       _ => {
-        let text = str::from_utf8(&*data).context(KbinErrorKind::Utf8)?;
+        let text = str::from_utf8(&*data)?;
         let value = Value::from_string(definition.node_type, text, definition.is_array, count)?;
 
         if let Value::Binary(data) = &value {
           // The read number of bytes must match the size attribute, if set
           if let Some(size) = size {
             if data.len() != size {
-              return Err(KbinErrorKind::InvalidState.into());
+              return Err(KbinError::InvalidState.into());
             }
           }
         }
@@ -179,7 +178,7 @@ impl<'a> TextXmlReader<'a> {
       *value_data = data;
     } else {
       // There should be a valid `NodeData` structure from the `Event::Start` handler
-      return Err(KbinErrorKind::InvalidState.into());
+      return Err(KbinError::InvalidState.into());
     }
 
     Ok(())
@@ -191,18 +190,18 @@ impl<'a> TextXmlReader<'a> {
     let mut buf = Vec::with_capacity(1024);
 
     loop {
-      match self.xml_reader.read_event(&mut buf) {
-        Ok(Event::Start(e)) => {
+      match self.xml_reader.read_event(&mut buf)? {
+        Event::Start(e) => {
           let start = self.handle_start(e)?;
           self.stack.push(start);
         },
-        Ok(Event::Text(e)) => {
+        Event::Text(e) => {
           if let Some((ref mut collection, ref count, ref size)) = self.stack.last_mut() {
             let base = collection.base_mut();
             Self::handle_text(e, base, *count, *size)?;
           }
         },
-        Ok(Event::End(_)) => {
+        Event::End(_) => {
           if let Some((collection, _count, _size)) = self.stack.pop() {
             if let Some((parent_collection, _count, _size)) = self.stack.last_mut() {
               parent_collection.children_mut().push_back(collection);
@@ -212,7 +211,7 @@ impl<'a> TextXmlReader<'a> {
             }
           }
         },
-        Ok(Event::Empty(e)) => {
+        Event::Empty(e) => {
           let (collection, count, size) = self.handle_start(e)?;
           assert!(count == 0, "empty node should not signal an array");
           assert!(size.is_none() || size == Some(0), "empty node should not signal binary data");
@@ -221,16 +220,13 @@ impl<'a> TextXmlReader<'a> {
             parent_collection.children_mut().push_back(collection);
           }
         },
-        Ok(Event::Decl(e)) => {
+        Event::Decl(e) => {
           if let Some(encoding) = e.encoding() {
             self.encoding = EncodingType::from_label(&encoding?)?;
           }
         },
-        Ok(Event::Eof) => break,
-        Ok(_) => {},
-        Err(e) => {
-          return Err(e.context(KbinErrorKind::InvalidState).into())
-        },
+        Event::Eof => break,
+        _ => {},
       };
 
       buf.clear();

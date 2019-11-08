@@ -6,7 +6,7 @@ use quick_xml::events::{BytesEnd, BytesStart, BytesText, Event};
 use quick_xml::events::attributes::Attribute;
 
 use crate::encoding_type::EncodingType;
-use crate::error::{KbinError, KbinErrorKind};
+use crate::error::KbinError;
 use crate::node::NodeCollection;
 use crate::node_types::StandardType;
 use crate::to_text_xml::ToTextXml;
@@ -20,21 +20,19 @@ impl ToTextXml for NodeCollection {
 
   fn write<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), KbinError> {
     let base = self.base();
-    let key = base.key()?.ok_or(KbinErrorKind::InvalidState)?;
+    let key = base.key()?.ok_or(KbinError::InvalidState)?;
     let value = match base.value() {
       Ok(value) => Some(value),
-      Err(e) => {
-        match e.get_context() {
-          KbinErrorKind::InvalidNodeType(_) => None,
-          _ => return Err(e),
-        }
+      Err(e) => match e {
+        KbinError::InvalidNodeType { .. } => None,
+        _ => return Err(e),
       },
     };
 
     let mut elem = BytesStart::borrowed(key.as_bytes(), key.as_bytes().len());
 
     if base.is_array {
-      let values = value.as_ref().ok_or(KbinErrorKind::InvalidState)?.as_array()?;
+      let values = value.as_ref().ok_or(KbinError::InvalidState)?.as_array()?;
 
       elem.push_attribute(Attribute {
         key: b"__count",
@@ -43,7 +41,7 @@ impl ToTextXml for NodeCollection {
     }
 
     if base.node_type == StandardType::Binary {
-      let value = value.as_ref().ok_or(KbinErrorKind::InvalidState)?.as_slice()?;
+      let value = value.as_ref().ok_or(KbinError::InvalidState)?.as_slice()?;
 
       elem.push_attribute(Attribute {
         key: b"__size",
@@ -60,7 +58,7 @@ impl ToTextXml for NodeCollection {
     }
 
     for attribute in self.attributes() {
-      let key = attribute.key()?.ok_or(KbinErrorKind::InvalidState)?.into_bytes();
+      let key = attribute.key()?.ok_or(KbinError::InvalidState)?.into_bytes();
       let value = attribute.value()?.to_string();
       let value = BytesText::from_plain_str(&value);
 

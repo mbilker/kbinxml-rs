@@ -1,10 +1,8 @@
 use std::collections::HashMap;
-use std::io::{Read, Write};
+use std::io::{self, Read, Write};
 
 use byteorder::{ReadBytesExt, WriteBytesExt};
-use failure::ResultExt;
-
-use crate::error::{KbinError, KbinErrorKind};
+use snafu::{ResultExt, Snafu};
 
 static CHAR_MAP: &'static [u8] = b"0123456789:ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz";
 
@@ -20,6 +18,30 @@ lazy_static! {
   };
 }
 
+#[derive(Debug, Snafu)]
+pub enum SixbitError {
+  #[snafu(display("Failed to read sixbit string length"))]
+  LengthRead {
+    source: io::Error,
+  },
+
+  #[snafu(display("Failed to write sixbit string length"))]
+  LengthWrite {
+    source: io::Error,
+  },
+
+  #[snafu(display("Failed to read sixbit string data (expected: {} bytes, got: {} bytes)", expected, actual))]
+  DataRead {
+    expected: usize,
+    actual: usize,
+  },
+
+  #[snafu(display("Failed to write sixbit string data"))]
+  DataWrite {
+    source: io::Error,
+  },
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct SixbitSize {
   pub sixbit_len: u8,
@@ -29,10 +51,10 @@ pub struct SixbitSize {
 pub struct Sixbit;
 
 impl Sixbit {
-  pub fn size<T>(reader: &mut T) -> Result<SixbitSize, KbinError>
-    where T: Read
+  pub fn size<T>(reader: &mut T) -> Result<SixbitSize, SixbitError>
+    where T: Read,
   {
-    let sixbit_len = reader.read_u8().context(KbinErrorKind::SixbitLengthRead)?;
+    let sixbit_len = reader.read_u8().context(LengthRead)?;
     let real_len = (f32::from(sixbit_len * 6) / 8f32).ceil();
     let real_len = (real_len as u32) as usize;
     debug!("sixbit_len: {}, real_len: {}", sixbit_len, real_len);
@@ -40,8 +62,8 @@ impl Sixbit {
     Ok(SixbitSize { sixbit_len, real_len })
   }
 
-  pub fn pack<T>(writer: &mut T, input: &str) -> Result<(), KbinError>
-    where T: Write
+  pub fn pack<T>(writer: &mut T, input: &str) -> Result<(), SixbitError>
+    where T: Write,
   {
     let sixbit_chars = input
       .bytes()
@@ -64,17 +86,17 @@ impl Sixbit {
       }
     }
 
-    writer.write_u8(len as u8).context(KbinErrorKind::SixbitLengthWrite)?;
-    writer.write_all(&bytes).context(KbinErrorKind::SixbitWrite)?;
+    writer.write_u8(len as u8).context(LengthWrite)?;
+    writer.write_all(&bytes).context(DataWrite)?;
 
     Ok(())
   }
 
-  pub fn unpack(buf: &[u8], size: SixbitSize) -> Result<String, KbinError> {
+  pub fn unpack(buf: &[u8], size: SixbitSize) -> Result<String, SixbitError> {
     let SixbitSize { sixbit_len, real_len } = size;
 
     if buf.len() < real_len {
-      return Err(KbinErrorKind::SixbitRead.into());
+      return Err(SixbitError::DataRead { expected: real_len, actual: buf.len() });
     }
 
     let sixbit_len = sixbit_len as usize;

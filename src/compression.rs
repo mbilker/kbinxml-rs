@@ -1,4 +1,4 @@
-use crate::error::{KbinError, KbinErrorKind};
+use crate::error::KbinError;
 use super::{SIG_COMPRESSED, SIG_UNCOMPRESSED};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -12,7 +12,7 @@ impl Compression {
     match byte {
       SIG_COMPRESSED => Ok(Compression::Compressed),
       SIG_UNCOMPRESSED => Ok(Compression::Uncompressed),
-      _ => Err(KbinErrorKind::UnknownCompression.into()),
+      _ => Err(KbinError::UnknownCompression),
     }
   }
 

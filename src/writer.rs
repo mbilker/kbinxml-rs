@@ -1,11 +1,11 @@
 use std::io::{Cursor, Write};
 
 use byteorder::{BigEndian, WriteBytesExt};
-use failure::ResultExt;
+use snafu::ResultExt;
 
 use crate::byte_buffer::ByteBufferWrite;
 use crate::compression::Compression;
-use crate::error::{KbinErrorKind, Result};
+use crate::error::*;
 use crate::node::{Node, NodeCollection};
 use crate::node_types::StandardType;
 use crate::options::Options;
@@ -20,8 +20,8 @@ fn write_value(options: &Options, data_buf: &mut ByteBufferWrite, node_type: Sta
       trace!("data: 0x{:02x?}", data);
 
       let size = (data.len() as u32) * (node_type.size as u32);
-      data_buf.write_u32::<BigEndian>(size).context(KbinErrorKind::DataWrite("binary node size"))?;
-      data_buf.write_all(&data).context(KbinErrorKind::DataWrite("binary"))?;
+      data_buf.write_u32::<BigEndian>(size).context(DataWrite { node_type: "binary node size" })?;
+      data_buf.write_all(&data).context(DataWrite { node_type: "binary" })?;
       data_buf.realign_writes(None)?;
     },
     Value::String(text) => {
@@ -29,7 +29,7 @@ fn write_value(options: &Options, data_buf: &mut ByteBufferWrite, node_type: Sta
     },
     Value::Array(values) => {
       if !is_array {
-        return Err(KbinErrorKind::InvalidState.into());
+        return Err(KbinError::InvalidState);
       }
 
       let total_size = values.len() * node_type.count * node_type.size;
@@ -37,13 +37,13 @@ fn write_value(options: &Options, data_buf: &mut ByteBufferWrite, node_type: Sta
       let mut data = Vec::with_capacity(total_size);
       values.to_bytes_into(&mut data)?;
 
-      data_buf.write_u32::<BigEndian>(total_size as u32).context(KbinErrorKind::DataWrite("node size"))?;
-      data_buf.write_all(&data).context(KbinErrorKind::DataWrite(node_type.name))?;
+      data_buf.write_u32::<BigEndian>(total_size as u32).context(DataWrite { node_type: "node size" })?;
+      data_buf.write_all(&data).context(DataWrite { node_type: node_type.name })?;
       data_buf.realign_writes(None)?;
     },
     value => {
       if is_array {
-        return Err(KbinErrorKind::InvalidState.into());
+        return Err(KbinError::InvalidState);
       } else {
         let data = value.to_bytes()?;
         data_buf.write_aligned(*node_type, &data)?;
@@ -62,7 +62,7 @@ impl Writeable for NodeCollection {
   fn write_node(&self, options: &Options, node_buf: &mut ByteBufferWrite, data_buf: &mut ByteBufferWrite) -> Result<()> {
     let (node_type, is_array) = self.base().node_type_tuple();
     let array_mask = if is_array { ARRAY_MASK } else { 0 };
-    let name = self.base().key()?.ok_or(KbinErrorKind::InvalidState)?;
+    let name = self.base().key()?.ok_or(KbinError::InvalidState)?;
 
     debug!("NodeCollection write_node => name: {}, type: {:?}, type_size: {}, type_count: {}, is_array: {}",
       name,
@@ -71,14 +71,14 @@ impl Writeable for NodeCollection {
       node_type.count,
       is_array);
 
-    node_buf.write_u8(node_type as u8 | array_mask).context(KbinErrorKind::DataWrite(node_type.name))?;
+    node_buf.write_u8(node_type as u8 | array_mask).context(DataWrite { node_type: node_type.name })?;
     match options.compression {
       Compression::Compressed => Sixbit::pack(&mut **node_buf, &name)?,
       Compression::Uncompressed => {
         let data = options.encoding.encode_bytes(&name)?;
         let len = (data.len() - 1) as u8;
-        node_buf.write_u8(len | ARRAY_MASK).context(KbinErrorKind::DataWrite("node name length"))?;
-        node_buf.write_all(&data).context(KbinErrorKind::DataWrite("node name bytes"))?;
+        node_buf.write_u8(len | ARRAY_MASK).context(DataWrite { node_type: "node name length" })?;
+        node_buf.write_all(&data).context(DataWrite { node_type: "node name bytes" })?;
       },
     };
 
@@ -88,21 +88,21 @@ impl Writeable for NodeCollection {
     }
 
     for attr in self.attributes() {
-      let key = attr.key()?.ok_or(KbinErrorKind::InvalidState)?;
-      let value = attr.value_bytes().ok_or(KbinErrorKind::InvalidState)?;
+      let key = attr.key()?.ok_or(KbinError::InvalidState)?;
+      let value = attr.value_bytes().ok_or(KbinError::InvalidState)?;
 
       trace!("NodeCollection write_node => attr: {}, value: 0x{:02x?}", key, value);
 
       data_buf.buf_write(value)?;
 
-      node_buf.write_u8(StandardType::Attribute as u8).context(KbinErrorKind::DataWrite(StandardType::Attribute.name))?;
+      node_buf.write_u8(StandardType::Attribute as u8).context(DataWrite { node_type: StandardType::Attribute.name })?;
       match options.compression {
         Compression::Compressed => Sixbit::pack(&mut **node_buf, &key)?,
         Compression::Uncompressed => {
           let data = options.encoding.encode_bytes(&key)?;
           let len = (data.len() - 1) as u8;
-          node_buf.write_u8(len | ARRAY_MASK).context(KbinErrorKind::DataWrite("attribute name length"))?;
-          node_buf.write_all(&data).context(KbinErrorKind::DataWrite("node name bytes"))?;
+          node_buf.write_u8(len | ARRAY_MASK).context(DataWrite { node_type: "attribute name length" })?;
+          node_buf.write_all(&data).context(DataWrite { node_type: "node name bytes" })?;
         },
       };
     }
@@ -112,7 +112,7 @@ impl Writeable for NodeCollection {
     }
 
     // node end always has the array bit set
-    node_buf.write_u8(StandardType::NodeEnd as u8 | ARRAY_MASK).context(KbinErrorKind::DataWrite("node end"))?;
+    node_buf.write_u8(StandardType::NodeEnd as u8 | ARRAY_MASK).context(DataWrite { node_type: "node end" })?;
 
     Ok(())
   }
@@ -134,14 +134,14 @@ impl Writeable for Node {
       node_type.count,
       is_array);
 
-    node_buf.write_u8(node_type as u8 | array_mask).context(KbinErrorKind::DataWrite(node_type.name))?;
+    node_buf.write_u8(node_type as u8 | array_mask).context(DataWrite { node_type: node_type.name })?;
     match options.compression {
       Compression::Compressed => Sixbit::pack(&mut **node_buf, &self.key())?,
       Compression::Uncompressed => {
         let data = options.encoding.encode_bytes(&self.key())?;
         let len = (data.len() - 1) as u8;
-        node_buf.write_u8(len | ARRAY_MASK).context(KbinErrorKind::DataWrite("node name length"))?;
-        node_buf.write_all(&data).context(KbinErrorKind::DataWrite("node name bytes"))?;
+        node_buf.write_u8(len | ARRAY_MASK).context(DataWrite { node_type: "node name length" })?;
+        node_buf.write_all(&data).context(DataWrite { node_type: "node name bytes" })?;
       },
     };
 
@@ -155,14 +155,14 @@ impl Writeable for Node {
 
         data_buf.write_str(options.encoding, value)?;
 
-        node_buf.write_u8(StandardType::Attribute as u8).context(KbinErrorKind::DataWrite(StandardType::Attribute.name))?;
+        node_buf.write_u8(StandardType::Attribute as u8).context(DataWrite { node_type: StandardType::Attribute.name })?;
         match options.compression {
           Compression::Compressed => Sixbit::pack(&mut **node_buf, &key)?,
           Compression::Uncompressed => {
             let data = options.encoding.encode_bytes(&key)?;
             let len = (data.len() - 1) as u8;
-            node_buf.write_u8(len | ARRAY_MASK).context(KbinErrorKind::DataWrite("attribute name length"))?;
-            node_buf.write_all(&data).context(KbinErrorKind::DataWrite("node name bytes"))?;
+            node_buf.write_u8(len | ARRAY_MASK).context(DataWrite { node_type: "attribute name length" })?;
+            node_buf.write_all(&data).context(DataWrite { node_type: "node name bytes" })?;
           },
         };
       }
@@ -175,7 +175,7 @@ impl Writeable for Node {
     }
 
     // node end always has the array bit set
-    node_buf.write_u8(StandardType::NodeEnd as u8 | ARRAY_MASK).context(KbinErrorKind::DataWrite("node end"))?;
+    node_buf.write_u8(StandardType::NodeEnd as u8 | ARRAY_MASK).context(DataWrite { node_type: "node end" })?;
 
     Ok(())
   }
@@ -202,33 +202,33 @@ impl Writer {
     where T: Writeable
   {
     let mut header = Cursor::new(Vec::with_capacity(8));
-    header.write_u8(SIGNATURE).context(KbinErrorKind::HeaderWrite("signature"))?;
+    header.write_u8(SIGNATURE).context(HeaderWrite { field: "signature" })?;
 
     let compression = self.options.compression.to_byte();
-    header.write_u8(compression).context(KbinErrorKind::HeaderWrite("compression"))?;
+    header.write_u8(compression).context(HeaderWrite { field: "compression" })?;
 
     let encoding = self.options.encoding.to_byte();
-    header.write_u8(encoding).context(KbinErrorKind::HeaderWrite("encoding"))?;
-    header.write_u8(0xFF ^ encoding).context(KbinErrorKind::HeaderWrite("encoding negation"))?;
+    header.write_u8(encoding).context(HeaderWrite { field: "encoding" })?;
+    header.write_u8(0xFF ^ encoding).context(HeaderWrite { field: "encoding negation" })?;
 
     let mut node_buf = ByteBufferWrite::new(Vec::new());
     let mut data_buf = ByteBufferWrite::new(Vec::new());
 
     input.write_node(&self.options, &mut node_buf, &mut data_buf)?;
 
-    node_buf.write_u8(StandardType::FileEnd as u8 | ARRAY_MASK).context(KbinErrorKind::DataWrite("file end"))?;
+    node_buf.write_u8(StandardType::FileEnd as u8 | ARRAY_MASK).context(DataWrite { node_type: "file end" })?;
     node_buf.realign_writes(None)?;
 
     let mut output = header.into_inner();
 
     let node_buf = node_buf.into_inner();
     debug!("to_binary_internal => node_buf len: {0} (0x{0:x})", node_buf.len());
-    output.write_u32::<BigEndian>(node_buf.len() as u32).context(KbinErrorKind::HeaderWrite("node buffer length"))?;
+    output.write_u32::<BigEndian>(node_buf.len() as u32).context(HeaderWrite { field: "node buffer length" })?;
     output.extend_from_slice(&node_buf);
 
     let data_buf = data_buf.into_inner();
     debug!("to_binary_internal => data_buf len: {0} (0x{0:x})", data_buf.len());
-    output.write_u32::<BigEndian>(data_buf.len() as u32).context(KbinErrorKind::HeaderWrite("data buffer length"))?;
+    output.write_u32::<BigEndian>(data_buf.len() as u32).context(HeaderWrite { field: "data buffer length" })?;
     output.extend_from_slice(&data_buf);
 
     Ok(output)

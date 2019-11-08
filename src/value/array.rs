@@ -1,12 +1,8 @@
-//use std::convert::TryFrom;
 use std::fmt;
 use std::io::Cursor;
 use std::net::Ipv4Addr;
-//use std::str::FromStr;
 
-//use rustc_hex::FromHex;
-
-use crate::error::{KbinError, KbinErrorKind};
+use crate::error::KbinError;
 use crate::node_types::StandardType;
 use crate::types::{FromKbinBytes, IntoKbinBytes};
 use crate::types::FromKbinString;
@@ -75,7 +71,7 @@ macro_rules! type_impl {
 
       // Prevent reading incomplete input data
       if node_size * len != input.len() {
-        return Err(KbinErrorKind::SizeMismatch(node_type.name, node_size, input.len()).into());
+        return Err(KbinError::SizeMismatch { node_type: node_type.name, expected: node_size, actual: input.len() });
       }
 
       let mut reader = Cursor::new(input);
@@ -136,7 +132,7 @@ macro_rules! type_impl {
         StandardType::Attribute |
         StandardType::Binary |
         StandardType::String |
-        StandardType::Time => return Err(KbinErrorKind::InvalidState.into()),
+        StandardType::Time => return Err(KbinError::InvalidState.into()),
         $(
           StandardType::$konst => {
             let mut values = Vec::new();
