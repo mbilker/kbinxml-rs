@@ -1,6 +1,5 @@
-use std::num::{ParseFloatError, ParseIntError};
+use std::num::ParseIntError;
 use std::str::{self, Utf8Error};
-use std::string::FromUtf8Error;
 
 use bytes::{BufMut, Bytes, BytesMut};
 use quick_xml::events::attributes::Attributes;
@@ -24,6 +23,12 @@ pub enum TextReaderError {
     #[snafu(display("Invalid encoding type read from declaration"))]
     InvalidEncoding { source: EncodingError },
 
+    #[snafu(display("Failed to parse array count from attribute"))]
+    ParseArrayCount { source: ParseIntError },
+
+    #[snafu(display("Failed to parse binary node size from attribute"))]
+    ParseBinarySize { source: ParseIntError },
+
     #[snafu(display(
         "Mismatched binary node length and size attribute value (value length: {}, size attribute: {})",
         len,
@@ -34,23 +39,8 @@ pub enum TextReaderError {
     #[snafu(display("No node data found"))]
     NoNodeData,
 
-    #[snafu(display("Failed to interpret bytes as UTF-8"))]
-    Utf8 { source: FromUtf8Error },
-
     #[snafu(display("Failed to interpret byte slice as UTF-8"))]
-    Utf8Slice { source: Utf8Error },
-
-    #[snafu(display("Failed to parse integer input as node type {}", node_type))]
-    StringParseInt {
-        node_type: &'static str,
-        source: ParseIntError,
-    },
-
-    #[snafu(display("Failed to parse float input as node type {}", node_type))]
-    StringParseFloat {
-        node_type: &'static str,
-        source: ParseFloatError,
-    },
+    Utf8 { source: Utf8Error },
 
     #[snafu(display("Failed to decode value from string for node type {}", node_type))]
     ValueDecode {
@@ -73,7 +63,7 @@ pub enum TextReaderError {
 impl From<Utf8Error> for TextReaderError {
     #[inline]
     fn from(source: Utf8Error) -> Self {
-        Self::Utf8Slice { source }
+        Self::Utf8 { source }
     }
 }
 
@@ -161,18 +151,14 @@ impl<'a> TextXmlReader<'a> {
                         node_type = Some(StandardType::from_name(value).context(InvalidKbinType)?);
                     } else if attr.key == b"__count" {
                         let value = str::from_utf8(&*value)?;
-                        let num_count = value.parse::<u32>().context(StringParseInt {
-                            node_type: "array count",
-                        })?;
+                        let num_count = value.parse::<u32>().context(ParseArrayCount)?;
 
                         count = num_count as usize;
                     } else if attr.key == b"__size" {
                         let value =
                             str::from_utf8(&*value)?
                                 .parse::<usize>()
-                                .context(StringParseInt {
-                                    node_type: "binary size",
-                                })?;
+                                .context(ParseBinarySize)?;
 
                         size = Some(value);
                     } else {
