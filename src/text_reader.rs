@@ -155,10 +155,9 @@ impl<'a> TextXmlReader<'a> {
 
                         count = num_count as usize;
                     } else if attr.key == b"__size" {
-                        let value =
-                            str::from_utf8(&*value)?
-                                .parse::<usize>()
-                                .context(ParseBinarySize)?;
+                        let value = str::from_utf8(&*value)?
+                            .parse::<usize>()
+                            .context(ParseBinarySize)?;
 
                         size = Some(value);
                     } else {
