@@ -104,7 +104,7 @@ fn main() -> Result<(), anyhow::Error> {
 
     if kbinxml::is_binary_xml(&contents) {
         if printer_enabled {
-            Printer::run(&contents).unwrap();
+            Printer::run(&contents)?;
         }
 
         let (collection, _encoding) = kbinxml::from_slice(&contents)?;
