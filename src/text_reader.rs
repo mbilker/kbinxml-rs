@@ -1,18 +1,88 @@
-use std::str;
+use std::num::{ParseFloatError, ParseIntError};
+use std::str::{self, Utf8Error};
+use std::string::FromUtf8Error;
 
 use bytes::{BufMut, Bytes, BytesMut};
 use quick_xml::events::attributes::Attributes;
 use quick_xml::events::{BytesStart, BytesText, Event};
+use quick_xml::Error as QuickXmlError;
 use quick_xml::Reader;
-use snafu::ResultExt;
+use snafu::{ResultExt, Snafu};
 
-use crate::encoding_type::EncodingType;
-use crate::error::*;
+use crate::encoding_type::{EncodingError, EncodingType};
 use crate::node::{Key, NodeCollection, NodeData, NodeDefinition};
-use crate::node_types::StandardType;
+use crate::node_types::{StandardType, UnknownKbinType};
 use crate::value::Value;
 
 const EMPTY_STRING_DATA: &[u8] = &[0];
+
+#[derive(Debug, Snafu)]
+pub enum TextReaderError {
+    #[snafu(display("Invalid kbin type found"))]
+    InvalidKbinType { source: UnknownKbinType },
+
+    #[snafu(display("Invalid encoding type read from declaration"))]
+    InvalidEncoding { source: EncodingError },
+
+    #[snafu(display(
+        "Mismatched binary node length and size attribute value (value length: {}, size attribute: {})",
+        len,
+        size
+    ))]
+    MismatchedBinaryNodeLength { len: usize, size: usize },
+
+    #[snafu(display("No node data found"))]
+    NoNodeData,
+
+    #[snafu(display("Failed to interpret bytes as UTF-8"))]
+    Utf8 { source: FromUtf8Error },
+
+    #[snafu(display("Failed to interpret byte slice as UTF-8"))]
+    Utf8Slice { source: Utf8Error },
+
+    #[snafu(display("Failed to parse integer input as node type {}", node_type))]
+    StringParseInt {
+        node_type: &'static str,
+        source: ParseIntError,
+    },
+
+    #[snafu(display("Failed to parse float input as node type {}", node_type))]
+    StringParseFloat {
+        node_type: &'static str,
+        source: ParseFloatError,
+    },
+
+    #[snafu(display("Failed to decode value from string for node type {}", node_type))]
+    ValueDecode {
+        node_type: StandardType,
+        #[snafu(source(from(crate::KbinError, Box::new)))]
+        source: Box<crate::KbinError>,
+    },
+
+    #[snafu(display("Failed to encode value for node type {}", node_type))]
+    ValueEncode {
+        node_type: StandardType,
+        #[snafu(source(from(crate::KbinError, Box::new)))]
+        source: Box<crate::KbinError>,
+    },
+
+    #[snafu(display("Failed to handle XML operation"))]
+    Xml { source: QuickXmlError },
+}
+
+impl From<Utf8Error> for TextReaderError {
+    #[inline]
+    fn from(source: Utf8Error) -> Self {
+        Self::Utf8Slice { source }
+    }
+}
+
+impl From<QuickXmlError> for TextReaderError {
+    #[inline]
+    fn from(source: QuickXmlError) -> Self {
+        Self::Xml { source }
+    }
+}
 
 pub struct TextXmlReader<'a> {
     xml_reader: Reader<&'a [u8]>,
@@ -41,7 +111,7 @@ impl<'a> TextXmlReader<'a> {
         self.encoding
     }
 
-    fn parse_attribute(&self, key: &[u8], value: &[u8]) -> Result<NodeDefinition> {
+    fn parse_attribute(&self, key: &[u8], value: &[u8]) -> Result<NodeDefinition, TextReaderError> {
         let mut value = BytesMut::from(value.to_vec());
 
         // Add the trailing null byte that kbin has at the end of strings
@@ -68,7 +138,7 @@ impl<'a> TextXmlReader<'a> {
     fn parse_attributes(
         &self,
         attrs: Attributes<'a>,
-    ) -> Result<(StandardType, usize, Option<usize>, Vec<NodeDefinition>)> {
+    ) -> Result<(StandardType, usize, Option<usize>, Vec<NodeDefinition>), TextReaderError> {
         let mut node_type = None;
         let mut count = 0;
         let mut size = None;
@@ -113,7 +183,7 @@ impl<'a> TextXmlReader<'a> {
                 Err(e) => {
                     error!("Error reading attribute: {:?}", e);
                 },
-            }
+            };
         }
 
         let node_type = match node_type {
@@ -128,7 +198,10 @@ impl<'a> TextXmlReader<'a> {
         Ok((node_type, count, size, attributes))
     }
 
-    fn handle_start(&self, e: BytesStart) -> Result<(NodeCollection, usize, Option<usize>)> {
+    fn handle_start(
+        &self,
+        e: BytesStart,
+    ) -> Result<(NodeCollection, usize, Option<usize>), TextReaderError> {
         let (node_type, count, size, attributes) = self.parse_attributes(e.attributes())?;
         let is_array = count > 0;
 
@@ -156,7 +229,7 @@ impl<'a> TextXmlReader<'a> {
         definition: &mut NodeDefinition,
         count: usize,
         size: Option<usize>,
-    ) -> Result<()> {
+    ) -> Result<(), TextReaderError> {
         let data = event.unescaped()?;
         let data = match definition.node_type {
             StandardType::String | StandardType::NodeStart => {
@@ -168,21 +241,24 @@ impl<'a> TextXmlReader<'a> {
 
                 data.freeze()
             },
-            _ => {
+            node_type => {
                 let text = str::from_utf8(&*data)?;
-                let value =
-                    Value::from_string(definition.node_type, text, definition.is_array, count)?;
+                let value = Value::from_string(node_type, text, definition.is_array, count)
+                    .context(ValueDecode { node_type })?;
 
+                // The read number of bytes must match the size attribute, if set
                 if let Value::Binary(data) = &value {
-                    // The read number of bytes must match the size attribute, if set
                     if let Some(size) = size {
                         if data.len() != size {
-                            return Err(KbinError::InvalidState.into());
+                            return Err(TextReaderError::MismatchedBinaryNodeLength {
+                                len: data.len(),
+                                size,
+                            });
                         }
                     }
                 }
 
-                Bytes::from(value.to_bytes()?)
+                Bytes::from(value.to_bytes().context(ValueEncode { node_type })?)
             },
         };
 
@@ -190,20 +266,22 @@ impl<'a> TextXmlReader<'a> {
             definition.node_type = StandardType::String;
         }
 
-        if let NodeData::Some {
-            ref mut value_data, ..
-        } = definition.data_mut()
-        {
-            *value_data = data;
-        } else {
-            // There should be a valid `NodeData` structure from the `Event::Start` handler
-            return Err(KbinError::InvalidState.into());
-        }
+        match definition.data_mut() {
+            NodeData::Some {
+                ref mut value_data, ..
+            } => {
+                *value_data = data;
+            },
+            NodeData::None => {
+                // There should be a valid `NodeData` structure from the `Event::Start` handler
+                return Err(TextReaderError::NoNodeData);
+            },
+        };
 
         Ok(())
     }
 
-    pub fn as_node_collection(&mut self) -> Result<Option<NodeCollection>> {
+    pub fn as_node_collection(&mut self) -> Result<Option<NodeCollection>, TextReaderError> {
         // A buffer size for reading a `quick_xml::events::Event` that I pulled
         // out of my head.
         let mut buf = Vec::with_capacity(1024);
@@ -245,7 +323,8 @@ impl<'a> TextXmlReader<'a> {
                 },
                 Event::Decl(e) => {
                     if let Some(encoding) = e.encoding() {
-                        self.encoding = EncodingType::from_label(&encoding?)?;
+                        self.encoding =
+                            EncodingType::from_label(&encoding?).context(InvalidEncoding)?;
                     }
                 },
                 Event::Eof => break,

@@ -1,10 +1,7 @@
 use std::error::Error;
-//use std::fmt;
 use std::io;
 use std::num::{ParseFloatError, ParseIntError};
 use std::result::Result as StdResult;
-use std::str::Utf8Error;
-use std::string::FromUtf8Error;
 
 use quick_xml::Error as QuickXmlError;
 use rustc_hex::FromHexError;
@@ -12,9 +9,10 @@ use snafu::Snafu;
 
 use crate::byte_buffer::ByteBufferError;
 use crate::encoding_type::EncodingError;
-use crate::node_types::{StandardType, UnknownKbinType};
+use crate::node_types::StandardType;
 use crate::reader::ReaderError;
 use crate::sixbit::SixbitError;
+use crate::text_reader::TextReaderError;
 use crate::value::Value;
 use crate::writer::WriterError;
 
@@ -23,27 +21,11 @@ pub type Result<T> = StdResult<T, KbinError>;
 #[derive(Debug, Snafu)]
 #[snafu(visibility = "pub(crate)")]
 pub enum KbinError {
-    #[snafu(display("Unable to write {} header field", field))]
-    HeaderWrite {
-        field: &'static str,
-        source: io::Error,
-    },
-
     #[snafu(display("Unable to read bytes or not enough data read"))]
     DataConvert { source: io::Error },
 
     #[snafu(display("No node collection found"))]
     NoNodeCollection,
-
-    #[snafu(display("Failed to interpret string as UTF-8"))]
-    Utf8 { source: FromUtf8Error },
-
-    #[snafu(display("Failed to interpret slice as UTF-8"))]
-    Utf8Slice { source: Utf8Error },
-
-    // TODO(felix): remove when text reader has own error type
-    #[snafu(display("Invalid kbin type read"))]
-    InvalidKbinType { source: UnknownKbinType },
 
     #[snafu(display(
         "Size Mismatch, type: {}, expected size: {}, actual size: {}",
@@ -114,6 +96,12 @@ pub enum KbinError {
         source: EncodingError,
     },
 
+    #[snafu(display("Failed to handle sixbit string operation"))]
+    Sixbit {
+        #[snafu(backtrace)]
+        source: SixbitError,
+    },
+
     #[snafu(display("Failed to read binary XML"))]
     Reader {
         #[snafu(backtrace)]
@@ -126,28 +114,14 @@ pub enum KbinError {
         source: WriterError,
     },
 
-    #[snafu(display("Failed to handle sixbit string operation"))]
-    Sixbit {
+    #[snafu(display("Failed to read text XML"))]
+    TextReader {
         #[snafu(backtrace)]
-        source: SixbitError,
+        source: TextReaderError,
     },
 
     #[snafu(display("Error handling XML"))]
     XmlError { source: QuickXmlError },
-}
-
-impl From<FromUtf8Error> for KbinError {
-    #[inline]
-    fn from(source: FromUtf8Error) -> Self {
-        KbinError::Utf8 { source }
-    }
-}
-
-impl From<Utf8Error> for KbinError {
-    #[inline]
-    fn from(source: Utf8Error) -> Self {
-        KbinError::Utf8Slice { source }
-    }
 }
 
 impl From<ByteBufferError> for KbinError {
@@ -161,6 +135,13 @@ impl From<EncodingError> for KbinError {
     #[inline]
     fn from(source: EncodingError) -> Self {
         KbinError::Encoding { source }
+    }
+}
+
+impl From<SixbitError> for KbinError {
+    #[inline]
+    fn from(source: SixbitError) -> Self {
+        KbinError::Sixbit { source }
     }
 }
 
@@ -178,10 +159,10 @@ impl From<WriterError> for KbinError {
     }
 }
 
-impl From<SixbitError> for KbinError {
+impl From<TextReaderError> for KbinError {
     #[inline]
-    fn from(source: SixbitError) -> Self {
-        KbinError::Sixbit { source }
+    fn from(source: TextReaderError) -> Self {
+        KbinError::TextReader { source }
     }
 }
 
