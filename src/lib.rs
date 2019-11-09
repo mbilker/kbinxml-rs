@@ -23,13 +23,14 @@ mod types;
 mod value;
 mod writer;
 
+use crate::error::Result;
 use crate::text_reader::TextXmlReader;
 use crate::to_text_xml::TextXmlWriter;
 
 // Public exports
 pub use crate::compression_type::CompressionType;
 pub use crate::encoding_type::EncodingType;
-pub use crate::error::{KbinError, Result};
+pub use crate::error::KbinError;
 pub use crate::node::{Node, NodeCollection};
 pub use crate::node_types::StandardType;
 pub use crate::options::{Options, OptionsBuilder};
@@ -88,7 +89,7 @@ where
     T: Writeable,
 {
     let mut writer = Writer::new();
-    writer.to_binary(input)
+    writer.to_binary(input).map_err(Into::into)
 }
 
 pub fn to_binary_with_options<T>(options: Options, input: &T) -> Result<Vec<u8>>
@@ -96,7 +97,7 @@ where
     T: Writeable,
 {
     let mut writer = Writer::with_options(options);
-    writer.to_binary(input)
+    writer.to_binary(input).map_err(Into::into)
 }
 
 pub fn to_text_xml<T>(input: &T) -> Result<Vec<u8>>

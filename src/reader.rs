@@ -1,4 +1,4 @@
-use std::io;
+use std::io::{self, Cursor, Seek, SeekFrom};
 
 use byteorder::{BigEndian, ReadBytesExt};
 use bytes::Bytes;
@@ -6,17 +6,19 @@ use snafu::{ResultExt, Snafu};
 
 use crate::byte_buffer::{ByteBufferError, ByteBufferRead};
 use crate::compression_type::{CompressionType, UnknownCompression};
-use crate::encoding_type::EncodingType;
-use crate::error::KbinError;
+use crate::encoding_type::{EncodingError, EncodingType};
 use crate::node::{Key, NodeData, NodeDefinition};
 use crate::node_types::{StandardType, UnknownKbinType};
-use crate::sixbit::Sixbit;
+use crate::sixbit::{Sixbit, SixbitError};
 use crate::{ARRAY_MASK, SIGNATURE};
 
 #[derive(Debug, Snafu)]
 pub enum ReaderError {
     #[snafu(display("Failed to read signature from header"))]
     Signature { source: io::Error },
+
+    #[snafu(display("Invalid signature read from header (signature: 0x{:x})", signature))]
+    InvalidSignature { signature: u8 },
 
     #[snafu(display("Failed to read compression type from header"))]
     Compression { source: io::Error },
@@ -30,11 +32,23 @@ pub enum ReaderError {
     #[snafu(display("Failed to read encoding type inverted value from header"))]
     EncodingNegate { source: io::Error },
 
+    #[snafu(display("Invalid encoding type read from header"))]
+    InvalidEncoding { source: EncodingError },
+
+    #[snafu(display("Mismatched encoding type and encoding type inverted values from header"))]
+    MismatchedEncoding,
+
     #[snafu(display("Failed to read node buffer length"))]
     NodeBufferLength { source: io::Error },
 
     #[snafu(display("Failed to read data buffer length"))]
     DataBufferLength { source: io::Error },
+
+    #[snafu(display(
+        "Failed to seek forward {} bytes in input buffer for data buffer length",
+        len_node
+    ))]
+    DataLengthSeek { len_node: u32, source: io::Error },
 
     #[snafu(display("Attempted to read past the end of the node buffer"))]
     EndOfNodeBuffer,
@@ -45,6 +59,9 @@ pub enum ReaderError {
     #[snafu(display("Invalid node type read"))]
     InvalidNodeType { source: UnknownKbinType },
 
+    #[snafu(display("Failed to read sixbit node name"))]
+    NodeSixbitName { source: SixbitError },
+
     #[snafu(display("Failed to read array node length"))]
     ArrayLength { source: io::Error },
 
@@ -53,6 +70,18 @@ pub enum ReaderError {
 
     #[snafu(display("Failed to read {} bytes from data buffer", size))]
     DataRead { size: usize, source: io::Error },
+
+    #[snafu(display("Failed to handle data buffer operation for node type {}", node_type))]
+    DataBuffer {
+        node_type: StandardType,
+        source: ByteBufferError,
+    },
+
+    #[snafu(display("Failed to handle node buffer operation for node type {}", node_type))]
+    NodeBuffer {
+        node_type: StandardType,
+        source: ByteBufferError,
+    },
 }
 
 pub struct Reader {
@@ -66,26 +95,22 @@ pub struct Reader {
 }
 
 impl Reader {
-    pub fn new(input: Bytes) -> Result<Self, KbinError> {
-        // Node buffer starts from the beginning.
-        // Data buffer starts later after reading `len_data`.
-        let mut node_buf = ByteBufferRead::new(input.clone());
+    pub fn new(input: Bytes) -> Result<Self, ReaderError> {
+        let mut header = Cursor::new(input.clone());
 
-        let signature = node_buf.read_u8().context(Signature)?;
+        let signature = header.read_u8().context(Signature)?;
         if signature != SIGNATURE {
-            return Err(KbinError::HeaderValue { field: "signature" });
+            return Err(ReaderError::InvalidSignature { signature });
         }
 
-        let compress_byte = node_buf.read_u8().context(Compression)?;
+        let compress_byte = header.read_u8().context(Compression)?;
         let compression = CompressionType::from_byte(compress_byte).context(InvalidCompression)?;
 
-        let encoding_byte = node_buf.read_u8().context(Encoding)?;
-        let encoding_negation = node_buf.read_u8().context(EncodingNegate)?;
-        let encoding = EncodingType::from_byte(encoding_byte)?;
+        let encoding_byte = header.read_u8().context(Encoding)?;
+        let encoding_negation = header.read_u8().context(EncodingNegate)?;
+        let encoding = EncodingType::from_byte(encoding_byte).context(InvalidEncoding)?;
         if encoding_negation != !encoding_byte {
-            return Err(KbinError::HeaderValue {
-                field: "encoding negation",
-            });
+            return Err(ReaderError::MismatchedEncoding);
         }
 
         info!(
@@ -93,16 +118,24 @@ impl Reader {
             signature, compress_byte, compression, encoding_byte, encoding
         );
 
-        let len_node = node_buf.read_u32::<BigEndian>().context(NodeBufferLength)?;
+        let len_node = header.read_u32::<BigEndian>().context(NodeBufferLength)?;
         info!("len_node: {0} (0x{0:x})", len_node);
 
-        // We have read 8 bytes so far, so offset the start of the data buffer from
-        // the start of the input data.
-        let data_buf_start = len_node + 8;
-        let mut data_buf = ByteBufferRead::new(input.slice_from(data_buf_start as usize));
+        // The length of the data buffer is the 4 bytes right after the node buffer.
+        header
+            .seek(SeekFrom::Current(len_node as i64))
+            .context(DataLengthSeek { len_node })?;
 
-        let len_data = data_buf.read_u32::<BigEndian>().context(DataBufferLength)?;
+        let len_data = header.read_u32::<BigEndian>().context(DataBufferLength)?;
         info!("len_data: {0} (0x{0:x})", len_data);
+
+        // We have read 8 bytes so far, so offset the start of the node buffer from
+        // the start of the input data. After that is the length of the data buffer.
+        // The data buffer is everything after that.
+        let node_buffer_end = 8 + len_node as usize;
+        let data_buffer_start = node_buffer_end + 4;
+        let node_buf = ByteBufferRead::new(input.slice(8, node_buffer_end));
+        let data_buf = ByteBufferRead::new(input.slice_from(data_buffer_start));
 
         Ok(Self {
             compression,
@@ -111,7 +144,7 @@ impl Reader {
             node_buf,
             data_buf,
 
-            data_buf_start: data_buf_start as u64,
+            data_buf_start: data_buffer_start as u64,
         })
     }
 
@@ -152,9 +185,9 @@ impl Reader {
 
     pub fn read_node_data(
         &mut self,
-        node_type: (StandardType, bool),
+        node_type: StandardType,
+        is_array: bool,
     ) -> Result<Bytes, ReaderError> {
-        let (node_type, is_array) = node_type;
         trace!(
             "Reader::read_node_data(node_type: {:?}, is_array: {})",
             node_type,
@@ -162,55 +195,75 @@ impl Reader {
         );
 
         let value = match node_type {
-            StandardType::Attribute | StandardType::String => self.data_buf.buf_read()?,
-            StandardType::Binary => self.read_bytes()?,
-
+            StandardType::Attribute | StandardType::String => {
+                self.data_buf.buf_read().context(DataBuffer { node_type })?
+            },
+            StandardType::Binary => self.read_bytes().context(DataBuffer { node_type })?,
             StandardType::NodeStart | StandardType::NodeEnd | StandardType::FileEnd => Bytes::new(),
-
-            _ if is_array => {
+            node_type if is_array => {
                 let arr_size = self.data_buf.read_u32::<BigEndian>().context(ArrayLength)?;
-                let data = self.data_buf.get(arr_size)?;
-                self.data_buf.realign_reads(None)?;
+                let data = self
+                    .data_buf
+                    .get(arr_size)
+                    .context(DataBuffer { node_type })?;
+                self.data_buf
+                    .realign_reads(None)
+                    .context(DataBuffer { node_type })?;
 
                 data
             },
-            node_type => self.data_buf.get_aligned(*node_type)?,
+            node_type => self
+                .data_buf
+                .get_aligned(node_type)
+                .context(DataBuffer { node_type })?,
         };
         debug!(
             "Reader::read_node_data(node_type: {:?}, is_array: {}) => value: 0x{:02x?}",
-            node_type, is_array, value
+            node_type,
+            is_array,
+            &value[..]
         );
 
         Ok(value)
     }
 
     pub fn read_node_definition(&mut self) -> Result<NodeDefinition, ReaderError> {
-        let node_type = self.read_node_type()?;
-        match node_type.0 {
+        let (node_type, is_array) = self.read_node_type()?;
+
+        match node_type {
             StandardType::NodeEnd | StandardType::FileEnd => {
-                Ok(NodeDefinition::new(self.encoding, node_type))
+                Ok(NodeDefinition::new(self.encoding, node_type, is_array))
             },
             _ => {
                 let key = match self.compression {
                     CompressionType::Compressed => {
-                        let size = Sixbit::size(&mut *self.node_buf)?;
-                        let data = self.node_buf.get(size.real_len as u32)?;
+                        let size = Sixbit::size(&mut *self.node_buf).context(NodeSixbitName)?;
+                        let data = self
+                            .node_buf
+                            .get(size.real_len as u32)
+                            .context(NodeBuffer { node_type })?;
+
                         Key::Compressed { size, data }
                     },
                     CompressionType::Uncompressed => {
                         let encoding = self.encoding;
                         let length =
                             (self.node_buf.read_u8().context(NameLength)? & !ARRAY_MASK) + 1;
-                        let data = self.node_buf.get(length as u32)?;
+                        let data = self
+                            .node_buf
+                            .get(length as u32)
+                            .context(NodeBuffer { node_type })?;
+
                         Key::Uncompressed { encoding, data }
                     },
                 };
-                let value_data = self.read_node_data(node_type)?;
-                let node_data = NodeData::Some { key, value_data };
+                let value_data = self.read_node_data(node_type, is_array)?;
+
                 Ok(NodeDefinition::with_data(
                     self.encoding,
                     node_type,
-                    node_data,
+                    is_array,
+                    NodeData::Some { key, value_data },
                 ))
             },
         }

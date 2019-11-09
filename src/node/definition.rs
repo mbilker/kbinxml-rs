@@ -45,9 +45,7 @@ impl Key {
 }
 
 impl NodeDefinition {
-    pub fn new(encoding: EncodingType, node_type: (StandardType, bool)) -> Self {
-        let (node_type, is_array) = node_type;
-
+    pub fn new(encoding: EncodingType, node_type: StandardType, is_array: bool) -> Self {
         Self {
             encoding,
             node_type,
@@ -58,11 +56,10 @@ impl NodeDefinition {
 
     pub fn with_data(
         encoding: EncodingType,
-        node_type: (StandardType, bool),
+        node_type: StandardType,
+        is_array: bool,
         data: NodeData,
     ) -> Self {
-        let (node_type, is_array) = node_type;
-
         Self {
             encoding,
             node_type,

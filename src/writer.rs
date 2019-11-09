@@ -45,6 +45,12 @@ pub enum WriterError {
         source: io::Error,
     },
 
+    #[snafu(display("Failed to write node data for node type {}", node_type))]
+    DataWrite {
+        node_type: StandardType,
+        source: io::Error,
+    },
+
     #[snafu(display("Failed to write sixbit node name"))]
     NodeSixbitName { source: SixbitError },
 
@@ -59,12 +65,6 @@ pub enum WriterError {
 
     #[snafu(display("Failed to write uncompressed node name data"))]
     NodeUncompressedNameData { source: io::Error },
-
-    #[snafu(display("Failed to write node data for node type {}", node_type))]
-    DataWrite {
-        node_type: StandardType,
-        source: io::Error,
-    },
 
     #[snafu(display("Failed to write node type {} to node buffer", node_type))]
     NodeType {

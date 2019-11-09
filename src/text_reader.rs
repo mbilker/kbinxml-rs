@@ -48,8 +48,6 @@ impl<'a> TextXmlReader<'a> {
         value.reserve(1);
         value.put_u8(0);
 
-        // `Attribute` nodes do not have the `is_array` flag set
-        let node_type = (StandardType::Attribute, false);
         let data = NodeData::Some {
             key: Key::Uncompressed {
                 encoding: self.encoding,
@@ -58,7 +56,13 @@ impl<'a> TextXmlReader<'a> {
             value_data: value.freeze(),
         };
 
-        Ok(NodeDefinition::with_data(self.encoding, node_type, data))
+        // `Attribute` nodes do not have the `is_array` flag set
+        Ok(NodeDefinition::with_data(
+            self.encoding,
+            StandardType::Attribute,
+            false,
+            data,
+        ))
     }
 
     fn parse_attributes(
@@ -126,14 +130,13 @@ impl<'a> TextXmlReader<'a> {
 
     fn handle_start(&self, e: BytesStart) -> Result<(NodeCollection, usize, Option<usize>)> {
         let (node_type, count, size, attributes) = self.parse_attributes(e.attributes())?;
+        let is_array = count > 0;
 
         // Stub the value for now, handle with `Event::Text`.
         let value_data = match node_type {
             StandardType::String => Bytes::from(EMPTY_STRING_DATA),
             _ => Bytes::new(),
         };
-
-        let node_type = (node_type, count > 0);
         let data = NodeData::Some {
             key: Key::Uncompressed {
                 encoding: self.encoding,
@@ -142,7 +145,7 @@ impl<'a> TextXmlReader<'a> {
             value_data,
         };
 
-        let base = NodeDefinition::with_data(self.encoding, node_type, data);
+        let base = NodeDefinition::with_data(self.encoding, node_type, is_array, data);
         let collection = NodeCollection::with_attributes(base, attributes.into());
 
         Ok((collection, count, size))

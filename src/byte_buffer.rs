@@ -7,7 +7,7 @@ use bytes::Bytes;
 use snafu::{ResultExt, Snafu};
 
 use crate::encoding_type::{EncodingError, EncodingType};
-use crate::node_types::{KbinType, StandardType};
+use crate::node_types::StandardType;
 
 #[derive(Debug, Snafu)]
 pub enum ByteBufferError {
@@ -177,7 +177,7 @@ impl ByteBufferRead {
         Ok(data)
     }
 
-    pub fn get_aligned(&mut self, data_type: KbinType) -> Result<Bytes, ByteBufferError> {
+    pub fn get_aligned(&mut self, node_type: StandardType) -> Result<Bytes, ByteBufferError> {
         if self.offset_1 % 4 == 0 {
             self.offset_1 = self.data_buf_offset();
         }
@@ -186,7 +186,7 @@ impl ByteBufferRead {
         }
 
         let old_pos = self.data_buf_offset();
-        let size = data_type.size * data_type.count;
+        let size = node_type.size * node_type.count;
         trace!("get_aligned => old_pos: {}, size: {}", old_pos, size);
 
         let (check_old, data) = match size {
