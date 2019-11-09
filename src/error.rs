@@ -12,7 +12,7 @@ use snafu::Snafu;
 
 use crate::byte_buffer::ByteBufferError;
 use crate::encoding_type::EncodingError;
-use crate::node_types::StandardType;
+use crate::node_types::{StandardType, UnknownKbinType};
 use crate::reader::ReaderError;
 use crate::sixbit::SixbitError;
 use crate::value::Value;
@@ -52,6 +52,9 @@ pub enum KbinError {
     #[snafu(display("Failed to interpret slice as UTF-8"))]
     Utf8Slice { source: Utf8Error },
 
+    // TODO(felix): remove when text reader has own error type
+    #[snafu(display("Invalid kbin type read"))]
+    InvalidKbinType { source: UnknownKbinType },
 
     #[snafu(display(
         "Size Mismatch, type: {}, expected size: {}, actual size: {}",

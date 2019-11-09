@@ -1,3 +1,4 @@
+use std::error::Error;
 use std::fmt;
 use std::ops::Deref;
 
@@ -11,11 +12,28 @@ pub struct KbinType {
     pub count: usize,
 }
 
+#[derive(Debug)]
+pub enum UnknownKbinType {
+    Byte(u8),
+    Name(String),
+}
+
 impl fmt::Display for KbinType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{} ({})", self.konst, self.name)
     }
 }
+
+impl fmt::Display for UnknownKbinType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::Byte(byte) => write!(f, "Unknown or not implemented type: {}", byte),
+            Self::Name(name) => write!(f, "Unknown or not implemented name: {}", name),
+        }
+    }
+}
+
+impl Error for UnknownKbinType {}
 
 macro_rules! construct_types {
   (
@@ -43,21 +61,21 @@ macro_rules! construct_types {
     )+
 
     impl StandardType {
-      pub fn from_u8(input: u8) -> StandardType {
+      pub fn from_u8(input: u8) -> Result<StandardType, UnknownKbinType> {
         match input {
           $(
-            $id => StandardType::$konst,
+            $id => Ok(StandardType::$konst),
           )+
-          _ => panic!("Node type {} not implemented", input),
+          _ => Err(UnknownKbinType::Byte(input)),
         }
       }
 
-      pub fn from_name(input: &str) -> StandardType {
+      pub fn from_name(input: &str) -> Result<StandardType, UnknownKbinType> {
         match input {
           $(
-            $name => StandardType::$konst,
+            $name => Ok(StandardType::$konst),
           )+
-          _ => panic!("Node name {} not implemented", input),
+          _ => Err(UnknownKbinType::Name(String::from(input))),
         }
       }
     }

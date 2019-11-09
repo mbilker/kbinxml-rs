@@ -9,7 +9,7 @@ use crate::compression_type::{CompressionType, UnknownCompression};
 use crate::encoding_type::EncodingType;
 use crate::error::KbinError;
 use crate::node::{Key, NodeData, NodeDefinition};
-use crate::node_types::StandardType;
+use crate::node_types::{StandardType, UnknownKbinType};
 use crate::sixbit::Sixbit;
 use crate::{ARRAY_MASK, SIGNATURE};
 
@@ -41,6 +41,9 @@ pub enum ReaderError {
 
     #[snafu(display("Failed to read node type"))]
     NodeType { source: io::Error },
+
+    #[snafu(display("Invalid node type read"))]
+    InvalidNodeType { source: UnknownKbinType },
 
     #[snafu(display("Failed to read array node length"))]
     ArrayLength { source: io::Error },
@@ -112,11 +115,11 @@ impl Reader {
         })
     }
 
-    fn parse_node_type(raw_node_type: u8) -> Result<(StandardType, bool), KbinError> {
+    fn parse_node_type(raw_node_type: u8) -> Result<(StandardType, bool), ReaderError> {
         let is_array = raw_node_type & ARRAY_MASK == ARRAY_MASK;
         let node_type = raw_node_type & !ARRAY_MASK;
 
-        let xml_type = StandardType::from_u8(node_type);
+        let xml_type = StandardType::from_u8(node_type).context(InvalidNodeType)?;
         debug!(
             "Reader::parse_node_type() => raw_node_type: {}, node_type: {:?} ({}), is_array: {}",
             raw_node_type, xml_type, node_type, is_array
@@ -138,7 +141,7 @@ impl Reader {
         }
     }
 
-    pub fn read_node_type(&mut self) -> Result<(StandardType, bool), KbinError> {
+    pub fn read_node_type(&mut self) -> Result<(StandardType, bool), ReaderError> {
         self.check_if_node_buffer_end()?;
 
         let raw_node_type = self.node_buf.read_u8().context(NodeType)?;
@@ -147,7 +150,10 @@ impl Reader {
         Ok(value)
     }
 
-    pub fn read_node_data(&mut self, node_type: (StandardType, bool)) -> Result<Bytes, KbinError> {
+    pub fn read_node_data(
+        &mut self,
+        node_type: (StandardType, bool),
+    ) -> Result<Bytes, ReaderError> {
         let (node_type, is_array) = node_type;
         trace!(
             "Reader::read_node_data(node_type: {:?}, is_array: {})",
@@ -178,7 +184,7 @@ impl Reader {
         Ok(value)
     }
 
-    pub fn read_node_definition(&mut self) -> Result<NodeDefinition, KbinError> {
+    pub fn read_node_definition(&mut self) -> Result<NodeDefinition, ReaderError> {
         let node_type = self.read_node_type()?;
         match node_type.0 {
             StandardType::NodeEnd | StandardType::FileEnd => {

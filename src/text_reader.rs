@@ -84,7 +84,7 @@ impl<'a> TextXmlReader<'a> {
                     if attr.key == b"__type" {
                         let value = str::from_utf8(&*value)?;
 
-                        node_type = Some(StandardType::from_name(value));
+                        node_type = Some(StandardType::from_name(value).context(InvalidKbinType)?);
                     } else if attr.key == b"__count" {
                         let value = str::from_utf8(&*value)?;
                         let num_count = value.parse::<u32>().context(StringParseInt {
