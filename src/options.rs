@@ -1,20 +1,20 @@
-use crate::compression::Compression;
+use crate::compression_type::CompressionType;
 use crate::encoding_type::EncodingType;
 
 #[derive(Clone, Debug, Default)]
 pub struct Options {
-    pub(crate) compression: Compression,
+    pub(crate) compression: CompressionType,
     pub(crate) encoding: EncodingType,
 }
 
 #[derive(Default)]
 pub struct OptionsBuilder {
-    compression: Compression,
+    compression: CompressionType,
     encoding: EncodingType,
 }
 
 impl Options {
-    pub fn new(compression: Compression, encoding: EncodingType) -> Self {
+    pub fn new(compression: CompressionType, encoding: EncodingType) -> Self {
         Self {
             compression,
             encoding,
@@ -34,7 +34,7 @@ impl Options {
 }
 
 impl OptionsBuilder {
-    pub fn compression(&mut self, compression: Compression) -> &mut Self {
+    pub fn compression(&mut self, compression: CompressionType) -> &mut Self {
         self.compression = compression;
         self
     }

@@ -52,8 +52,6 @@ pub enum KbinError {
     #[snafu(display("Failed to interpret slice as UTF-8"))]
     Utf8Slice { source: Utf8Error },
 
-    #[snafu(display("Unknown compression value"))]
-    UnknownCompression,
 
     #[snafu(display(
         "Size Mismatch, type: {}, expected size: {}, actual size: {}",

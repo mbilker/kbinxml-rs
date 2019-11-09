@@ -5,14 +5,13 @@ use bytes::Bytes;
 use snafu::{ResultExt, Snafu};
 
 use crate::byte_buffer::{ByteBufferError, ByteBufferRead};
-use crate::compression::Compression as CompressionType;
+use crate::compression_type::{CompressionType, UnknownCompression};
 use crate::encoding_type::EncodingType;
 use crate::error::KbinError;
 use crate::node::{Key, NodeData, NodeDefinition};
 use crate::node_types::StandardType;
 use crate::sixbit::Sixbit;
-
-use super::{ARRAY_MASK, SIGNATURE};
+use crate::{ARRAY_MASK, SIGNATURE};
 
 #[derive(Debug, Snafu)]
 pub enum ReaderError {
@@ -21,6 +20,9 @@ pub enum ReaderError {
 
     #[snafu(display("Failed to read compression type from header"))]
     Compression { source: io::Error },
+
+    #[snafu(display("Invalid compression type read from header"))]
+    InvalidCompression { source: UnknownCompression },
 
     #[snafu(display("Failed to read encoding type from header"))]
     Encoding { source: io::Error },
@@ -34,7 +36,7 @@ pub enum ReaderError {
     #[snafu(display("Failed to read data buffer length"))]
     DataBufferLength { source: io::Error },
 
-    #[snafu(display("Reached the end of the node buffer"))]
+    #[snafu(display("Attempted to read past the end of the node buffer"))]
     EndOfNodeBuffer,
 
     #[snafu(display("Failed to read node type"))]
@@ -72,7 +74,7 @@ impl Reader {
         }
 
         let compress_byte = node_buf.read_u8().context(Compression)?;
-        let compression = CompressionType::from_byte(compress_byte)?;
+        let compression = CompressionType::from_byte(compress_byte).context(InvalidCompression)?;
 
         let encoding_byte = node_buf.read_u8().context(Encoding)?;
         let encoding_negation = node_buf.read_u8().context(EncodingNegate)?;

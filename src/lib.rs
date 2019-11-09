@@ -8,7 +8,7 @@ extern crate log;
 use bytes::Bytes;
 
 mod byte_buffer;
-mod compression;
+mod compression_type;
 mod encoding_type;
 mod error;
 mod node;
@@ -27,7 +27,7 @@ use crate::text_reader::TextXmlReader;
 use crate::to_text_xml::TextXmlWriter;
 
 // Public exports
-pub use crate::compression::Compression;
+pub use crate::compression_type::CompressionType;
 pub use crate::encoding_type::EncodingType;
 pub use crate::error::{KbinError, Result};
 pub use crate::node::{Node, NodeCollection};

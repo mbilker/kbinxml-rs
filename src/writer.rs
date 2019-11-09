@@ -4,7 +4,7 @@ use byteorder::{BigEndian, WriteBytesExt};
 use snafu::ResultExt;
 
 use crate::byte_buffer::ByteBufferWrite;
-use crate::compression::Compression;
+use crate::compression_type::CompressionType;
 use crate::error::*;
 use crate::node::{Node, NodeCollection};
 use crate::node_types::StandardType;
@@ -91,11 +91,11 @@ impl Writeable for NodeCollection {
         let name = self.base().key()?.ok_or(KbinError::InvalidState)?;
 
         debug!("NodeCollection write_node => name: {}, type: {:?}, type_size: {}, type_count: {}, is_array: {}",
-      name,
-      node_type,
-      node_type.size,
-      node_type.count,
-      is_array);
+            name,
+            node_type,
+            node_type.size,
+            node_type.count,
+            is_array);
 
         node_buf
             .write_u8(node_type as u8 | array_mask)
@@ -103,8 +103,8 @@ impl Writeable for NodeCollection {
                 node_type: node_type.name,
             })?;
         match options.compression {
-            Compression::Compressed => Sixbit::pack(&mut **node_buf, &name)?,
-            Compression::Uncompressed => {
+            CompressionType::Compressed => Sixbit::pack(&mut **node_buf, &name)?,
+            CompressionType::Uncompressed => {
                 let data = options.encoding.encode_bytes(&name)?;
                 let len = (data.len() - 1) as u8;
                 node_buf.write_u8(len | ARRAY_MASK).context(DataWrite {
@@ -139,8 +139,8 @@ impl Writeable for NodeCollection {
                     node_type: StandardType::Attribute.name,
                 })?;
             match options.compression {
-                Compression::Compressed => Sixbit::pack(&mut **node_buf, &key)?,
-                Compression::Uncompressed => {
+                CompressionType::Compressed => Sixbit::pack(&mut **node_buf, &key)?,
+                CompressionType::Uncompressed => {
                     let data = options.encoding.encode_bytes(&key)?;
                     let len = (data.len() - 1) as u8;
                     node_buf.write_u8(len | ARRAY_MASK).context(DataWrite {
@@ -197,8 +197,8 @@ impl Writeable for Node {
                 node_type: node_type.name,
             })?;
         match options.compression {
-            Compression::Compressed => Sixbit::pack(&mut **node_buf, &self.key())?,
-            Compression::Uncompressed => {
+            CompressionType::Compressed => Sixbit::pack(&mut **node_buf, &self.key())?,
+            CompressionType::Uncompressed => {
                 let data = options.encoding.encode_bytes(&self.key())?;
                 let len = (data.len() - 1) as u8;
                 node_buf.write_u8(len | ARRAY_MASK).context(DataWrite {
@@ -226,8 +226,8 @@ impl Writeable for Node {
                         node_type: StandardType::Attribute.name,
                     })?;
                 match options.compression {
-                    Compression::Compressed => Sixbit::pack(&mut **node_buf, &key)?,
-                    Compression::Uncompressed => {
+                    CompressionType::Compressed => Sixbit::pack(&mut **node_buf, &key)?,
+                    CompressionType::Uncompressed => {
                         let data = options.encoding.encode_bytes(&key)?;
                         let len = (data.len() - 1) as u8;
                         node_buf.write_u8(len | ARRAY_MASK).context(DataWrite {
