@@ -2,6 +2,7 @@
 members = [
     "kbinxml",
     "kbinxml_cli",
+    "psmap",
 ]
 
 [profile.release]
