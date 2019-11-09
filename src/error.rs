@@ -16,6 +16,7 @@ use crate::node_types::{StandardType, UnknownKbinType};
 use crate::reader::ReaderError;
 use crate::sixbit::SixbitError;
 use crate::value::Value;
+use crate::writer::WriterError;
 
 pub type Result<T> = StdResult<T, KbinError>;
 
@@ -25,18 +26,6 @@ pub enum KbinError {
     #[snafu(display("Unable to write {} header field", field))]
     HeaderWrite {
         field: &'static str,
-        source: io::Error,
-    },
-
-    #[snafu(display("Invalid byte value for {} header field", field))]
-    HeaderValue { field: &'static str },
-
-    #[snafu(display("Unable to read {} bytes from data buffer", size))]
-    DataRead { size: usize, source: io::Error },
-
-    #[snafu(display("Unable to write a {} to data buffer", node_type))]
-    DataWrite {
-        node_type: &'static str,
         source: io::Error,
     },
 
@@ -131,6 +120,12 @@ pub enum KbinError {
         source: ReaderError,
     },
 
+    #[snafu(display("Failed to write binary XML"))]
+    Writer {
+        #[snafu(backtrace)]
+        source: WriterError,
+    },
+
     #[snafu(display("Failed to handle sixbit string operation"))]
     Sixbit {
         #[snafu(backtrace)]
@@ -173,6 +168,13 @@ impl From<ReaderError> for KbinError {
     #[inline]
     fn from(source: ReaderError) -> Self {
         KbinError::Reader { source }
+    }
+}
+
+impl From<WriterError> for KbinError {
+    #[inline]
+    fn from(source: WriterError) -> Self {
+        KbinError::Writer { source }
     }
 }
 

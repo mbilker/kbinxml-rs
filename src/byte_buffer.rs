@@ -6,9 +6,8 @@ use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use bytes::Bytes;
 use snafu::{ResultExt, Snafu};
 
-use crate::encoding_type::EncodingType;
-use crate::error::KbinError;
-use crate::node_types::KbinType;
+use crate::encoding_type::{EncodingError, EncodingType};
+use crate::node_types::{KbinType, StandardType};
 
 #[derive(Debug, Snafu)]
 pub enum ByteBufferError {
@@ -46,8 +45,23 @@ pub enum ByteBufferError {
     #[snafu(display("Failed to write data block to data buffer"))]
     WriteDataBlock { source: io::Error },
 
+    #[snafu(display("Failed to encode string"))]
+    StringEncode { source: EncodingError },
+
     #[snafu(display("Failed to write padding {} byte(s) to data buffer", size))]
     WritePadding { size: usize, source: io::Error },
+
+    #[snafu(display(
+        "Mismatched size for {} node data (expected: {}, actual: {})",
+        node_type,
+        expected,
+        actual
+    ))]
+    WriteSizeMismatch {
+        node_type: StandardType,
+        expected: usize,
+        actual: usize,
+    },
 
     #[snafu(display("Failed to seek to {} in data buffer", offset))]
     SeekOffset { offset: usize, source: io::Error },
@@ -285,20 +299,24 @@ impl ByteBufferWrite {
         Ok(())
     }
 
-    pub fn write_str(&mut self, encoding: EncodingType, data: &str) -> Result<(), KbinError> {
+    pub fn write_str(&mut self, encoding: EncodingType, data: &str) -> Result<(), ByteBufferError> {
         trace!(
             "write_str => input: {}, data: 0x{:02x?}",
             data,
             data.as_bytes()
         );
 
-        let bytes = encoding.encode_bytes(data)?;
+        let bytes = encoding.encode_bytes(data).context(StringEncode)?;
         self.buf_write(&bytes)?;
 
         Ok(())
     }
 
-    pub fn write_aligned(&mut self, data_type: KbinType, data: &[u8]) -> Result<(), KbinError> {
+    pub fn write_aligned(
+        &mut self,
+        node_type: StandardType,
+        data: &[u8],
+    ) -> Result<(), ByteBufferError> {
         if self.offset_1 % 4 == 0 {
             self.offset_1 = self.data_buf_offset();
         }
@@ -307,7 +325,7 @@ impl ByteBufferWrite {
         }
 
         let old_pos = self.data_buf_offset();
-        let size = data_type.size * data_type.count;
+        let size = node_type.size * node_type.count;
         trace!(
             "write_aligned => old_pos: {}, size: {}, data: 0x{:02x?}",
             old_pos,
@@ -316,8 +334,8 @@ impl ByteBufferWrite {
         );
 
         if size != data.len() {
-            return Err(KbinError::SizeMismatch {
-                node_type: data_type.name,
+            return Err(ByteBufferError::WriteSizeMismatch {
+                node_type,
                 expected: size,
                 actual: data.len(),
             });
