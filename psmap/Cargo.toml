@@ -6,9 +6,6 @@ license = "MIT"
 edition = "2018"
 
 [dependencies]
-proc-macro2 = "1.0.1"
-quote = "1.0.2"
-syn = { version = "1.0.5", features = ["extra-traits", "full"] }
-
-[lib]
-proc-macro = true
+kbinxml = { path = "../kbinxml" }
+psmap_derive = { path = "../psmap_derive" }
+thiserror = "1.0.4"
