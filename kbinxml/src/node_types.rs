@@ -75,6 +75,17 @@ macro_rules! construct_types {
           $(
             $name => Ok(StandardType::$konst),
           )+
+          "binary" => Ok(StandardType::Binary),
+          "string" => Ok(StandardType::String),
+          "f" => Ok(StandardType::Float),
+          "d" => Ok(StandardType::Double),
+          "vs64" => Ok(StandardType::S64_2),
+          "vu64" => Ok(StandardType::U64_2),
+          "vd" => Ok(StandardType::Double2),
+          "vs32" => Ok(StandardType::S32_4),
+          "vu32" => Ok(StandardType::U32_4),
+          "vf" => Ok(StandardType::Float4),
+          "b" => Ok(StandardType::Boolean),
           _ => Err(UnknownKbinType::Name(String::from(input))),
         }
       }
