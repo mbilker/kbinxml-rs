@@ -430,11 +430,11 @@ impl PsmapOutput {
             attribute: #attr,
             source_name: #source,
             struct_name: stringify!(#struct_name),
-            source,
+            source: Box::new(source),
           })?);
         });
         self.fields.append_all(quote_spanned! {target.span()=>
-          #target: #target.ok_or_else(::psmap::PsmapError::FieldNotFoundFromSource {
+          #target: #target.ok_or(::psmap::PsmapError::FieldNotFoundFromSource {
             target: stringify!(#target),
             source_name: #source,
             struct_name: stringify!(#struct_name),

@@ -1,4 +1,5 @@
-use kbinxml::KbinError;
+use std::error::Error;
+
 use thiserror::Error;
 
 // Re-export proc macro
@@ -18,7 +19,7 @@ pub enum PsmapError {
         attribute: &'static str,
         source_name: &'static str,
         struct_name: &'static str,
-        source: KbinError,
+        source: Box<dyn Error + Send + Sync>,
     },
 
     #[error("Field `{target}` not found for `{struct_name}`")]
