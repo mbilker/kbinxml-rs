@@ -15,23 +15,23 @@ pub struct UnknownCompression(u8);
 impl CompressionType {
     pub fn from_byte(byte: u8) -> Result<Self, UnknownCompression> {
         match byte {
-            SIG_COMPRESSED => Ok(Self::Compressed),
-            SIG_UNCOMPRESSED => Ok(Self::Uncompressed),
+            SIG_COMPRESSED => Ok(CompressionType::Compressed),
+            SIG_UNCOMPRESSED => Ok(CompressionType::Uncompressed),
             _ => Err(UnknownCompression(byte)),
         }
     }
 
     pub fn to_byte(&self) -> u8 {
         match *self {
-            Self::Compressed => SIG_COMPRESSED,
-            Self::Uncompressed => SIG_UNCOMPRESSED,
+            CompressionType::Compressed => SIG_COMPRESSED,
+            CompressionType::Uncompressed => SIG_UNCOMPRESSED,
         }
     }
 }
 
 impl Default for CompressionType {
     fn default() -> Self {
-        Self::Compressed
+        CompressionType::Compressed
     }
 }
 

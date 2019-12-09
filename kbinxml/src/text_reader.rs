@@ -63,14 +63,14 @@ pub enum TextReaderError {
 impl From<Utf8Error> for TextReaderError {
     #[inline]
     fn from(source: Utf8Error) -> Self {
-        Self::Utf8 { source }
+        TextReaderError::Utf8 { source }
     }
 }
 
 impl From<QuickXmlError> for TextReaderError {
     #[inline]
     fn from(source: QuickXmlError) -> Self {
-        Self::Xml { source }
+        TextReaderError::Xml { source }
     }
 }
 

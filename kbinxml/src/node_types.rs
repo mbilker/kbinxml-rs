@@ -27,8 +27,8 @@ impl fmt::Display for KbinType {
 impl fmt::Display for UnknownKbinType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Self::Byte(byte) => write!(f, "Unknown or not implemented type: {}", byte),
-            Self::Name(name) => write!(f, "Unknown or not implemented name: {}", name),
+            UnknownKbinType::Byte(byte) => write!(f, "Unknown or not implemented type: {}", byte),
+            UnknownKbinType::Name(name) => write!(f, "Unknown or not implemented name: {}", name),
         }
     }
 }
