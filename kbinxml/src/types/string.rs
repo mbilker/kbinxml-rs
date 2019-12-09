@@ -48,9 +48,8 @@ impl FromKbinString for bool {
         match input {
             "false" | "0" => Ok(false),
             "true" | "1" => Ok(true),
-            input => Err(KbinError::InvalidBooleanInput {
-                input: u8::from_kbin_string(input)?,
-            }),
+            // Some text kbin XML files have values other than 0 or 1.
+            input => u8::from_kbin_string(input).map(|v| v > 0),
         }
     }
 }
