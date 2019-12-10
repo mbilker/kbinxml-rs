@@ -96,7 +96,7 @@ pub struct Reader {
 
 impl Reader {
     pub fn new(input: Bytes) -> Result<Self, ReaderError> {
-        let mut header = Cursor::new(input.clone());
+        let mut header = Cursor::new(&input);
 
         let signature = header.read_u8().context(Signature)?;
         if signature != SIGNATURE {
@@ -134,8 +134,8 @@ impl Reader {
         // The data buffer is everything after that.
         let node_buffer_end = 8 + len_node as usize;
         let data_buffer_start = node_buffer_end + 4;
-        let node_buf = ByteBufferRead::new(input.slice(8, node_buffer_end));
-        let data_buf = ByteBufferRead::new(input.slice_from(data_buffer_start));
+        let node_buf = ByteBufferRead::new(input.slice(8..node_buffer_end));
+        let data_buf = ByteBufferRead::new(input.slice(data_buffer_start..));
 
         Ok(Self {
             compression,

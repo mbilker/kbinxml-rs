@@ -102,7 +102,7 @@ impl<'a> TextXmlReader<'a> {
     }
 
     fn parse_attribute(&self, key: &[u8], value: &[u8]) -> Result<NodeDefinition, TextReaderError> {
-        let mut value = BytesMut::from(value.to_vec());
+        let mut value = BytesMut::from(value);
 
         // Add the trailing null byte that kbin has at the end of strings
         value.reserve(1);
@@ -111,7 +111,7 @@ impl<'a> TextXmlReader<'a> {
         let data = NodeData::Some {
             key: Key::Uncompressed {
                 encoding: self.encoding,
-                data: Bytes::from(key),
+                data: Bytes::from(key.to_vec()),
             },
             value_data: value.freeze(),
         };
@@ -198,7 +198,7 @@ impl<'a> TextXmlReader<'a> {
         let data = NodeData::Some {
             key: Key::Uncompressed {
                 encoding: self.encoding,
-                data: Bytes::from(e.name()),
+                data: Bytes::from(e.name().to_vec()),
             },
             value_data,
         };
@@ -218,7 +218,7 @@ impl<'a> TextXmlReader<'a> {
         let data = event.unescaped()?;
         let data = match definition.node_type {
             StandardType::String | StandardType::NodeStart => {
-                let mut data = BytesMut::from(data.into_owned());
+                let mut data = BytesMut::from(&*data);
 
                 // Add the trailing null byte that kbin has at the end of strings
                 data.reserve(1);

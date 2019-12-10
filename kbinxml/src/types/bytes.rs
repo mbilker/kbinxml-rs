@@ -1,8 +1,8 @@
 use std::io::Read;
 use std::net::Ipv4Addr;
 
-use byteorder::ReadBytesExt;
-use bytes::{BigEndian, BufMut};
+use byteorder::{BigEndian, ReadBytesExt};
+use bytes::BufMut;
 use snafu::ResultExt;
 
 use crate::error::*;
@@ -186,14 +186,14 @@ macro_rules! tuple_impl {
 }
 
 multibyte_impl! {
-  (i16, put_i16_be, read_i16),
-  (u16, put_u16_be, read_u16),
-  (i32, put_i32_be, read_i32),
-  (u32, put_u32_be, read_u32),
-  (i64, put_i64_be, read_i64),
-  (u64, put_u64_be, read_u64),
-  (f32, put_f32_be, read_f32),
-  (f64, put_f64_be, read_f64),
+  (i16, put_i16, read_i16),
+  (u16, put_u16, read_u16),
+  (i32, put_i32, read_i32),
+  (u32, put_u32, read_u32),
+  (i64, put_i64, read_i64),
+  (u64, put_u64, read_u64),
+  (f32, put_f32, read_f32),
+  (f64, put_f64, read_f64),
 }
 
 tuple_impl! {
@@ -201,13 +201,13 @@ tuple_impl! {
   u8: [2, 3, 4, 16],
   bool: [2, 3, 4, 16],
   multi: [
-    [i16; 2, 3, 4, 8] => (put_i16_be, read_i16_into),
-    [u16; 2, 3, 4, 8] => (put_u16_be, read_u16_into),
-    [i32; 2, 3, 4] => (put_i32_be, read_i32_into),
-    [u32; 2, 3, 4] => (put_u32_be, read_u32_into),
-    [i64; 2, 3, 4] => (put_i64_be, read_i64_into),
-    [u64; 2, 3, 4] => (put_u64_be, read_u64_into),
-    [f32; 2, 3, 4] => (put_f32_be, read_f32_into),
-    [f64; 2, 3, 4] => (put_f64_be, read_f64_into),
+    [i16; 2, 3, 4, 8] => (put_i16, read_i16_into),
+    [u16; 2, 3, 4, 8] => (put_u16, read_u16_into),
+    [i32; 2, 3, 4] => (put_i32, read_i32_into),
+    [u32; 2, 3, 4] => (put_u32, read_u32_into),
+    [i64; 2, 3, 4] => (put_i64, read_i64_into),
+    [u64; 2, 3, 4] => (put_u64, read_u64_into),
+    [f32; 2, 3, 4] => (put_f32, read_f32_into),
+    [f64; 2, 3, 4] => (put_f64, read_f64_into),
   ]
 }

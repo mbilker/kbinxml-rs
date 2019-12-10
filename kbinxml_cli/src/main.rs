@@ -104,7 +104,7 @@ fn main() -> Result<(), anyhow::Error> {
 
     if kbinxml::is_binary_xml(&contents) {
         if printer_enabled {
-            Printer::run(&contents)?;
+            Printer::run(contents.clone())?;
         }
 
         let (collection, _encoding) = kbinxml::from_slice(&contents)?;
@@ -121,7 +121,7 @@ fn main() -> Result<(), anyhow::Error> {
         let buf = kbinxml::to_binary_with_options(options, &collection)?;
 
         if printer_enabled {
-            Printer::run(&buf)?;
+            Printer::run(buf.clone())?;
         }
 
         io::stdout().write_all(&buf)?;

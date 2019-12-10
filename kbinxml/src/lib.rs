@@ -81,7 +81,7 @@ pub fn from_bytes(input: Bytes) -> Result<(NodeCollection, EncodingType)> {
 
 #[inline]
 pub fn from_slice(input: &[u8]) -> Result<(NodeCollection, EncodingType)> {
-    from_binary(Bytes::from(input))
+    from_binary(Bytes::from(input.to_vec()))
 }
 
 pub fn to_binary<T>(input: &T) -> Result<Vec<u8>>

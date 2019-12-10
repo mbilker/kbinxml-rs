@@ -141,7 +141,7 @@ impl ByteBufferRead {
         let start = self.data_buf_offset();
         let end = self.check_read_size(start, size)?;
 
-        let data = self.buffer.slice(start, end);
+        let data = self.buffer.slice(start..end);
         trace!(
             "buf_read_size => index: {}, size: {}, data: 0x{:02x?}",
             self.cursor.position(),
@@ -192,14 +192,14 @@ impl ByteBufferRead {
         let (check_old, data) = match size {
             1 => {
                 let end = self.check_read_size(self.offset_1, 1)?;
-                let data = self.buffer.slice(self.offset_1, end);
+                let data = self.buffer.slice(self.offset_1..end);
                 self.offset_1 += 1;
 
                 (true, data)
             },
             2 => {
                 let end = self.check_read_size(self.offset_2, 2)?;
-                let data = self.buffer.slice(self.offset_2, end);
+                let data = self.buffer.slice(self.offset_2..end);
                 self.offset_2 += 2;
 
                 (true, data)
