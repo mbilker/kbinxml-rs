@@ -1,6 +1,6 @@
 [package]
 name = "kbinxml"
-version = "2.0.2"
+version = "2.1.0"
 authors = ["Matt Bilker <me@mbilker.us>"]
 description = "An encoder/decoder for Konami's binary XML format used in many of their games."
 license = "MIT"
