@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::convert::TryFrom;
 use std::fmt;
 use std::io::Cursor;
@@ -455,6 +456,34 @@ impl TryFrom<&Value> for Vec<u8> {
             },
             value => Err(KbinError::ValueTypeMismatch {
                 node_type: StandardType::Binary,
+                value: value.clone(),
+            }),
+        }
+    }
+}
+
+impl TryFrom<Value> for Cow<'_, str> {
+    type Error = KbinError;
+
+    fn try_from(value: Value) -> Result<Self> {
+        match value {
+            Value::String(v) => Ok(Cow::Owned(v)),
+            value => Err(KbinError::ValueTypeMismatch {
+                node_type: StandardType::String,
+                value,
+            }),
+        }
+    }
+}
+
+impl TryFrom<&Value> for Cow<'_, str> {
+    type Error = KbinError;
+
+    fn try_from(value: &Value) -> Result<Self> {
+        match value {
+            Value::String(ref v) => Ok(Cow::Owned(v.clone())),
+            value => Err(KbinError::ValueTypeMismatch {
+                node_type: StandardType::String,
                 value: value.clone(),
             }),
         }
