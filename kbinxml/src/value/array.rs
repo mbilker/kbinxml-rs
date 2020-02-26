@@ -286,10 +286,42 @@ impl fmt::Display for ValueArray {
             ValueArray::Vu8(v) => write_array_16(f, v),
             ValueArray::Vs16(v) => write_array_8(f, v),
             ValueArray::Vu16(v) => write_array_8(f, v),
-            ValueArray::Boolean(v) => write_values(f, &v),
-            ValueArray::Boolean2(v) => write_array_2(f, v),
-            ValueArray::Boolean3(v) => write_array_3(f, v),
-            ValueArray::Boolean4(v) => write_array_4(f, v),
+            ValueArray::Boolean(values) => {
+                for (i, v) in values.iter().enumerate() {
+                    if i > 0 {
+                        f.write_str(" ")?;
+                    }
+                    f.write_str(if *v { "1" } else { "0" })?;
+                }
+                Ok(())
+            },
+            ValueArray::Boolean2(values) => {
+                for (i, v) in values.iter().flat_map(|v| v.into_iter()).enumerate() {
+                    if i > 0 {
+                        f.write_str(" ")?;
+                    }
+                    f.write_str(if *v { "1" } else { "0" })?;
+                }
+                Ok(())
+            },
+            ValueArray::Boolean3(values) => {
+                for (i, v) in values.iter().flat_map(|v| v.into_iter()).enumerate() {
+                    if i > 0 {
+                        f.write_str(" ")?;
+                    }
+                    f.write_str(if *v { "1" } else { "0" })?;
+                }
+                Ok(())
+            },
+            ValueArray::Boolean4(values) => {
+                for (i, v) in values.iter().flat_map(|v| v.into_iter()).enumerate() {
+                    if i > 0 {
+                        f.write_str(" ")?;
+                    }
+                    f.write_str(if *v { "1" } else { "0" })?;
+                }
+                Ok(())
+            },
             ValueArray::Vb(v) => write_array_16(f, v),
         }
     }
