@@ -304,6 +304,8 @@ impl<'a> TextXmlReader<'a> {
                     if let Some((ref mut parent_collection, _count, _size)) = self.stack.last_mut()
                     {
                         parent_collection.children_mut().push_back(collection);
+                    } else {
+                        return Ok(Some(collection));
                     }
                 },
                 Event::Decl(e) => {
