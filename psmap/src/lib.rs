@@ -36,7 +36,5 @@ pub enum PsmapError {
     },
 
     #[error("Node field `{source_name}` does not have a value")]
-    ValueNotFound {
-        source_name: &'static str,
-    },
+    ValueNotFound { source_name: &'static str },
 }
