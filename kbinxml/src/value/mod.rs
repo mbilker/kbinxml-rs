@@ -16,213 +16,237 @@ mod array;
 pub use self::array::ValueArray;
 
 macro_rules! construct_types {
-  (
-    $(
-      ($konst:ident, $($value_type:tt)*);
-    )+
-  ) => {
-    #[derive(Clone, PartialEq)]
-    pub enum Value {
-      $(
-        $konst($($value_type)*),
-      )+
-      Binary(Vec<u8>),
-      Time(u32),
-      Attribute(String),
+    (
+        $(
+            ($konst:ident, $($value_type:tt)*);
+        )+
+    ) => {
+        #[derive(Clone, PartialEq)]
+        pub enum Value {
+            $(
+                $konst($($value_type)*),
+            )+
+            Binary(Vec<u8>),
+            Time(u32),
+            Attribute(String),
 
-      Array(ValueArray),
+            Array(ValueArray),
+        }
+
+        $(
+            impl From<$($value_type)*> for Value {
+                fn from(value: $($value_type)*) -> Value {
+                    Value::$konst(value)
+                }
+            }
+
+            impl TryFrom<Value> for $($value_type)* {
+                type Error = KbinError;
+
+                fn try_from(value: Value) -> Result<Self> {
+                    match value {
+                        Value::$konst(v) => Ok(v),
+                        value => {
+                            Err(KbinError::ValueTypeMismatch {
+                                node_type: StandardType::$konst,
+                                value,
+                            })
+                        },
+                    }
+                }
+            }
+
+            impl TryFrom<&Value> for $($value_type)* {
+                type Error = KbinError;
+
+                fn try_from(value: &Value) -> Result<Self> {
+                    match value {
+                        Value::$konst(ref v) => Ok(v.clone()),
+                        value => {
+                            Err(KbinError::ValueTypeMismatch {
+                                node_type: StandardType::$konst,
+                                value: value.clone(),
+                            })
+                        },
+                    }
+                }
+            }
+        )+
+
+        impl Value {
+            pub fn standard_type(&self) -> StandardType {
+                match *self {
+                    $(
+                        Value::$konst(_) => StandardType::$konst,
+                    )+
+                    Value::Binary(_) => StandardType::Binary,
+                    Value::Time(_) => StandardType::Time,
+                    Value::Attribute(_) => StandardType::Attribute,
+                    Value::Array(ref value) => value.standard_type(),
+                }
+            }
+        }
     }
-
-    $(
-      impl From<$($value_type)*> for Value {
-        fn from(value: $($value_type)*) -> Value {
-          Value::$konst(value)
-        }
-      }
-
-      impl TryFrom<Value> for $($value_type)* {
-        type Error = KbinError;
-
-        fn try_from(value: Value) -> Result<Self> {
-          match value {
-            Value::$konst(v) => Ok(v),
-            value => {
-              Err(KbinError::ValueTypeMismatch {
-                node_type: StandardType::$konst,
-                value,
-              })
-            },
-          }
-        }
-      }
-
-      impl TryFrom<&Value> for $($value_type)* {
-        type Error = KbinError;
-
-        fn try_from(value: &Value) -> Result<Self> {
-          match value {
-            Value::$konst(ref v) => Ok(v.clone()),
-            value => {
-              Err(KbinError::ValueTypeMismatch {
-                node_type: StandardType::$konst,
-                value: value.clone(),
-              })
-            },
-          }
-        }
-      }
-    )+
-
-    impl Value {
-      pub fn standard_type(&self) -> StandardType {
-        match *self {
-          $(
-            Value::$konst(_) => StandardType::$konst,
-          )+
-          Value::Binary(_) => StandardType::Binary,
-          Value::Time(_) => StandardType::Time,
-          Value::Attribute(_) => StandardType::Attribute,
-          Value::Array(ref value) => value.standard_type(),
-        }
-      }
-    }
-  }
 }
 
 macro_rules! tuple {
-  (
-    $($konst:ident),*$(,)?
-  ) => {
-    pub fn from_standard_type(node_type: StandardType, is_array: bool, input: &[u8]) -> Result<Option<Value>> {
-      let node_size = node_type.size * node_type.count;
+    (
+        $($konst:ident),*$(,)?
+    ) => {
+        pub fn from_standard_type(
+            node_type: StandardType,
+            is_array: bool,
+            input: &[u8],
+        ) -> Result<Option<Value>> {
+            let node_size = node_type.size * node_type.count;
 
-      if is_array {
-        let value = match ValueArray::from_standard_type(node_type, input)? {
-          Some(value) => value,
-          None => return Err(KbinError::InvalidState),
-        };
-        debug!("Value::from_standard_type({:?}) input: 0x{:02x?} => {:?}", node_type, input, value);
+            if is_array {
+                let value = match ValueArray::from_standard_type(node_type, input)? {
+                    Some(value) => value,
+                    None => return Err(KbinError::InvalidState),
+                };
+                debug!(
+                    "Value::from_standard_type({:?}) input: 0x{:02x?} => {:?}",
+                    node_type, input, value
+                );
 
-        return Ok(Some(Value::Array(value)));
-      }
+                return Ok(Some(Value::Array(value)));
+            }
 
-      match node_type {
-        StandardType::String |
-        StandardType::Binary => {},
-        _ => {
-          if input.len() != node_size {
-            return Err(KbinError::SizeMismatch { node_type: node_type.name, expected: node_size, actual: input.len() });
-          }
-        },
-      };
+            match node_type {
+                StandardType::String | StandardType::Binary => {},
+                _ => {
+                    if input.len() != node_size {
+                        return Err(KbinError::SizeMismatch {
+                            node_type: node_type.name,
+                            expected: node_size,
+                            actual: input.len(),
+                        });
+                    }
+                },
+            };
 
-      let mut reader = Cursor::new(input);
+            let mut reader = Cursor::new(input);
 
-      let value = match node_type {
-        StandardType::NodeStart |
-        StandardType::NodeEnd |
-        StandardType::FileEnd |
-        StandardType::Attribute |
-        StandardType::String => return Ok(None),
-        StandardType::S8 => i8::from_kbin_bytes(&mut reader).map(Value::S8)?,
-        StandardType::U8 => u8::from_kbin_bytes(&mut reader).map(Value::U8)?,
-        StandardType::S16 => i16::from_kbin_bytes(&mut reader).map(Value::S16)?,
-        StandardType::U16 => u16::from_kbin_bytes(&mut reader).map(Value::U16)?,
-        StandardType::S32 => i32::from_kbin_bytes(&mut reader).map(Value::S32)?,
-        StandardType::U32 => u32::from_kbin_bytes(&mut reader).map(Value::U32)?,
-        StandardType::S64 => i64::from_kbin_bytes(&mut reader).map(Value::S64)?,
-        StandardType::U64 => u64::from_kbin_bytes(&mut reader).map(Value::U64)?,
-        StandardType::Binary => Value::Binary(input.to_vec()),
-        StandardType::Time => u32::from_kbin_bytes(&mut reader).map(Value::Time)?,
-        StandardType::Ip4 => Ipv4Addr::from_kbin_bytes(&mut reader).map(Value::Ip4)?,
-        StandardType::Float => f32::from_kbin_bytes(&mut reader).map(Value::Float)?,
-        StandardType::Double => f64::from_kbin_bytes(&mut reader).map(Value::Double)?,
-        StandardType::Boolean => bool::from_kbin_bytes(&mut reader).map(Value::Boolean)?,
-        $(
-          StandardType::$konst => {
-            FromKbinBytes::from_kbin_bytes(&mut reader).map(Value::$konst)?
-          },
-        )*
-      };
-      debug!("Value::from_standard_type({:?}) input: 0x{:02x?} => {:?}", node_type, input, value);
+            let value = match node_type {
+                StandardType::NodeStart |
+                StandardType::NodeEnd |
+                StandardType::FileEnd |
+                StandardType::Attribute |
+                StandardType::String => return Ok(None),
+                StandardType::S8 => i8::from_kbin_bytes(&mut reader).map(Value::S8)?,
+                StandardType::U8 => u8::from_kbin_bytes(&mut reader).map(Value::U8)?,
+                StandardType::S16 => i16::from_kbin_bytes(&mut reader).map(Value::S16)?,
+                StandardType::U16 => u16::from_kbin_bytes(&mut reader).map(Value::U16)?,
+                StandardType::S32 => i32::from_kbin_bytes(&mut reader).map(Value::S32)?,
+                StandardType::U32 => u32::from_kbin_bytes(&mut reader).map(Value::U32)?,
+                StandardType::S64 => i64::from_kbin_bytes(&mut reader).map(Value::S64)?,
+                StandardType::U64 => u64::from_kbin_bytes(&mut reader).map(Value::U64)?,
+                StandardType::Binary => Value::Binary(input.to_vec()),
+                StandardType::Time => u32::from_kbin_bytes(&mut reader).map(Value::Time)?,
+                StandardType::Ip4 => Ipv4Addr::from_kbin_bytes(&mut reader).map(Value::Ip4)?,
+                StandardType::Float => f32::from_kbin_bytes(&mut reader).map(Value::Float)?,
+                StandardType::Double => f64::from_kbin_bytes(&mut reader).map(Value::Double)?,
+                StandardType::Boolean => bool::from_kbin_bytes(&mut reader).map(Value::Boolean)?,
+                $(
+                    StandardType::$konst => {
+                        FromKbinBytes::from_kbin_bytes(&mut reader).map(Value::$konst)?
+                    },
+                )*
+            };
+            debug!("Value::from_standard_type({:?}) input: 0x{:02x?} => {:?}", node_type, input, value);
 
-      Ok(Some(value))
-    }
+            Ok(Some(value))
+        }
 
-    pub fn from_string(node_type: StandardType, input: &str, is_array: bool, arr_count: usize) -> Result<Value> {
-      trace!("Value::from_string({:?}, is_array: {}, arr_count: {}) => input: {:?}", node_type, is_array, arr_count, input);
+        pub fn from_string(
+            node_type: StandardType,
+            input: &str,
+            is_array: bool,
+            arr_count: usize,
+        ) -> Result<Value> {
+            trace!(
+                "Value::from_string({:?}, is_array: {}, arr_count: {}) => input: {:?}",
+                node_type,
+                is_array,
+                arr_count,
+                input
+            );
 
-      if is_array {
-        let value = match node_type.count {
-          0 => return Err(KbinError::InvalidState.into()),
-          count => Value::Array(ValueArray::from_string(node_type, count, input, arr_count)?),
-        };
-        debug!("Value::from_string({:?}) input: {:?} => {:?}", node_type, input, value);
+            if is_array {
+                let value = match node_type.count {
+                    0 => return Err(KbinError::InvalidState.into()),
+                    count => Value::Array(ValueArray::from_string(node_type, count, input, arr_count)?),
+                };
+                debug!("Value::from_string({:?}) input: {:?} => {:?}", node_type, input, value);
 
-        return Ok(value);
-      }
+                return Ok(value);
+            }
 
-      let value = match node_type {
-        StandardType::NodeStart |
-        StandardType::NodeEnd |
-        StandardType::FileEnd => return Err(KbinError::InvalidNodeType { node_type }),
-        StandardType::S8 => i8::from_kbin_string(input).map(Value::S8)?,
-        StandardType::U8 => u8::from_kbin_string(input).map(Value::U8)?,
-        StandardType::S16 => i16::from_kbin_string(input).map(Value::S16)?,
-        StandardType::U16 => u16::from_kbin_string(input).map(Value::U16)?,
-        StandardType::S32 => i32::from_kbin_string(input).map(Value::S32)?,
-        StandardType::U32 => u32::from_kbin_string(input).map(Value::U32)?,
-        StandardType::S64 => i64::from_kbin_string(input).map(Value::S64)?,
-        StandardType::U64 => u64::from_kbin_string(input).map(Value::U64)?,
-        StandardType::Binary => input.from_hex().map(Value::Binary).context(HexSnafu)?,
-        StandardType::String => Value::String(input.to_owned()),
-        StandardType::Attribute => Value::Attribute(input.to_owned()),
-        StandardType::Ip4 => Ipv4Addr::from_kbin_string(input).map(Value::Ip4)?,
-        StandardType::Time => u32::from_kbin_string(input).map(Value::Time)?,
-        StandardType::Float => f32::from_kbin_string(input).map(Value::Float)?,
-        StandardType::Double => f64::from_kbin_string(input).map(Value::Double)?,
-        StandardType::Boolean => bool::from_kbin_string(input).map(Value::Boolean)?,
-        $(
-          StandardType::$konst => FromKbinString::from_kbin_string(input).map(Value::$konst)?,
-        )*
-      };
-      debug!("Value::from_string({:?}) input: {:?} => {:?}", node_type, input, value);
+            let value = match node_type {
+                StandardType::NodeStart |
+                StandardType::NodeEnd |
+                StandardType::FileEnd => return Err(KbinError::InvalidNodeType { node_type }),
+                StandardType::S8 => i8::from_kbin_string(input).map(Value::S8)?,
+                StandardType::U8 => u8::from_kbin_string(input).map(Value::U8)?,
+                StandardType::S16 => i16::from_kbin_string(input).map(Value::S16)?,
+                StandardType::U16 => u16::from_kbin_string(input).map(Value::U16)?,
+                StandardType::S32 => i32::from_kbin_string(input).map(Value::S32)?,
+                StandardType::U32 => u32::from_kbin_string(input).map(Value::U32)?,
+                StandardType::S64 => i64::from_kbin_string(input).map(Value::S64)?,
+                StandardType::U64 => u64::from_kbin_string(input).map(Value::U64)?,
+                StandardType::Binary => input.from_hex().map(Value::Binary).context(HexSnafu)?,
+                StandardType::String => Value::String(input.to_owned()),
+                StandardType::Attribute => Value::Attribute(input.to_owned()),
+                StandardType::Ip4 => Ipv4Addr::from_kbin_string(input).map(Value::Ip4)?,
+                StandardType::Time => u32::from_kbin_string(input).map(Value::Time)?,
+                StandardType::Float => f32::from_kbin_string(input).map(Value::Float)?,
+                StandardType::Double => f64::from_kbin_string(input).map(Value::Double)?,
+                StandardType::Boolean => bool::from_kbin_string(input).map(Value::Boolean)?,
+                $(
+                    StandardType::$konst => FromKbinString::from_kbin_string(input)
+                        .map(Value::$konst)?,
+                )*
+            };
+            debug!("Value::from_string({:?}) input: {:?} => {:?}", node_type, input, value);
 
-      Ok(value)
-    }
+            Ok(value)
+        }
 
-    fn to_bytes_inner(&self, output: &mut Vec<u8>) -> Result<()> {
-      debug!("Value::to_bytes_inner(self: {:?})", self);
+        fn to_bytes_inner(&self, output: &mut Vec<u8>) -> Result<()> {
+            debug!("Value::to_bytes_inner(self: {:?})", self);
 
-      match self {
-        Value::S8(n) => n.write_kbin_bytes(output),
-        Value::U8(n) => n.write_kbin_bytes(output),
-        Value::S16(n) => n.write_kbin_bytes(output),
-        Value::U16(n) => n.write_kbin_bytes(output),
-        Value::S32(n) => n.write_kbin_bytes(output),
-        Value::U32(n) => n.write_kbin_bytes(output),
-        Value::S64(n) => n.write_kbin_bytes(output),
-        Value::U64(n) => n.write_kbin_bytes(output),
-        Value::Binary(data) => output.extend_from_slice(data),
-        Value::Time(n) => n.write_kbin_bytes(output),
-        Value::Ip4(addr) => addr.write_kbin_bytes(output),
-        Value::Float(n) => n.write_kbin_bytes(output),
-        Value::Double(n) => n.write_kbin_bytes(output),
-        Value::Boolean(v) => v.write_kbin_bytes(output),
-        Value::Array(value) => value.to_bytes_into(output)?,
-        Value::Attribute(_) |
-        Value::String(_) => return Err(KbinError::InvalidNodeType { node_type: self.standard_type() }),
-        $(
-          Value::$konst(value) => {
-            output.reserve(value.len() * StandardType::$konst.size);
-            value.write_kbin_bytes(output);
-          },
-        )*
-      };
+            match self {
+                Value::S8(n) => n.write_kbin_bytes(output),
+                Value::U8(n) => n.write_kbin_bytes(output),
+                Value::S16(n) => n.write_kbin_bytes(output),
+                Value::U16(n) => n.write_kbin_bytes(output),
+                Value::S32(n) => n.write_kbin_bytes(output),
+                Value::U32(n) => n.write_kbin_bytes(output),
+                Value::S64(n) => n.write_kbin_bytes(output),
+                Value::U64(n) => n.write_kbin_bytes(output),
+                Value::Binary(data) => output.extend_from_slice(data),
+                Value::Time(n) => n.write_kbin_bytes(output),
+                Value::Ip4(addr) => addr.write_kbin_bytes(output),
+                Value::Float(n) => n.write_kbin_bytes(output),
+                Value::Double(n) => n.write_kbin_bytes(output),
+                Value::Boolean(v) => v.write_kbin_bytes(output),
+                Value::Array(value) => value.to_bytes_into(output)?,
+                Value::Attribute(_) |
+                Value::String(_) => {
+                    return Err(KbinError::InvalidNodeType { node_type: self.standard_type() });
+                },
+                $(
+                    Value::$konst(value) => {
+                        output.reserve(value.len() * StandardType::$konst.size);
+                        value.write_kbin_bytes(output);
+                    },
+                )*
+            };
 
-      Ok(())
-    }
-  };
+            Ok(())
+        }
+    };
 }
 
 impl Value {

@@ -81,109 +81,113 @@ impl FromKbinString for Ipv4Addr {
 }
 
 macro_rules! basic_int_parse {
-  (
-    $($type:ty),*$(,)?
-  ) => {
-    $(
-      impl FromKbinString for $type {
-        fn from_kbin_string(input: &str) -> Result<Self> {
-          space_check(input)?;
+    ($($type:ty),*$(,)?) => {
+        $(
+            impl FromKbinString for $type {
+                fn from_kbin_string(input: &str) -> Result<Self> {
+                    space_check(input)?;
 
-          if input.starts_with("0x") {
-            <$type>::from_str_radix(&input[2..], 16)
-              .context(StringParseIntSnafu { node_type: stringify!($type) })
-          } else {
-            input.parse::<$type>()
-              .context(StringParseIntSnafu { node_type: stringify!($type) })
-          }
-        }
-      }
-    )*
-  };
+                    if input.starts_with("0x") {
+                        <$type>::from_str_radix(&input[2..], 16)
+                            .context(StringParseIntSnafu { node_type: stringify!($type) })
+                    } else {
+                        input
+                            .parse::<$type>()
+                            .context(StringParseIntSnafu { node_type: stringify!($type) })
+                    }
+                }
+            }
+        )*
+    };
 }
 
 macro_rules! basic_float_parse {
-  (
-    $($type:ty),*$(,)?
-  ) => {
-    $(
-      impl FromKbinString for $type {
-        fn from_kbin_string(input: &str) -> Result<Self> {
-          space_check(input)?;
+    ($($type:ty),*$(,)?) => {
+        $(
+            impl FromKbinString for $type {
+                fn from_kbin_string(input: &str) -> Result<Self> {
+                    space_check(input)?;
 
-          input.parse::<$type>()
-            .context(StringParseFloatSnafu { node_type: stringify!($type) })
-        }
-      }
-    )*
-  };
+                    input
+                        .parse::<$type>()
+                        .context(StringParseFloatSnafu { node_type: stringify!($type) })
+                }
+            }
+        )*
+    };
 }
 
 macro_rules! tuple_parse {
-  (
-    bool: [$($bool_count:expr),*],
-    multi: [
-      $([$type:ident ; $($count:expr),*]),*$(,)?
-    ]
-  ) => {
-    $(
-      impl FromKbinString for [bool; $bool_count] {
-        fn from_kbin_string(input: &str) -> Result<Self> {
-          const TYPE_NAME: &'static str = concat!("[bool; ", stringify!($bool_count), "]");
+    (
+        bool: [$($bool_count:expr),*],
+        multi: [
+            $([$type:ident ; $($count:expr),*]),*$(,)?
+        ]
+    ) => {
+        $(
+            impl FromKbinString for [bool; $bool_count] {
+                fn from_kbin_string(input: &str) -> Result<Self> {
+                    const TYPE_NAME: &'static str = concat!("[bool; ", stringify!($bool_count), "]");
 
-          let count = input.split(' ').count();
-          if count != $bool_count {
-            return Err(KbinError::SizeMismatch { node_type: TYPE_NAME, expected: $bool_count, actual: count });
-          }
+                    let count = input.split(' ').count();
 
-          let mut value = Self::default();
+                    if count != $bool_count {
+                        return Err(KbinError::SizeMismatch {
+                            node_type: TYPE_NAME,
+                            expected: $bool_count,
+                            actual: count,
+                        });
+                    }
 
-          for (i, part) in input.split(' ').enumerate() {
-            value[i] = bool::from_kbin_string(part)?;
-          }
+                    let mut value = Self::default();
 
-          Ok(value)
-        }
-      }
-    )*
-    $(
-      $(
-        impl FromKbinString for [$type; $count] {
-          fn from_kbin_string(input: &str) -> Result<Self> {
-            let mut value = Self::default();
-            parse_tuple(concat!("[", stringify!($type), "; ", stringify!($count), "]"), input, &mut value)?;
+                    for (i, part) in input.split(' ').enumerate() {
+                        value[i] = bool::from_kbin_string(part)?;
+                    }
 
-            Ok(value)
-          }
-        }
-      )*
-    )*
-  };
+                    Ok(value)
+                }
+            }
+        )*
+        $(
+            $(
+                impl FromKbinString for [$type; $count] {
+                    fn from_kbin_string(input: &str) -> Result<Self> {
+                        let mut value = Self::default();
+
+                        parse_tuple(concat!("[", stringify!($type), "; ", stringify!($count), "]"), input, &mut value)?;
+
+                        Ok(value)
+                    }
+                }
+            )*
+        )*
+    };
 }
 
 basic_int_parse! {
-  i8, u8,
-  i16, u16,
-  i32, u32,
-  i64, u64,
+    i8, u8,
+    i16, u16,
+    i32, u32,
+    i64, u64,
 }
 
 basic_float_parse! {
-  f32, f64,
+    f32, f64,
 }
 
 tuple_parse! {
-  bool: [2, 3, 4, 16],
-  multi: [
-    [i8; 2, 3, 4, 16],
-    [u8; 2, 3, 4, 16],
-    [i16; 2, 3, 4, 8],
-    [u16; 2, 3, 4, 8],
-    [i32; 2, 3, 4],
-    [u32; 2, 3, 4],
-    [i64; 2, 3, 4],
-    [u64; 2, 3, 4],
-    [f32; 2, 3, 4],
-    [f64; 2, 3, 4],
-  ]
+    bool: [2, 3, 4, 16],
+    multi: [
+        [i8; 2, 3, 4, 16],
+        [u8; 2, 3, 4, 16],
+        [i16; 2, 3, 4, 8],
+        [u16; 2, 3, 4, 8],
+        [i32; 2, 3, 4],
+        [u32; 2, 3, 4],
+        [i64; 2, 3, 4],
+        [u64; 2, 3, 4],
+        [f32; 2, 3, 4],
+        [f64; 2, 3, 4],
+    ]
 }
