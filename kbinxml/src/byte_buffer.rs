@@ -151,13 +151,13 @@ impl ByteBufferRead {
 
         self.cursor
             .seek(SeekFrom::Current(size as i64))
-            .context(ReadSizeSeek { size })?;
+            .context(ReadSizeSeekSnafu { size })?;
 
         Ok(data)
     }
 
     pub fn buf_read(&mut self) -> Result<Bytes, ByteBufferError> {
-        let size = self.cursor.read_u32::<BigEndian>().context(ReadSize)?;
+        let size = self.cursor.read_u32::<BigEndian>().context(ReadSizeSnafu)?;
         debug!(
             "buf_read => index: {}, size: {}",
             self.cursor.position(),
@@ -208,7 +208,7 @@ impl ByteBufferRead {
                 let data = self
                     .buf_read_size(size as usize)
                     .map_err(Box::new)
-                    .context(ReadAligned { size })?;
+                    .context(ReadAlignedSnafu { size })?;
                 self.realign_reads(None)?;
 
                 (false, data)
@@ -226,7 +226,7 @@ impl ByteBufferRead {
             if old_pos < trailing {
                 self.cursor
                     .seek(SeekFrom::Start(trailing as u64))
-                    .context(SeekOffset { offset: trailing })?;
+                    .context(SeekOffsetSnafu { offset: trailing })?;
                 self.realign_reads(None)?;
             }
         }
@@ -245,7 +245,7 @@ impl ByteBufferRead {
         while self.cursor.position() % size > 0 {
             self.cursor
                 .seek(SeekFrom::Current(1))
-                .context(SeekForward { size: 1usize })?;
+                .context(SeekForwardSnafu { size: 1usize })?;
         }
         trace!("realign_reads => realigned to: {}", self.cursor.position());
 
@@ -279,14 +279,14 @@ impl ByteBufferWrite {
     pub fn buf_write(&mut self, data: &[u8]) -> Result<(), ByteBufferError> {
         self.buffer
             .write_u32::<BigEndian>(data.len() as u32)
-            .context(WriteLength { len: data.len() })?;
+            .context(WriteLengthSnafu { len: data.len() })?;
         debug!(
             "buf_write => index: {}, size: {}",
             self.buffer.position(),
             data.len()
         );
 
-        self.buffer.write_all(data).context(WriteDataBlock)?;
+        self.buffer.write_all(data).context(WriteDataBlockSnafu)?;
         trace!(
             "buf_write => index: {}, size: {}, data: 0x{:02x?}",
             self.buffer.position(),
@@ -306,7 +306,7 @@ impl ByteBufferWrite {
             data.as_bytes()
         );
 
-        let bytes = encoding.encode_bytes(data).context(StringEncode)?;
+        let bytes = encoding.encode_bytes(data).context(StringEncodeSnafu)?;
         self.buf_write(&bytes)?;
 
         Ok(())
@@ -347,17 +347,17 @@ impl ByteBufferWrite {
                 if self.offset_1 % 4 == 0 {
                     self.buffer
                         .write_u32::<BigEndian>(0)
-                        .context(WritePadding { size: 4usize })?;
+                        .context(WritePaddingSnafu { size: 4usize })?;
                 }
 
                 self.buffer
                     .seek(SeekFrom::Start(self.offset_1))
-                    .context(SeekOffset {
+                    .context(SeekOffsetSnafu {
                         offset: self.offset_1 as usize,
                     })?;
                 self.buffer
                     .write_u8(data[0])
-                    .context(WriteDataByte { offset: 1usize })?;
+                    .context(WriteDataByteSnafu { offset: 1usize })?;
                 self.offset_1 += 1;
 
                 true
@@ -367,26 +367,26 @@ impl ByteBufferWrite {
                 if self.offset_2 % 4 == 0 {
                     self.buffer
                         .write_u32::<BigEndian>(0)
-                        .context(WritePadding { size: 4usize })?;
+                        .context(WritePaddingSnafu { size: 4usize })?;
                 }
 
                 self.buffer
                     .seek(SeekFrom::Start(self.offset_2))
-                    .context(SeekOffset {
+                    .context(SeekOffsetSnafu {
                         offset: self.offset_2 as usize,
                     })?;
                 self.buffer
                     .write_u8(data[0])
-                    .context(WriteDataByte { offset: 1usize })?;
+                    .context(WriteDataByteSnafu { offset: 1usize })?;
                 self.buffer
                     .write_u8(data[1])
-                    .context(WriteDataByte { offset: 2usize })?;
+                    .context(WriteDataByteSnafu { offset: 2usize })?;
                 self.offset_2 += 2;
 
                 true
             },
             _ => {
-                self.buffer.write_all(data).context(WriteDataBlock)?;
+                self.buffer.write_all(data).context(WriteDataBlockSnafu)?;
                 self.realign_writes(None)?;
 
                 false
@@ -396,7 +396,7 @@ impl ByteBufferWrite {
         if check_old {
             self.buffer
                 .seek(SeekFrom::Start(old_pos))
-                .context(SeekOffset {
+                .context(SeekOffsetSnafu {
                     offset: old_pos as usize,
                 })?;
 
@@ -409,7 +409,7 @@ impl ByteBufferWrite {
             if old_pos < trailing {
                 self.buffer
                     .seek(SeekFrom::Start(trailing))
-                    .context(SeekOffset {
+                    .context(SeekOffsetSnafu {
                         offset: trailing as usize,
                     })?;
                 self.realign_writes(None)?;
@@ -430,7 +430,7 @@ impl ByteBufferWrite {
         while self.buffer.position() % size > 0 {
             self.buffer
                 .write_u8(0)
-                .context(WritePadding { size: 1usize })?;
+                .context(WritePaddingSnafu { size: 1usize })?;
         }
 
         trace!("realign_writes => realigned to: {}", self.buffer.position());

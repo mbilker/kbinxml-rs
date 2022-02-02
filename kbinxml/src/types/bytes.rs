@@ -23,7 +23,7 @@ impl IntoKbinBytes for i8 {
 
 impl FromKbinBytes for i8 {
     fn from_kbin_bytes<R: Read>(input: &mut R) -> Result<Self> {
-        input.read_i8().context(DataConvert)
+        input.read_i8().context(DataConvertSnafu)
     }
 }
 
@@ -35,7 +35,7 @@ impl IntoKbinBytes for u8 {
 
 impl FromKbinBytes for u8 {
     fn from_kbin_bytes<R: Read>(input: &mut R) -> Result<Self> {
-        input.read_u8().context(DataConvert)
+        input.read_u8().context(DataConvertSnafu)
     }
 }
 
@@ -72,7 +72,7 @@ impl IntoKbinBytes for Ipv4Addr {
 impl FromKbinBytes for Ipv4Addr {
     fn from_kbin_bytes<R: Read>(input: &mut R) -> Result<Self> {
         let mut octets = [0; 4];
-        input.read_exact(&mut octets).context(DataConvert)?;
+        input.read_exact(&mut octets).context(DataConvertSnafu)?;
 
         Ok(Ipv4Addr::from(octets))
     }
@@ -91,7 +91,7 @@ macro_rules! multibyte_impl {
 
       impl FromKbinBytes for $type {
         fn from_kbin_bytes<R: Read>(input: &mut R) -> Result<Self> {
-          input.$read_method::<BigEndian>().context(DataConvert)
+          input.$read_method::<BigEndian>().context(DataConvertSnafu)
         }
       }
     )*
@@ -119,7 +119,7 @@ macro_rules! tuple_impl {
       impl FromKbinBytes for [i8; $i8_count] {
         fn from_kbin_bytes<R: Read>(input: &mut R) -> Result<Self> {
           let mut values = Self::default();
-          input.read_i8_into(&mut values).context(DataConvert)?;
+          input.read_i8_into(&mut values).context(DataConvertSnafu)?;
 
           Ok(values)
         }
@@ -135,7 +135,7 @@ macro_rules! tuple_impl {
       impl FromKbinBytes for [u8; $u8_count] {
         fn from_kbin_bytes<R: Read>(input: &mut R) -> Result<Self> {
           let mut values = Self::default();
-          input.read_exact(&mut values).context(DataConvert)?;
+          input.read_exact(&mut values).context(DataConvertSnafu)?;
 
           Ok(values)
         }
@@ -175,7 +175,7 @@ macro_rules! tuple_impl {
         impl FromKbinBytes for [$type; $count] {
           fn from_kbin_bytes<R: Read>(input: &mut R) -> Result<Self> {
             let mut values = Self::default();
-            input.$read_method::<BigEndian>(&mut values).context(DataConvert)?;
+            input.$read_method::<BigEndian>(&mut values).context(DataConvertSnafu)?;
 
             Ok(values)
           }

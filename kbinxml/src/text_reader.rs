@@ -148,16 +148,17 @@ impl<'a> TextXmlReader<'a> {
                     if attr.key == b"__type" {
                         let value = str::from_utf8(&*value)?;
 
-                        node_type = Some(StandardType::from_name(value).context(InvalidKbinType)?);
+                        node_type =
+                            Some(StandardType::from_name(value).context(InvalidKbinTypeSnafu)?);
                     } else if attr.key == b"__count" {
                         let value = str::from_utf8(&*value)?;
-                        let num_count = value.parse::<u32>().context(ParseArrayCount)?;
+                        let num_count = value.parse::<u32>().context(ParseArrayCountSnafu)?;
 
                         count = num_count as usize;
                     } else if attr.key == b"__size" {
                         let value = str::from_utf8(&*value)?
                             .parse::<usize>()
-                            .context(ParseBinarySize)?;
+                            .context(ParseBinarySizeSnafu)?;
 
                         size = Some(value);
                     } else {
@@ -229,7 +230,7 @@ impl<'a> TextXmlReader<'a> {
             node_type => {
                 let text = str::from_utf8(&*data)?;
                 let value = Value::from_string(node_type, text, definition.is_array, count)
-                    .context(ValueDecode { node_type })?;
+                    .context(ValueDecodeSnafu { node_type })?;
 
                 // The read number of bytes must match the size attribute, if set
                 if let Value::Binary(data) = &value {
@@ -243,7 +244,7 @@ impl<'a> TextXmlReader<'a> {
                     }
                 }
 
-                Bytes::from(value.to_bytes().context(ValueEncode { node_type })?)
+                Bytes::from(value.to_bytes().context(ValueEncodeSnafu { node_type })?)
             },
         };
 
@@ -309,7 +310,7 @@ impl<'a> TextXmlReader<'a> {
                 Event::Decl(e) => {
                     if let Some(encoding) = e.encoding() {
                         self.encoding =
-                            EncodingType::from_label(&encoding?).context(InvalidEncoding)?;
+                            EncodingType::from_label(&encoding?).context(InvalidEncodingSnafu)?;
                     }
                 },
                 Event::Eof => break,

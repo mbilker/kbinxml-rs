@@ -37,7 +37,7 @@ where
         output[i] = part
             .parse::<T>()
             .map_err(|e| Box::new(e) as Box<(dyn Error + Send + Sync + 'static)>)
-            .context(StringParse { node_type })?;
+            .context(StringParseSnafu { node_type })?;
     }
 
     Ok(())
@@ -71,7 +71,7 @@ impl FromKbinString for Ipv4Addr {
 
         // IP addresses are split by a period, so do not use `parse_tuple`
         for (i, part) in input.split('.').enumerate() {
-            octets[i] = part.parse::<u8>().context(StringParseInt {
+            octets[i] = part.parse::<u8>().context(StringParseIntSnafu {
                 node_type: "Ipv4Addr",
             })?;
         }
@@ -91,10 +91,10 @@ macro_rules! basic_int_parse {
 
           if input.starts_with("0x") {
             <$type>::from_str_radix(&input[2..], 16)
-              .context(StringParseInt { node_type: stringify!($type) })
+              .context(StringParseIntSnafu { node_type: stringify!($type) })
           } else {
             input.parse::<$type>()
-              .context(StringParseInt { node_type: stringify!($type) })
+              .context(StringParseIntSnafu { node_type: stringify!($type) })
           }
         }
       }
@@ -112,7 +112,7 @@ macro_rules! basic_float_parse {
           space_check(input)?;
 
           input.parse::<$type>()
-            .context(StringParseFloat { node_type: stringify!($type) })
+            .context(StringParseFloatSnafu { node_type: stringify!($type) })
         }
       }
     )*

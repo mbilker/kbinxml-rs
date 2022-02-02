@@ -130,16 +130,18 @@ fn write_value(
             let size = (data.len() * node_type.size) as u32;
             data_buf
                 .write_u32::<BigEndian>(size)
-                .context(NodeSize { node_type, size })?;
-            data_buf.write_all(&data).context(DataWrite { node_type })?;
+                .context(NodeSizeSnafu { node_type, size })?;
+            data_buf
+                .write_all(&data)
+                .context(DataWriteSnafu { node_type })?;
             data_buf
                 .realign_writes(None)
-                .context(DataBuffer { node_type })?;
+                .context(DataBufferSnafu { node_type })?;
         },
         Value::String(text) => {
             data_buf
                 .write_str(options.encoding, &text)
-                .context(DataBuffer { node_type })?;
+                .context(DataBufferSnafu { node_type })?;
         },
         Value::Array(values) => {
             if !is_array {
@@ -151,28 +153,30 @@ fn write_value(
             let mut data = Vec::with_capacity(total_size);
             values
                 .to_bytes_into(&mut data)
-                .context(ValueEncode { node_type })?;
+                .context(ValueEncodeSnafu { node_type })?;
 
             data_buf
                 .write_u32::<BigEndian>(total_size as u32)
-                .context(NodeSize {
+                .context(NodeSizeSnafu {
                     node_type,
                     size: total_size as u32,
                 })?;
-            data_buf.write_all(&data).context(DataWrite { node_type })?;
+            data_buf
+                .write_all(&data)
+                .context(DataWriteSnafu { node_type })?;
             data_buf
                 .realign_writes(None)
-                .context(DataBuffer { node_type })?;
+                .context(DataBufferSnafu { node_type })?;
         },
         value => {
             if is_array {
                 panic!("Attempted to write non-array value but was marked as array");
             }
 
-            let data = value.to_bytes().context(ValueEncode { node_type })?;
+            let data = value.to_bytes().context(ValueEncodeSnafu { node_type })?;
             data_buf
                 .write_aligned(node_type, &data)
-                .context(DataBuffer { node_type })?;
+                .context(DataBufferSnafu { node_type })?;
         },
     };
 
@@ -200,7 +204,7 @@ impl Writeable for NodeCollection {
         let name = self
             .base()
             .key()
-            .context(DefinitionValue { node_type })?
+            .context(DefinitionValueSnafu { node_type })?
             .ok_or(WriterError::NoNodeKey)?;
 
         debug!("NodeCollection write_node => name: {}, type: {:?}, type_size: {}, type_count: {}, is_array: {}",
@@ -212,32 +216,33 @@ impl Writeable for NodeCollection {
 
         node_buf
             .write_u8(node_type as u8 | array_mask)
-            .context(DataWrite { node_type })?;
+            .context(DataWriteSnafu { node_type })?;
 
         match options.compression {
             CompressionType::Compressed => {
-                Sixbit::pack(&mut **node_buf, &name).context(NodeSixbitName)?
+                Sixbit::pack(&mut **node_buf, &name).context(NodeSixbitNameSnafu)?
             },
             CompressionType::Uncompressed => {
-                let data =
-                    options
-                        .encoding
-                        .encode_bytes(&name)
-                        .context(NodeUncompressedNameEncode {
-                            encoding: options.encoding,
-                        })?;
+                let data = options.encoding.encode_bytes(&name).context(
+                    NodeUncompressedNameEncodeSnafu {
+                        encoding: options.encoding,
+                    },
+                )?;
                 let len = (data.len() - 1) as u8;
                 node_buf
                     .write_u8(len | ARRAY_MASK)
-                    .context(NodeUncompressedNameLength)?;
+                    .context(NodeUncompressedNameLengthSnafu)?;
                 node_buf
                     .write_all(&data)
-                    .context(NodeUncompressedNameData)?;
+                    .context(NodeUncompressedNameDataSnafu)?;
             },
         };
 
         if node_type != StandardType::NodeStart {
-            let value = self.base().value().context(DefinitionValue { node_type })?;
+            let value = self
+                .base()
+                .value()
+                .context(DefinitionValueSnafu { node_type })?;
             write_value(options, data_buf, node_type, is_array, &value)?;
         }
 
@@ -245,7 +250,7 @@ impl Writeable for NodeCollection {
             let node_type = StandardType::Attribute;
             let key = attr
                 .key()
-                .context(DefinitionKey { node_type })?
+                .context(DefinitionKeySnafu { node_type })?
                 .ok_or(WriterError::NoNodeKey)?;
             let value = attr.value_bytes().ok_or(WriterError::NoNodeValue)?;
 
@@ -257,29 +262,29 @@ impl Writeable for NodeCollection {
 
             data_buf
                 .buf_write(value)
-                .context(DataBuffer { node_type })?;
+                .context(DataBufferSnafu { node_type })?;
 
             node_buf
                 .write_u8(StandardType::Attribute as u8)
-                .context(DataWrite { node_type })?;
+                .context(DataWriteSnafu { node_type })?;
 
             match options.compression {
                 CompressionType::Compressed => {
-                    Sixbit::pack(&mut **node_buf, &key).context(NodeSixbitName)?
+                    Sixbit::pack(&mut **node_buf, &key).context(NodeSixbitNameSnafu)?
                 },
                 CompressionType::Uncompressed => {
                     let data = options.encoding.encode_bytes(&key).context(
-                        NodeUncompressedNameEncode {
+                        NodeUncompressedNameEncodeSnafu {
                             encoding: options.encoding,
                         },
                     )?;
                     let len = (data.len() - 1) as u8;
                     node_buf
                         .write_u8(len | ARRAY_MASK)
-                        .context(NodeUncompressedNameLength)?;
+                        .context(NodeUncompressedNameLengthSnafu)?;
                     node_buf
                         .write_all(&data)
-                        .context(NodeUncompressedNameData)?;
+                        .context(NodeUncompressedNameDataSnafu)?;
                 },
             };
         }
@@ -291,7 +296,7 @@ impl Writeable for NodeCollection {
         // node end always has the array bit set
         node_buf
             .write_u8(StandardType::NodeEnd as u8 | ARRAY_MASK)
-            .context(NodeType {
+            .context(NodeTypeSnafu {
                 node_type: StandardType::NodeEnd,
             })?;
 
@@ -324,26 +329,26 @@ impl Writeable for Node {
 
         node_buf
             .write_u8(node_type as u8 | array_mask)
-            .context(DataWrite {
+            .context(DataWriteSnafu {
                 node_type: node_type,
             })?;
         match options.compression {
             CompressionType::Compressed => {
-                Sixbit::pack(&mut **node_buf, &self.key()).context(NodeSixbitName)?
+                Sixbit::pack(&mut **node_buf, &self.key()).context(NodeSixbitNameSnafu)?
             },
             CompressionType::Uncompressed => {
                 let data = options.encoding.encode_bytes(&self.key()).context(
-                    NodeUncompressedNameEncode {
+                    NodeUncompressedNameEncodeSnafu {
                         encoding: options.encoding,
                     },
                 )?;
                 let len = (data.len() - 1) as u8;
                 node_buf
                     .write_u8(len | ARRAY_MASK)
-                    .context(NodeUncompressedNameLength)?;
+                    .context(NodeUncompressedNameLengthSnafu)?;
                 node_buf
                     .write_all(&data)
-                    .context(NodeUncompressedNameData)?;
+                    .context(NodeUncompressedNameDataSnafu)?;
             },
         };
 
@@ -356,31 +361,31 @@ impl Writeable for Node {
 
             data_buf
                 .write_str(options.encoding, value)
-                .context(DataBuffer { node_type })?;
+                .context(DataBufferSnafu { node_type })?;
 
             node_buf
                 .write_u8(StandardType::Attribute as u8)
-                .context(DataWrite {
+                .context(DataWriteSnafu {
                     node_type: StandardType::Attribute,
                 })?;
 
             match options.compression {
                 CompressionType::Compressed => {
-                    Sixbit::pack(&mut **node_buf, &key).context(NodeSixbitName)?
+                    Sixbit::pack(&mut **node_buf, &key).context(NodeSixbitNameSnafu)?
                 },
                 CompressionType::Uncompressed => {
                     let data = options.encoding.encode_bytes(&key).context(
-                        NodeUncompressedNameEncode {
+                        NodeUncompressedNameEncodeSnafu {
                             encoding: options.encoding,
                         },
                     )?;
                     let len = (data.len() - 1) as u8;
                     node_buf
                         .write_u8(len | ARRAY_MASK)
-                        .context(NodeUncompressedNameLength)?;
+                        .context(NodeUncompressedNameLengthSnafu)?;
                     node_buf
                         .write_all(&data)
-                        .context(NodeUncompressedNameData)?;
+                        .context(NodeUncompressedNameDataSnafu)?;
                 },
             };
         }
@@ -392,7 +397,7 @@ impl Writeable for Node {
         // node end always has the array bit set
         node_buf
             .write_u8(StandardType::NodeEnd as u8 | ARRAY_MASK)
-            .context(NodeType {
+            .context(NodeTypeSnafu {
                 node_type: StandardType::NodeEnd,
             })?;
 
@@ -420,14 +425,16 @@ impl Writer {
         T: Writeable,
     {
         let mut header = Cursor::new(Vec::with_capacity(8));
-        header.write_u8(SIGNATURE).context(Signature)?;
+        header.write_u8(SIGNATURE).context(SignatureSnafu)?;
 
         let compression = self.options.compression.to_byte();
-        header.write_u8(compression).context(Compression)?;
+        header.write_u8(compression).context(CompressionSnafu)?;
 
         let encoding = self.options.encoding.to_byte();
-        header.write_u8(encoding).context(Encoding)?;
-        header.write_u8(0xFF ^ encoding).context(EncodingNegate)?;
+        header.write_u8(encoding).context(EncodingSnafu)?;
+        header
+            .write_u8(0xFF ^ encoding)
+            .context(EncodingNegateSnafu)?;
 
         let mut node_buf = ByteBufferWrite::new(Vec::new());
         let mut data_buf = ByteBufferWrite::new(Vec::new());
@@ -436,10 +443,10 @@ impl Writer {
 
         node_buf
             .write_u8(StandardType::FileEnd as u8 | ARRAY_MASK)
-            .context(NodeType {
+            .context(NodeTypeSnafu {
                 node_type: StandardType::FileEnd,
             })?;
-        node_buf.realign_writes(None).context(NodeBuffer {
+        node_buf.realign_writes(None).context(NodeBufferSnafu {
             node_type: StandardType::FileEnd,
         })?;
 
@@ -452,7 +459,7 @@ impl Writer {
         );
         output
             .write_u32::<BigEndian>(node_buf.len() as u32)
-            .context(NodeBufferLength)?;
+            .context(NodeBufferLengthSnafu)?;
         output.extend_from_slice(&node_buf);
 
         let data_buf = data_buf.into_inner();
@@ -462,7 +469,7 @@ impl Writer {
         );
         output
             .write_u32::<BigEndian>(data_buf.len() as u32)
-            .context(DataBufferLength)?;
+            .context(DataBufferLengthSnafu)?;
         output.extend_from_slice(&data_buf);
 
         Ok(output)

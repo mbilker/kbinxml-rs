@@ -49,7 +49,7 @@ impl Sixbit {
     where
         T: Read,
     {
-        let sixbit_len = reader.read_u8().context(LengthRead)?;
+        let sixbit_len = reader.read_u8().context(LengthReadSnafu)?;
         let real_len = (f32::from(sixbit_len * 6) / 8f32).ceil();
         let real_len = (real_len as u32) as usize;
         debug!("sixbit_len: {}, real_len: {}", sixbit_len, real_len);
@@ -85,8 +85,8 @@ impl Sixbit {
             }
         }
 
-        writer.write_u8(len as u8).context(LengthWrite)?;
-        writer.write_all(&bytes).context(DataWrite)?;
+        writer.write_u8(len as u8).context(LengthWriteSnafu)?;
+        writer.write_all(&bytes).context(DataWriteSnafu)?;
 
         Ok(())
     }

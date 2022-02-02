@@ -121,7 +121,7 @@ impl EncodingType {
         // ASCII only goes up to 0x7F
         match input.iter().position(|&ch| ch >= 0x80) {
             Some(index) => Err(EncodingError::InvalidAscii { index }),
-            None => String::from_utf8(input.to_vec()).context(InvalidUtf8),
+            None => String::from_utf8(input.to_vec()).context(InvalidUtf8Snafu),
         }
     }
 
@@ -181,7 +181,7 @@ impl EncodingType {
     pub fn decode_bytes(&self, input: &[u8]) -> Result<String, EncodingError> {
         match *self {
             EncodingType::None | EncodingType::UTF_8 => {
-                String::from_utf8(input.to_vec()).context(InvalidUtf8)
+                String::from_utf8(input.to_vec()).context(InvalidUtf8Snafu)
             },
 
             EncodingType::ASCII => Self::decode_ascii(input),

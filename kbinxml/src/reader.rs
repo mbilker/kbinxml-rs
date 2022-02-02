@@ -98,17 +98,18 @@ impl Reader {
     pub fn new(input: Bytes) -> Result<Self, ReaderError> {
         let mut header = Cursor::new(&input);
 
-        let signature = header.read_u8().context(Signature)?;
+        let signature = header.read_u8().context(SignatureSnafu)?;
         if signature != SIGNATURE {
             return Err(ReaderError::InvalidSignature { signature });
         }
 
-        let compress_byte = header.read_u8().context(Compression)?;
-        let compression = CompressionType::from_byte(compress_byte).context(InvalidCompression)?;
+        let compress_byte = header.read_u8().context(CompressionSnafu)?;
+        let compression =
+            CompressionType::from_byte(compress_byte).context(InvalidCompressionSnafu)?;
 
-        let encoding_byte = header.read_u8().context(Encoding)?;
-        let encoding_negation = header.read_u8().context(EncodingNegate)?;
-        let encoding = EncodingType::from_byte(encoding_byte).context(InvalidEncoding)?;
+        let encoding_byte = header.read_u8().context(EncodingSnafu)?;
+        let encoding_negation = header.read_u8().context(EncodingNegateSnafu)?;
+        let encoding = EncodingType::from_byte(encoding_byte).context(InvalidEncodingSnafu)?;
         if encoding_negation != !encoding_byte {
             return Err(ReaderError::MismatchedEncoding);
         }
@@ -118,15 +119,19 @@ impl Reader {
             signature, compress_byte, compression, encoding_byte, encoding
         );
 
-        let len_node = header.read_u32::<BigEndian>().context(NodeBufferLength)?;
+        let len_node = header
+            .read_u32::<BigEndian>()
+            .context(NodeBufferLengthSnafu)?;
         info!("len_node: {0} (0x{0:x})", len_node);
 
         // The length of the data buffer is the 4 bytes right after the node buffer.
         header
             .seek(SeekFrom::Current(len_node as i64))
-            .context(DataLengthSeek { len_node })?;
+            .context(DataLengthSeekSnafu { len_node })?;
 
-        let len_data = header.read_u32::<BigEndian>().context(DataBufferLength)?;
+        let len_data = header
+            .read_u32::<BigEndian>()
+            .context(DataBufferLengthSnafu)?;
         info!("len_data: {0} (0x{0:x})", len_data);
 
         // We have read 8 bytes so far, so offset the start of the node buffer from
@@ -152,7 +157,7 @@ impl Reader {
         let is_array = raw_node_type & ARRAY_MASK == ARRAY_MASK;
         let node_type = raw_node_type & !ARRAY_MASK;
 
-        let xml_type = StandardType::from_u8(node_type).context(InvalidNodeType)?;
+        let xml_type = StandardType::from_u8(node_type).context(InvalidNodeTypeSnafu)?;
         debug!(
             "Reader::parse_node_type() => raw_node_type: {}, node_type: {:?} ({}), is_array: {}",
             raw_node_type, xml_type, node_type, is_array
@@ -177,7 +182,7 @@ impl Reader {
     pub fn read_node_type(&mut self) -> Result<(StandardType, bool), ReaderError> {
         self.check_if_node_buffer_end()?;
 
-        let raw_node_type = self.node_buf.read_u8().context(NodeType)?;
+        let raw_node_type = self.node_buf.read_u8().context(NodeTypeSnafu)?;
         let value = Self::parse_node_type(raw_node_type)?;
 
         Ok(value)
@@ -195,27 +200,31 @@ impl Reader {
         );
 
         let value = match node_type {
-            StandardType::Attribute | StandardType::String => {
-                self.data_buf.buf_read().context(DataBuffer { node_type })?
-            },
-            StandardType::Binary => self.read_bytes().context(DataBuffer { node_type })?,
+            StandardType::Attribute | StandardType::String => self
+                .data_buf
+                .buf_read()
+                .context(DataBufferSnafu { node_type })?,
+            StandardType::Binary => self.read_bytes().context(DataBufferSnafu { node_type })?,
             StandardType::NodeStart | StandardType::NodeEnd | StandardType::FileEnd => Bytes::new(),
             node_type if is_array => {
-                let arr_size = self.data_buf.read_u32::<BigEndian>().context(ArrayLength)?;
+                let arr_size = self
+                    .data_buf
+                    .read_u32::<BigEndian>()
+                    .context(ArrayLengthSnafu)?;
                 let data = self
                     .data_buf
                     .get(arr_size)
-                    .context(DataBuffer { node_type })?;
+                    .context(DataBufferSnafu { node_type })?;
                 self.data_buf
                     .realign_reads(None)
-                    .context(DataBuffer { node_type })?;
+                    .context(DataBufferSnafu { node_type })?;
 
                 data
             },
             node_type => self
                 .data_buf
                 .get_aligned(node_type)
-                .context(DataBuffer { node_type })?,
+                .context(DataBufferSnafu { node_type })?,
         };
         debug!(
             "Reader::read_node_data(node_type: {:?}, is_array: {}) => value: 0x{:02x?}",
@@ -237,22 +246,23 @@ impl Reader {
             _ => {
                 let key = match self.compression {
                     CompressionType::Compressed => {
-                        let size = Sixbit::size(&mut *self.node_buf).context(NodeSixbitName)?;
+                        let size =
+                            Sixbit::size(&mut *self.node_buf).context(NodeSixbitNameSnafu)?;
                         let data = self
                             .node_buf
                             .get(size.real_len as u32)
-                            .context(NodeBuffer { node_type })?;
+                            .context(NodeBufferSnafu { node_type })?;
 
                         Key::Compressed { size, data }
                     },
                     CompressionType::Uncompressed => {
                         let encoding = self.encoding;
                         let length =
-                            (self.node_buf.read_u8().context(NameLength)? & !ARRAY_MASK) + 1;
+                            (self.node_buf.read_u8().context(NameLengthSnafu)? & !ARRAY_MASK) + 1;
                         let data = self
                             .node_buf
                             .get(length as u32)
-                            .context(NodeBuffer { node_type })?;
+                            .context(NodeBufferSnafu { node_type })?;
 
                         Key::Uncompressed { encoding, data }
                     },
@@ -273,7 +283,7 @@ impl Reader {
         let value = self
             .data_buf
             .read_u32::<BigEndian>()
-            .context(DataRead { size: 4usize })?;
+            .context(DataReadSnafu { size: 4usize })?;
         debug!("Reader::read_u32() => result: {}", value);
 
         Ok(value)

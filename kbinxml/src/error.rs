@@ -19,7 +19,7 @@ use crate::writer::WriterError;
 pub type Result<T> = StdResult<T, KbinError>;
 
 #[derive(Debug, Snafu)]
-#[snafu(visibility = "pub(crate)")]
+#[snafu(visibility(pub(crate)))]
 pub enum KbinError {
     #[snafu(display("Unable to read bytes or not enough data read"))]
     DataConvert { source: io::Error },
@@ -58,7 +58,7 @@ pub enum KbinError {
     },
 
     #[snafu(display("Unable to convert from hexadecimal"))]
-    HexError { source: FromHexError },
+    Hex { source: FromHexError },
 
     #[snafu(display("Type mismatch, expected: {}, found: {}", expected, found))]
     TypeMismatch {

@@ -7,7 +7,7 @@ use std::net::Ipv4Addr;
 use rustc_hex::FromHex;
 use snafu::ResultExt;
 
-use crate::error::*;
+use crate::error::{HexSnafu, KbinError, Result};
 use crate::node_types::StandardType;
 use crate::types::{FromKbinBytes, FromKbinString, IntoKbinBytes};
 
@@ -174,10 +174,7 @@ macro_rules! tuple {
         StandardType::U32 => u32::from_kbin_string(input).map(Value::U32)?,
         StandardType::S64 => i64::from_kbin_string(input).map(Value::S64)?,
         StandardType::U64 => u64::from_kbin_string(input).map(Value::U64)?,
-        StandardType::Binary => {
-          let data: Vec<u8> = input.from_hex().context(HexError)?;
-          Value::Binary(data)
-        },
+        StandardType::Binary => input.from_hex().map(Value::Binary).context(HexSnafu)?,
         StandardType::String => Value::String(input.to_owned()),
         StandardType::Attribute => Value::Attribute(input.to_owned()),
         StandardType::Ip4 => Ipv4Addr::from_kbin_string(input).map(Value::Ip4)?,
