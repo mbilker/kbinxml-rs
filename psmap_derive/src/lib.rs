@@ -411,44 +411,50 @@ impl PsmapOutput {
                 });
 
                 self.definitions.append_all(quote_spanned! {attr.span()=>
-                  let mut #target = None;
+                    let mut #target = None;
                 });
                 body.append_all(quote_spanned! {attr.span()=>
-                  #target = Some(child.attr(#attr).ok_or(::psmap::PsmapError::AttributeNotFound {
-                    attribute: #attr,
-                    source_name: #source,
-                    struct_name: stringify!(#struct_name),
-                  })?
-                  .parse#target_type()
-                  .map_err(|source| ::psmap::PsmapError::AttributeParse {
-                    attribute: #attr,
-                    source_name: #source,
-                    struct_name: stringify!(#struct_name),
-                    source: Box::new(source),
-                  })?);
+                    #target = Some(
+                        child
+                            .attributes()
+                            .get(#attr)
+                            .ok_or(::psmap::PsmapError::AttributeNotFound {
+                                attribute: #attr,
+                                source_name: #source,
+                                struct_name: stringify!(#struct_name),
+                            })?
+                            .parse#target_type()
+                            .map_err(|source| ::psmap::PsmapError::AttributeParse {
+                                attribute: #attr,
+                                source_name: #source,
+                                struct_name: stringify!(#struct_name),
+                                source: Box::new(source),
+                            })?
+                    );
                 });
                 self.fields.append_all(quote_spanned! {target.span()=>
-                  #target: #target.ok_or(::psmap::PsmapError::FieldNotFoundFromSource {
-                    target: stringify!(#target),
-                    source_name: #source,
-                    struct_name: stringify!(#struct_name),
-                  })?,
+                    #target: #target.ok_or(::psmap::PsmapError::FieldNotFoundFromSource {
+                        target: stringify!(#target),
+                        source_name: #source,
+                        struct_name: stringify!(#struct_name),
+                    })?,
                 });
             }
         }
 
         let inner_loop: Option<TokenStream2> = if let Some(subnodes) = subnodes {
             let input = Ident::new("child", source.span());
+
             Some(self.create_input_loop(&input, subnodes.iter()))
         } else {
             None
         };
 
         quote_spanned! {source.span()=>
-          #source => {
-            #body
-            #inner_loop
-          },
+            #source => {
+                #body
+                #inner_loop
+            },
         }
     }
 
@@ -464,12 +470,12 @@ impl PsmapOutput {
         }
 
         quote! {
-          for child in #input.children_iter() {
-            match child.key() {
-              #mapping_tokens
-              _ => {},
-            };
-          }
+            for child in #input.children() {
+                match child.key() {
+                    #mapping_tokens
+                    _ => {},
+                };
+            }
         }
     }
 }
@@ -497,17 +503,17 @@ pub fn psmap(input: TokenStream) -> TokenStream {
     let fields = output.fields;
 
     let output = quote! {
-      {
-        use std::convert::TryInto;
+        {
+            use std::convert::TryInto;
 
-        #definitions
-        #loops
+            #definitions
+            #loops
 
-        #struct_name {
-          #includes
-          #fields
+            #struct_name {
+                #includes
+                #fields
+            }
         }
-      }
     };
     //eprintln!("output: {}", output);
 
