@@ -1,5 +1,4 @@
 use std::fmt;
-use std::iter::IntoIterator;
 use std::mem;
 
 use indexmap::IndexMap;
@@ -27,29 +26,22 @@ fn parse_index(s: &str) -> Option<usize> {
     s.parse().ok()
 }
 
-pub struct OptionIterator<T: IntoIterator> {
-    inner: Option<T::IntoIter>,
-}
-
 #[derive(Clone, Default, PartialEq)]
 pub struct Node {
     key: String,
-    attributes: Option<IndexMap<String, String>>,
-    children: Option<Vec<Node>>,
+    attributes: IndexMap<String, String>,
+    children: Vec<Node>,
     value: Option<Value>,
 }
 
 impl fmt::Debug for Node {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut d = f.debug_struct("Node");
-        d.field("key", &self.key);
 
-        if let Some(ref attributes) = self.attributes {
-            d.field("attributes", attributes);
-        }
-        if let Some(ref children) = self.children {
-            d.field("children", children);
-        }
+        d.field("key", &self.key);
+        d.field("attributes", &self.attributes);
+        d.field("children", &self.children);
+
         if let Some(ref value) = self.value {
             d.field("value", value);
         }
@@ -65,8 +57,8 @@ impl Node {
     {
         Self {
             key: key.into(),
-            attributes: None,
-            children: None,
+            attributes: IndexMap::new(),
+            children: Vec::new(),
             value: None,
         }
     }
@@ -77,8 +69,8 @@ impl Node {
     {
         Self {
             key: key.into(),
-            attributes: Some(convert_attributes(attrs)),
-            children: None,
+            attributes: convert_attributes(attrs),
+            children: Vec::new(),
             value: None,
         }
     }
@@ -89,8 +81,8 @@ impl Node {
     {
         Self {
             key: key.into(),
-            attributes: None,
-            children: None,
+            attributes: IndexMap::new(),
+            children: Vec::new(),
             value: Some(value),
         }
     }
@@ -102,8 +94,8 @@ impl Node {
     {
         Self {
             key: key.into(),
-            attributes: None,
-            children: Some(nodes.into()),
+            attributes: IndexMap::new(),
+            children: nodes.into(),
             value: None,
         }
     }
@@ -115,8 +107,8 @@ impl Node {
     {
         Self {
             key: key.into(),
-            attributes: Some(convert_attributes(attrs)),
-            children: Some(nodes.into()),
+            attributes: convert_attributes(attrs),
+            children: nodes.into(),
             value: None,
         }
     }
@@ -127,8 +119,8 @@ impl Node {
     {
         Self {
             key: key.into(),
-            attributes: Some(convert_attributes(attrs)),
-            children: None,
+            attributes: convert_attributes(attrs),
+            children: Vec::new(),
             value: Some(value),
         }
     }
@@ -139,23 +131,23 @@ impl Node {
     }
 
     #[inline]
-    pub fn attributes(&self) -> Option<&IndexMap<String, String>> {
-        self.attributes.as_ref()
+    pub fn attributes(&self) -> &IndexMap<String, String> {
+        &self.attributes
     }
 
     #[inline]
-    pub fn attributes_mut(&mut self) -> Option<&mut IndexMap<String, String>> {
-        self.attributes.as_mut()
+    pub fn attributes_mut(&mut self) -> &mut IndexMap<String, String> {
+        &mut self.attributes
     }
 
     #[inline]
-    pub fn children(&self) -> Option<&Vec<Node>> {
-        self.children.as_ref()
+    pub fn children(&self) -> &[Node] {
+        &self.children
     }
 
     #[inline]
-    pub fn children_mut(&mut self) -> Option<&mut Vec<Node>> {
-        self.children.as_mut()
+    pub fn children_mut(&mut self) -> &mut Vec<Node> {
+        &mut self.children
     }
 
     #[inline]
@@ -168,32 +160,20 @@ impl Node {
         self.value.as_mut()
     }
 
-    #[inline]
-    pub fn children_iter(&self) -> OptionIterator<&Vec<Node>> {
-        OptionIterator::new(self.children())
-    }
-
-    #[inline]
-    pub fn children_iter_mut(&mut self) -> OptionIterator<&mut Vec<Node>> {
-        OptionIterator::new(self.children_mut())
-    }
-
     pub fn attr(&self, key: &str) -> Option<&str> {
-        self.attributes()
-            .and_then(|attributes| attributes.get(key).map(String::as_str))
+        self.attributes.get(key).map(String::as_str)
     }
 
     pub fn attr_mut(&mut self, key: &str) -> Option<&mut String> {
-        self.attributes_mut()
-            .and_then(|attributes| attributes.get_mut(key))
+        self.attributes.get_mut(key)
     }
 
     pub fn into_key_and_value(self) -> (String, Option<Value>) {
         (self.key, self.value)
     }
 
-    pub fn set_key(&mut self, key: String) {
-        self.key = key;
+    pub fn set_key<K: Into<String>>(&mut self, key: K) {
+        self.key = key.into();
     }
 
     pub fn set_attr<K, V>(&mut self, key: K, value: V) -> Option<String>
@@ -201,25 +181,19 @@ impl Node {
         K: Into<String>,
         V: Into<String>,
     {
-        let attributes = self.attributes.get_or_insert_with(Default::default);
-        attributes.insert(key.into(), value.into())
+        self.attributes.insert(key.into(), value.into())
     }
 
     pub fn remove_attr(&mut self, key: &str) -> Option<String> {
-        self.attributes
-            .as_mut()
-            .and_then(|attributes| attributes.swap_remove(key))
+        self.attributes.swap_remove(key)
     }
 
     pub fn sort_attrs(&mut self) {
-        if let Some(ref mut attributes) = self.attributes {
-            attributes.sort_keys();
-        }
+        self.attributes.sort_keys();
     }
 
     pub fn append_child(&mut self, value: Node) {
-        let children = self.children.get_or_insert_with(Default::default);
-        children.push(value);
+        self.children.push(value);
     }
 
     pub fn set_value(&mut self, value: Option<Value>) -> Option<Value> {
@@ -227,11 +201,9 @@ impl Node {
     }
 
     pub fn has(&self, key: &str) -> bool {
-        if let Some(ref children) = self.children {
-            for node in children {
-                if node.key == key {
-                    return true;
-                }
+        for node in self.children.iter() {
+            if node.key == key {
+                return true;
             }
         }
 
@@ -239,11 +211,9 @@ impl Node {
     }
 
     pub fn get_child(&self, key: &str) -> Option<&Node> {
-        if let Some(ref children) = self.children {
-            for node in children {
-                if node.key == key {
-                    return Some(node);
-                }
+        for node in self.children.iter() {
+            if node.key == key {
+                return Some(node);
             }
         }
 
@@ -251,11 +221,9 @@ impl Node {
     }
 
     pub fn get_child_mut(&mut self, key: &str) -> Option<&mut Node> {
-        if let Some(ref mut children) = self.children {
-            for node in children {
-                if node.key == key {
-                    return Some(node);
-                }
+        for node in self.children.iter_mut() {
+            if node.key == key {
+                return Some(node);
             }
         }
 
@@ -263,25 +231,13 @@ impl Node {
     }
 
     pub fn remove_child(&mut self, key: &str) -> Option<Node> {
-        if let Some(ref mut children) = self.children {
-            let index = children
-                .iter()
-                .enumerate()
-                .find(|(_, child)| child.key() == key)
-                .map(|(index, _)| index);
+        let index = self.children.iter().position(|child| child.key() == key);
 
-            if let Some(index) = index {
-                return Some(children.remove(index));
-            }
+        if let Some(index) = index {
+            return Some(self.children.remove(index));
         }
 
         None
-    }
-
-    pub fn remove_child_at(&mut self, index: usize) -> Option<Node> {
-        self.children
-            .as_mut()
-            .map(|children| children.remove(index))
     }
 
     pub fn pointer<'a>(&'a self, pointer: &[&str]) -> Option<&'a Node> {
@@ -291,15 +247,13 @@ impl Node {
         let mut target = self;
 
         for token in pointer {
-            let children = match target.children {
-                Some(ref v) => v,
-                None => return None,
-            };
-
             let target_opt = if let Some(index) = parse_index(token) {
-                children.get(index)
+                target.children.get(index)
             } else {
-                children.iter().find(|ref child| child.key() == *token)
+                target
+                    .children
+                    .iter()
+                    .find(|ref child| child.key() == *token)
             };
 
             if let Some(t) = target_opt {
@@ -318,15 +272,13 @@ impl Node {
         let mut target = self;
 
         for token in pointer {
-            let children = match target.children {
-                Some(ref mut v) => v,
-                None => return None,
-            };
-
             let target_opt = if let Some(index) = parse_index(token) {
-                children.get_mut(index)
+                target.children.get_mut(index)
             } else {
-                children.iter_mut().find(|ref child| child.key() == *token)
+                target
+                    .children
+                    .iter_mut()
+                    .find(|ref child| child.key() == *token)
             };
 
             if let Some(t) = target_opt {
@@ -336,30 +288,5 @@ impl Node {
             }
         }
         Some(target)
-    }
-}
-
-impl<T> OptionIterator<T>
-where
-    T: IntoIterator,
-{
-    pub fn new(inner: Option<T>) -> Self {
-        OptionIterator {
-            inner: inner.map(|inner| inner.into_iter()),
-        }
-    }
-}
-
-impl<T> Iterator for OptionIterator<T>
-where
-    T: IntoIterator,
-{
-    type Item = T::Item;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        match self.inner {
-            Some(ref mut inner) => inner.next(),
-            None => None,
-        }
     }
 }

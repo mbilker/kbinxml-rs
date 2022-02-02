@@ -51,15 +51,13 @@ impl ToTextXml for Node {
             }
         }
 
-        if let Some(attributes) = self.attributes() {
-            for (key, value) in attributes {
-                let value = BytesText::from_plain_str(&value);
+        for (key, value) in self.attributes() {
+            let value = BytesText::from_plain_str(&value);
 
-                elem.push_attribute(Attribute {
-                    key: key.as_bytes(),
-                    value: Cow::Borrowed(value.escaped()),
-                });
-            }
+            elem.push_attribute(Attribute {
+                key: key.as_bytes(),
+                value: Cow::Borrowed(value.escaped()),
+            });
         }
 
         // Now write the value contents.
@@ -76,10 +74,7 @@ impl ToTextXml for Node {
         };
 
         let has_value = start_elem.is_none();
-        let has_children = match self.children() {
-            Some(children) => !children.is_empty(),
-            None => false,
-        };
+        let has_children = !self.children().is_empty();
 
         // A `Some` value here means the start element was not written
         if let Some(start_elem) = start_elem {
@@ -90,10 +85,8 @@ impl ToTextXml for Node {
             }
         }
 
-        if let Some(children) = self.children() {
-            for child in children {
-                child.write(writer)?;
-            }
+        for child in self.children() {
+            child.write(writer)?;
         }
 
         if has_value || has_children {

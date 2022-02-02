@@ -351,46 +351,42 @@ impl Writeable for Node {
             write_value(options, data_buf, node_type, is_array, value)?;
         }
 
-        if let Some(attributes) = self.attributes() {
-            for (key, value) in attributes {
-                trace!("Node write_node => attr: {}, value: {}", key, value);
+        for (key, value) in self.attributes() {
+            trace!("Node write_node => attr: {}, value: {}", key, value);
 
-                data_buf
-                    .write_str(options.encoding, value)
-                    .context(DataBuffer { node_type })?;
+            data_buf
+                .write_str(options.encoding, value)
+                .context(DataBuffer { node_type })?;
 
-                node_buf
-                    .write_u8(StandardType::Attribute as u8)
-                    .context(DataWrite {
-                        node_type: StandardType::Attribute,
-                    })?;
+            node_buf
+                .write_u8(StandardType::Attribute as u8)
+                .context(DataWrite {
+                    node_type: StandardType::Attribute,
+                })?;
 
-                match options.compression {
-                    CompressionType::Compressed => {
-                        Sixbit::pack(&mut **node_buf, &key).context(NodeSixbitName)?
-                    },
-                    CompressionType::Uncompressed => {
-                        let data = options.encoding.encode_bytes(&key).context(
-                            NodeUncompressedNameEncode {
-                                encoding: options.encoding,
-                            },
-                        )?;
-                        let len = (data.len() - 1) as u8;
-                        node_buf
-                            .write_u8(len | ARRAY_MASK)
-                            .context(NodeUncompressedNameLength)?;
-                        node_buf
-                            .write_all(&data)
-                            .context(NodeUncompressedNameData)?;
-                    },
-                };
-            }
+            match options.compression {
+                CompressionType::Compressed => {
+                    Sixbit::pack(&mut **node_buf, &key).context(NodeSixbitName)?
+                },
+                CompressionType::Uncompressed => {
+                    let data = options.encoding.encode_bytes(&key).context(
+                        NodeUncompressedNameEncode {
+                            encoding: options.encoding,
+                        },
+                    )?;
+                    let len = (data.len() - 1) as u8;
+                    node_buf
+                        .write_u8(len | ARRAY_MASK)
+                        .context(NodeUncompressedNameLength)?;
+                    node_buf
+                        .write_all(&data)
+                        .context(NodeUncompressedNameData)?;
+                },
+            };
         }
 
-        if let Some(children) = self.children() {
-            for child in children {
-                child.write_node(options, node_buf, data_buf)?;
-            }
+        for child in self.children() {
+            child.write_node(options, node_buf, data_buf)?;
         }
 
         // node end always has the array bit set
