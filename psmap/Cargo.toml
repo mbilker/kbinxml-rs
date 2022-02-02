@@ -1,6 +1,6 @@
 [package]
 name = "psmap"
-version = "1.2.0"
+version = "2.0.0"
 authors = ["Matt Bilker <me@mbilker.us>"]
 license = "MIT"
 edition = "2018"
