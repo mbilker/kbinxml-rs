@@ -495,8 +495,9 @@ pub fn psmap(input: TokenStream) -> TokenStream {
     };
 
     let mut loops = TokenStream2::new();
+
     for InputBlock { name, mappings } in blocks.iter() {
-        loops.append_all(output.create_input_loop(&name, mappings.iter()));
+        loops.append_all(output.create_input_loop(name, mappings.iter()));
     }
 
     let definitions = output.definitions;

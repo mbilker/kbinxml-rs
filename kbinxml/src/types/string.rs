@@ -13,7 +13,7 @@ pub trait FromKbinString: Sized {
 fn space_check(input: &str) -> Result<()> {
     // check for space character
     if input.find(' ').is_some() {
-        return Err(KbinError::InvalidState.into());
+        return Err(KbinError::InvalidState);
     }
 
     Ok(())
@@ -87,8 +87,8 @@ macro_rules! basic_int_parse {
                 fn from_kbin_string(input: &str) -> Result<Self> {
                     space_check(input)?;
 
-                    if input.starts_with("0x") {
-                        <$type>::from_str_radix(&input[2..], 16)
+                    if let Some(input) = input.strip_prefix("0x") {
+                        <$type>::from_str_radix(input, 16)
                             .context(StringParseIntSnafu { node_type: stringify!($type) })
                     } else {
                         input

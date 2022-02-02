@@ -132,7 +132,7 @@ fn write_value(
                 .write_u32::<BigEndian>(size)
                 .context(NodeSizeSnafu { node_type, size })?;
             data_buf
-                .write_all(&data)
+                .write_all(data)
                 .context(DataWriteSnafu { node_type })?;
             data_buf
                 .realign_writes(None)
@@ -140,7 +140,7 @@ fn write_value(
         },
         Value::String(text) => {
             data_buf
-                .write_str(options.encoding, &text)
+                .write_str(options.encoding, text)
                 .context(DataBufferSnafu { node_type })?;
         },
         Value::Array(values) => {
@@ -312,8 +312,8 @@ impl Writeable for Node {
         data_buf: &mut ByteBufferWrite,
     ) -> Result<(), WriterError> {
         let (node_type, is_array) = match self.value() {
-            Some(Value::Array(ref values)) => (values.standard_type(), true),
-            Some(ref value) => (value.standard_type(), false),
+            Some(Value::Array(values)) => (values.standard_type(), true),
+            Some(value) => (value.standard_type(), false),
             None => (StandardType::NodeStart, false),
         };
         let array_mask = if is_array { ARRAY_MASK } else { 0 };
@@ -329,15 +329,13 @@ impl Writeable for Node {
 
         node_buf
             .write_u8(node_type as u8 | array_mask)
-            .context(DataWriteSnafu {
-                node_type: node_type,
-            })?;
+            .context(DataWriteSnafu { node_type })?;
         match options.compression {
             CompressionType::Compressed => {
-                Sixbit::pack(&mut **node_buf, &self.key()).context(NodeSixbitNameSnafu)?
+                Sixbit::pack(&mut **node_buf, self.key()).context(NodeSixbitNameSnafu)?
             },
             CompressionType::Uncompressed => {
-                let data = options.encoding.encode_bytes(&self.key()).context(
+                let data = options.encoding.encode_bytes(self.key()).context(
                     NodeUncompressedNameEncodeSnafu {
                         encoding: options.encoding,
                     },
@@ -371,10 +369,10 @@ impl Writeable for Node {
 
             match options.compression {
                 CompressionType::Compressed => {
-                    Sixbit::pack(&mut **node_buf, &key).context(NodeSixbitNameSnafu)?
+                    Sixbit::pack(&mut **node_buf, key).context(NodeSixbitNameSnafu)?
                 },
                 CompressionType::Uncompressed => {
-                    let data = options.encoding.encode_bytes(&key).context(
+                    let data = options.encoding.encode_bytes(key).context(
                         NodeUncompressedNameEncodeSnafu {
                             encoding: options.encoding,
                         },
@@ -473,5 +471,12 @@ impl Writer {
         output.extend_from_slice(&data_buf);
 
         Ok(output)
+    }
+}
+
+impl Default for Writer {
+    #[inline]
+    fn default() -> Self {
+        Self::new()
     }
 }

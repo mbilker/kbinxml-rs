@@ -174,6 +174,14 @@ macro_rules! type_impl {
       }
     }
 
+    pub fn is_empty(&self) -> bool {
+      match self {
+        $(
+          ValueArray::$konst(values) => values.is_empty(),
+        )*
+      }
+    }
+
     pub fn len(&self) -> usize {
       match self {
         $(
@@ -186,25 +194,25 @@ macro_rules! type_impl {
 
 impl ValueArray {
     type_impl! {
-      S8, U8,
-      S16, U16,
-      S32, U32,
-      S64, U64,
-      Ip4,
-      Float,
-      Double,
-      Boolean,
-      S8_2, S8_3, S8_4, Vs8,
-      U8_2, U8_3, U8_4, Vu8,
-      Boolean2, Boolean3, Boolean4, Vb,
-      S16_2, S16_3, S16_4, Vs16,
-      S32_2, S32_3, S32_4,
-      S64_2, S64_3, S64_4,
-      U16_2, U16_3, U16_4, Vu16,
-      U32_2, U32_3, U32_4,
-      U64_2, U64_3, U64_4,
-      Float2, Float3, Float4,
-      Double2, Double3, Double4,
+        S8, U8,
+        S16, U16,
+        S32, U32,
+        S64, U64,
+        Ip4,
+        Float,
+        Double,
+        Boolean,
+        S8_2, S8_3, S8_4, Vs8,
+        U8_2, U8_3, U8_4, Vu8,
+        Boolean2, Boolean3, Boolean4, Vb,
+        S16_2, S16_3, S16_4, Vs16,
+        S32_2, S32_3, S32_4,
+        S64_2, S64_3, S64_4,
+        U16_2, U16_3, U16_4, Vu16,
+        U32_2, U32_3, U32_4,
+        U64_2, U64_3, U64_4,
+        Float2, Float3, Float4,
+        Double2, Double3, Double4,
     }
 }
 
@@ -221,7 +229,7 @@ fn write_values<T: fmt::Display>(f: &mut fmt::Formatter, values: &[T]) -> fmt::R
 macro_rules! write_array {
     ($method:ident, $num:expr) => {
         fn $method<T: fmt::Display>(f: &mut fmt::Formatter, values: &[[T; $num]]) -> fmt::Result {
-            for (i, v) in values.iter().flat_map(|v| v.into_iter()).enumerate() {
+            for (i, v) in values.iter().flat_map(|v| v.iter()).enumerate() {
                 if i > 0 {
                     f.write_str(" ")?;
                 }
@@ -296,7 +304,7 @@ impl fmt::Display for ValueArray {
                 Ok(())
             },
             ValueArray::Boolean2(values) => {
-                for (i, v) in values.iter().flat_map(|v| v.into_iter()).enumerate() {
+                for (i, v) in values.iter().flat_map(|v| v.iter()).enumerate() {
                     if i > 0 {
                         f.write_str(" ")?;
                     }
@@ -305,7 +313,7 @@ impl fmt::Display for ValueArray {
                 Ok(())
             },
             ValueArray::Boolean3(values) => {
-                for (i, v) in values.iter().flat_map(|v| v.into_iter()).enumerate() {
+                for (i, v) in values.iter().flat_map(|v| v.iter()).enumerate() {
                     if i > 0 {
                         f.write_str(" ")?;
                     }
@@ -314,7 +322,7 @@ impl fmt::Display for ValueArray {
                 Ok(())
             },
             ValueArray::Boolean4(values) => {
-                for (i, v) in values.iter().flat_map(|v| v.into_iter()).enumerate() {
+                for (i, v) in values.iter().flat_map(|v| v.iter()).enumerate() {
                     if i > 0 {
                         f.write_str(" ")?;
                     }

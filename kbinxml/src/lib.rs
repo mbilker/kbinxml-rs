@@ -54,9 +54,9 @@ pub fn is_binary_xml(input: &[u8]) -> bool {
 }
 
 pub fn from_binary(input: Bytes) -> Result<(NodeCollection, EncodingType)> {
-    let mut reader = Reader::new(input)?;
-    let collection = NodeCollection::from_iter(&mut reader).ok_or(KbinError::NoNodeCollection)?;
+    let reader = Reader::new(input)?;
     let encoding = reader.encoding();
+    let collection = reader.collect::<Option<_>>().ok_or(KbinError::NoNodeCollection)?;
 
     Ok((collection, encoding))
 }
@@ -105,5 +105,6 @@ where
     T: ToTextXml,
 {
     let writer = TextXmlWriter::new();
-    writer.to_text_xml(input)
+
+    writer.into_text_xml(input)
 }

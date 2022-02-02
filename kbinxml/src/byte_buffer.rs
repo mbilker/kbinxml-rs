@@ -71,7 +71,7 @@ pub enum ByteBufferError {
 }
 
 /// Remove trailing null bytes, used for the `String` type
-pub(crate) fn strip_trailing_null_bytes<'a>(data: &'a [u8]) -> &'a [u8] {
+pub(crate) fn strip_trailing_null_bytes(data: &[u8]) -> &[u8] {
     let len = data.len();
 
     if len == 0 {

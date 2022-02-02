@@ -85,7 +85,7 @@ impl EncodingType {
             e if e == EUC_JP => Ok(EncodingType::EUC_JP),
             e if e == SHIFT_JIS => Ok(EncodingType::SHIFT_JIS),
             e if e == UTF_8 => Ok(EncodingType::UTF_8),
-            _ => return Err(EncodingError::UnknownEncoding),
+            _ => Err(EncodingError::UnknownEncoding),
         }
     }
 

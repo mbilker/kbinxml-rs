@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 use std::fmt;
-use std::iter::Iterator;
+use std::iter::{FromIterator, Iterator};
 
 use crate::error::KbinError;
 use crate::node::{Node, NodeDefinition};
@@ -39,19 +39,6 @@ impl NodeCollection {
         }
     }
 
-    pub fn from_iter<I>(iter: &mut I) -> Option<NodeCollection>
-    where
-        I: Iterator<Item = NodeDefinition>,
-    {
-        let base = if let Some(def) = iter.next() {
-            def
-        } else {
-            return None;
-        };
-
-        NodeCollection::from_iter_base(base, iter)
-    }
-
     fn from_iter_base<I>(base: NodeDefinition, iter: &mut I) -> Option<NodeCollection>
     where
         I: Iterator<Item = NodeDefinition>,
@@ -59,18 +46,14 @@ impl NodeCollection {
         let mut attributes = VecDeque::new();
         let mut children = VecDeque::new();
 
-        loop {
-            if let Some(def) = iter.next() {
-                match def.node_type {
-                    StandardType::Attribute => attributes.push_back(def),
-                    StandardType::NodeEnd | StandardType::FileEnd => break,
-                    _ => match NodeCollection::from_iter_base(def, iter) {
-                        Some(child) => children.push_back(child),
-                        None => return None,
-                    },
-                }
-            } else {
-                break;
+        while let Some(def) = iter.next() {
+            match def.node_type {
+                StandardType::Attribute => attributes.push_back(def),
+                StandardType::NodeEnd | StandardType::FileEnd => break,
+                _ => match NodeCollection::from_iter_base(def, iter) {
+                    Some(child) => children.push_back(child),
+                    None => return None,
+                },
             }
         }
 
@@ -120,7 +103,7 @@ impl NodeCollection {
             if let Value::Attribute(value) = attr.value()? {
                 node.set_attr(key, value);
             } else {
-                return Err(KbinError::InvalidState.into());
+                return Err(KbinError::InvalidState);
             }
         }
 
@@ -141,7 +124,7 @@ impl NodeCollection {
             let target_opt = if let Some(index) = parse_index(token) {
                 target.children().get(index)
             } else {
-                target.children().iter().find(|ref child| {
+                target.children().iter().find(|child| {
                     child
                         .base()
                         .key()
@@ -159,6 +142,18 @@ impl NodeCollection {
             }
         }
         Some(target)
+    }
+}
+
+impl FromIterator<NodeDefinition> for Option<NodeCollection> {
+    fn from_iter<T>(iter: T) -> Self
+    where
+        T: IntoIterator<Item = NodeDefinition>,
+    {
+        let mut iter = iter.into_iter();
+        let base = iter.next()?;
+
+        NodeCollection::from_iter_base(base, &mut iter)
     }
 }
 

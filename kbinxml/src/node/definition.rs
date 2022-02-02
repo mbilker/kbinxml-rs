@@ -79,12 +79,12 @@ impl NodeDefinition {
     }
 
     #[inline]
-    pub fn data<'a>(&'a self) -> &'a NodeData {
+    pub fn data(&self) -> &NodeData {
         &self.data
     }
 
     #[inline]
-    pub fn data_mut<'a>(&'a mut self) -> &'a mut NodeData {
+    pub fn data_mut(&mut self) -> &mut NodeData {
         &mut self.data
     }
 
@@ -118,7 +118,7 @@ impl NodeDefinition {
         }
     }
 
-    pub fn value_bytes<'a>(&'a self) -> Option<&'a [u8]> {
+    pub fn value_bytes(&self) -> Option<&[u8]> {
         match self.data {
             NodeData::Some { ref value_data, .. } => Some(value_data),
             NodeData::None => None,

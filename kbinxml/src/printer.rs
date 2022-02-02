@@ -53,9 +53,10 @@ impl Printer {
             };
         }
 
-        let collection = NodeCollection::from_iter(&mut definitions.into_iter());
+        let collection: Option<NodeCollection> = definitions.into_iter().collect();
+
         match collection {
-            Some(ref collection) => eprintln!("collection: {:#}", collection),
+            Some(collection) => eprintln!("collection: {:#}", collection),
             None => eprintln!("collection: {:?}", collection),
         };
 

@@ -4,8 +4,7 @@ use std::io::{self, Read, Write};
 use byteorder::{ReadBytesExt, WriteBytesExt};
 use snafu::{ResultExt, Snafu};
 
-static CHAR_MAP: &'static [u8] =
-    b"0123456789:ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz";
+const CHAR_MAP: &[u8] = b"0123456789:ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz";
 
 lazy_static! {
     static ref BYTE_MAP: HashMap<u8, u8> = {

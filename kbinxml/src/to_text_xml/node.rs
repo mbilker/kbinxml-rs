@@ -52,7 +52,7 @@ impl ToTextXml for Node {
         }
 
         for (key, value) in self.attributes() {
-            let value = BytesText::from_plain_str(&value);
+            let value = BytesText::from_plain_str(value);
 
             elem.push_attribute(Attribute {
                 key: key.as_bytes(),

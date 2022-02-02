@@ -8,7 +8,7 @@ use encoding_rs::Encoding;
 use kbinxml::{EncodingType, Options, Printer};
 
 fn display_buf(buf: &[u8]) -> Result<(), IoError> {
-    io::stdout().write_all(&buf)?;
+    io::stdout().write_all(buf)?;
     println!();
 
     Ok(())

@@ -26,7 +26,7 @@ impl TextXmlWriter {
         Self { xml_writer }
     }
 
-    pub fn to_text_xml<T>(mut self, value: &T) -> Result<Vec<u8>, KbinError>
+    pub fn into_text_xml<T>(mut self, value: &T) -> Result<Vec<u8>, KbinError>
     where
         T: ToTextXml,
     {
