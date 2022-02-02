@@ -160,19 +160,14 @@ impl Node {
         self.value.as_mut()
     }
 
-    pub fn attr(&self, key: &str) -> Option<&str> {
-        self.attributes.get(key).map(String::as_str)
-    }
-
-    pub fn attr_mut(&mut self, key: &str) -> Option<&mut String> {
-        self.attributes.get_mut(key)
-    }
-
-    pub fn into_key_and_value(self) -> (String, Option<Value>) {
+    pub fn into_key_value(self) -> (String, Option<Value>) {
         (self.key, self.value)
     }
 
-    pub fn set_key<K: Into<String>>(&mut self, key: K) {
+    pub fn set_key<K>(&mut self, key: K)
+    where
+        K: Into<String>,
+    {
         self.key = key.into();
     }
 
@@ -182,10 +177,6 @@ impl Node {
         V: Into<String>,
     {
         self.attributes.insert(key.into(), value.into())
-    }
-
-    pub fn remove_attr(&mut self, key: &str) -> Option<String> {
-        self.attributes.swap_remove(key)
     }
 
     pub fn sort_attrs(&mut self) {
@@ -201,59 +192,37 @@ impl Node {
     }
 
     pub fn has(&self, key: &str) -> bool {
-        for node in self.children.iter() {
-            if node.key == key {
-                return true;
-            }
-        }
-
-        false
+        self.children.iter().any(|node| node.key == key)
     }
 
     pub fn get_child(&self, key: &str) -> Option<&Node> {
-        for node in self.children.iter() {
-            if node.key == key {
-                return Some(node);
-            }
-        }
-
-        None
+        self.children.iter().find(|node| node.key == key)
     }
 
     pub fn get_child_mut(&mut self, key: &str) -> Option<&mut Node> {
-        for node in self.children.iter_mut() {
-            if node.key == key {
-                return Some(node);
-            }
-        }
-
-        None
+        self.children.iter_mut().find(|node| node.key == key)
     }
 
     pub fn remove_child(&mut self, key: &str) -> Option<Node> {
-        let index = self.children.iter().position(|child| child.key() == key);
-
-        if let Some(index) = index {
-            return Some(self.children.remove(index));
+        if let Some(index) = self.children.iter().position(|node| node.key == key) {
+            Some(self.children.remove(index))
+        } else {
+            None
         }
-
-        None
     }
 
     pub fn pointer<'a>(&'a self, pointer: &[&str]) -> Option<&'a Node> {
         if pointer.is_empty() {
             return Some(self);
         }
+
         let mut target = self;
 
         for token in pointer {
             let target_opt = if let Some(index) = parse_index(token) {
                 target.children.get(index)
             } else {
-                target
-                    .children
-                    .iter()
-                    .find(|ref child| child.key() == *token)
+                target.children.iter().find(|child| child.key == *token)
             };
 
             if let Some(t) = target_opt {
@@ -262,6 +231,7 @@ impl Node {
                 return None;
             }
         }
+
         Some(target)
     }
 
@@ -269,16 +239,14 @@ impl Node {
         if pointer.is_empty() {
             return Some(self);
         }
+
         let mut target = self;
 
         for token in pointer {
             let target_opt = if let Some(index) = parse_index(token) {
                 target.children.get_mut(index)
             } else {
-                target
-                    .children
-                    .iter_mut()
-                    .find(|ref child| child.key() == *token)
+                target.children.iter_mut().find(|child| child.key == *token)
             };
 
             if let Some(t) = target_opt {
@@ -287,6 +255,7 @@ impl Node {
                 return None;
             }
         }
+
         Some(target)
     }
 }
