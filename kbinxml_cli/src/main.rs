@@ -59,20 +59,20 @@ fn main() -> Result<(), anyhow::Error> {
         .version(env!("CARGO_PKG_VERSION"))
         .author("Matt Bilker <me@mbilker.us>")
         .arg(
-            Arg::with_name("printer")
+            Arg::new("printer")
                 .help("Turn on the NodeCollection and NodeDefinition debug printer")
-                .short("p")
+                .short('p')
                 .long("printer"),
         )
         .arg(
-            Arg::with_name("encoding")
+            Arg::new("encoding")
                 .help("Set the encoding used when encoding kbin data")
-                .short("e")
+                .short('e')
                 .long("encoding")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("input")
+            Arg::new("input")
                 .help("The file to convert")
                 .index(1)
                 .required(true),
