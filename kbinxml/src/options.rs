@@ -44,7 +44,7 @@ impl OptionsBuilder {
         self
     }
 
-    pub fn build(self) -> Options {
+    pub fn build(&self) -> Options {
         Options {
             compression: self.compression,
             encoding: self.encoding,
