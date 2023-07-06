@@ -31,7 +31,7 @@ impl TextXmlWriter {
         T: ToTextXml,
     {
         if let Some(encoding) = value.encoding().name() {
-            let header = BytesDecl::new(b"1.0", Some(encoding.as_bytes()), None);
+            let header = BytesDecl::new("1.0", Some(encoding), None);
 
             self.xml_writer.write_event(Event::Decl(header))?;
         }

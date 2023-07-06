@@ -1,9 +1,11 @@
+use std::borrow::Cow;
 use std::num::ParseIntError;
 use std::str::{self, Utf8Error};
 
 use bytes::{BufMut, Bytes, BytesMut};
 use quick_xml::events::attributes::Attributes;
 use quick_xml::events::{BytesStart, BytesText, Event};
+use quick_xml::name::QName;
 use quick_xml::Error as QuickXmlError;
 use quick_xml::Reader;
 use snafu::{ResultExt, Snafu};
@@ -137,32 +139,28 @@ impl<'a> TextXmlReader<'a> {
         for attr in attrs {
             match attr {
                 Ok(attr) => {
-                    let value = match attr.unescaped_value() {
+                    let value = match attr.unescape_value() {
                         Ok(v) => v,
                         Err(e) => {
                             error!("Error decoding attribute value: {:?}", e);
-                            attr.value.clone()
+                            Cow::Borrowed(str::from_utf8(&attr.value)?)
                         },
                     };
 
-                    if attr.key == b"__type" {
-                        let value = str::from_utf8(&*value)?;
-
+                    if attr.key == QName(b"__type") {
                         node_type =
-                            Some(StandardType::from_name(value).context(InvalidKbinTypeSnafu)?);
-                    } else if attr.key == b"__count" {
-                        let value = str::from_utf8(&*value)?;
+                            Some(StandardType::from_name(&value).context(InvalidKbinTypeSnafu)?);
+                    } else if attr.key == QName(b"__count") {
                         let num_count = value.parse::<u32>().context(ParseArrayCountSnafu)?;
 
                         count = num_count as usize;
-                    } else if attr.key == b"__size" {
-                        let value = str::from_utf8(&*value)?
-                            .parse::<usize>()
-                            .context(ParseBinarySizeSnafu)?;
+                    } else if attr.key == QName(b"__size") {
+                        let value = value.parse::<usize>().context(ParseBinarySizeSnafu)?;
 
                         size = Some(value);
                     } else {
-                        let definition = self.parse_attribute(attr.key, &value)?;
+                        let definition =
+                            self.parse_attribute(attr.key.into_inner(), &value.as_bytes())?;
                         attributes.push(definition);
                     }
                 },
@@ -199,7 +197,7 @@ impl<'a> TextXmlReader<'a> {
         let data = NodeData::Some {
             key: Key::Uncompressed {
                 encoding: self.encoding,
-                data: Bytes::from(e.name().to_vec()),
+                data: Bytes::from(e.name().0.to_owned()),
             },
             value_data,
         };
@@ -216,7 +214,7 @@ impl<'a> TextXmlReader<'a> {
         count: usize,
         size: Option<usize>,
     ) -> Result<(), TextReaderError> {
-        let data = event.unescaped()?;
+        let data = event.unescape()?;
         let data = match definition.node_type {
             StandardType::String | StandardType::NodeStart => {
                 let mut data = BytesMut::from(&*data);
@@ -228,8 +226,7 @@ impl<'a> TextXmlReader<'a> {
                 data.freeze()
             },
             node_type => {
-                let text = str::from_utf8(&*data)?;
-                let value = Value::from_string(node_type, text, definition.is_array, count)
+                let value = Value::from_string(node_type, &data, definition.is_array, count)
                     .context(ValueDecodeSnafu { node_type })?;
 
                 // The read number of bytes must match the size attribute, if set
@@ -268,12 +265,8 @@ impl<'a> TextXmlReader<'a> {
     }
 
     pub fn as_node_collection(&mut self) -> Result<Option<NodeCollection>, TextReaderError> {
-        // A buffer size for reading a `quick_xml::events::Event` that I pulled
-        // out of my head.
-        let mut buf = Vec::with_capacity(1024);
-
         loop {
-            match self.xml_reader.read_event(&mut buf)? {
+            match self.xml_reader.read_event()? {
                 Event::Start(e) => {
                     let start = self.handle_start(e)?;
                     self.stack.push(start);
@@ -316,8 +309,6 @@ impl<'a> TextXmlReader<'a> {
                 Event::Eof => break,
                 _ => {},
             };
-
-            buf.clear();
         }
 
         Ok(None)

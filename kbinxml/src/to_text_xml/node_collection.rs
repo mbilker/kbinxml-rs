@@ -3,6 +3,7 @@ use std::io::Write;
 
 use quick_xml::events::attributes::Attribute;
 use quick_xml::events::{BytesEnd, BytesStart, BytesText, Event};
+use quick_xml::name::QName;
 use quick_xml::Writer;
 
 use crate::encoding_type::EncodingType;
@@ -29,13 +30,13 @@ impl ToTextXml for NodeCollection {
             },
         };
 
-        let mut elem = BytesStart::borrowed(key.as_bytes(), key.as_bytes().len());
+        let mut elem = BytesStart::new(key.clone());
 
         if base.is_array {
             let values = value.as_ref().ok_or(KbinError::InvalidState)?.as_array()?;
 
             elem.push_attribute(Attribute {
-                key: b"__count",
+                key: QName(b"__count"),
                 value: Cow::Owned(values.len().to_string().into_bytes()),
             });
         }
@@ -44,7 +45,7 @@ impl ToTextXml for NodeCollection {
             let value = value.as_ref().ok_or(KbinError::InvalidState)?.as_slice()?;
 
             elem.push_attribute(Attribute {
-                key: b"__size",
+                key: QName(b"__size"),
                 value: Cow::Owned(value.len().to_string().into_bytes()),
             });
         }
@@ -52,7 +53,7 @@ impl ToTextXml for NodeCollection {
         // Only add a `__type` attribute if this is not a `NodeStart` node
         if base.node_type != StandardType::NodeStart {
             elem.push_attribute(Attribute {
-                key: b"__type",
+                key: QName(b"__type"),
                 value: Cow::Borrowed(base.node_type.name.as_bytes()),
             });
         }
@@ -63,11 +64,10 @@ impl ToTextXml for NodeCollection {
                 .ok_or(KbinError::InvalidState)?
                 .into_bytes();
             let value = attribute.value()?.to_string();
-            let value = BytesText::from_plain_str(&value);
 
             elem.push_attribute(Attribute {
-                key: &key,
-                value: Cow::Borrowed(value.escaped()),
+                key: QName(&key),
+                value: Cow::Borrowed(value.as_bytes()),
             });
         }
 
@@ -76,7 +76,7 @@ impl ToTextXml for NodeCollection {
                 writer.write_event(Event::Start(elem))?;
 
                 let value = value.to_string();
-                let elem = BytesText::from_plain_str(&value);
+                let elem = BytesText::new(&value);
                 writer.write_event(Event::Text(elem))?;
 
                 None
@@ -101,7 +101,7 @@ impl ToTextXml for NodeCollection {
         }
 
         if has_value || has_children {
-            let end_elem = BytesEnd::borrowed(key.as_bytes());
+            let end_elem = BytesEnd::new(key);
             writer.write_event(Event::End(end_elem))?;
         }
 
