@@ -3,6 +3,7 @@ use std::io::Write;
 
 use quick_xml::events::attributes::Attribute;
 use quick_xml::events::{BytesEnd, BytesStart, BytesText, Event};
+use quick_xml::name::QName;
 use quick_xml::Writer;
 
 use crate::encoding_type::EncodingType;
@@ -20,7 +21,7 @@ impl ToTextXml for Node {
 
     fn write<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), KbinError> {
         let key = self.key();
-        let mut elem = BytesStart::borrowed(key.as_bytes(), key.as_bytes().len());
+        let mut elem = BytesStart::new(key);
 
         // Write the attributes for the value, but not the value contents.
         if let Some(value) = self.value() {
@@ -29,13 +30,13 @@ impl ToTextXml for Node {
             match value {
                 Value::Binary(ref data) => {
                     elem.push_attribute(Attribute {
-                        key: b"__size",
+                        key: QName(b"__size"),
                         value: Cow::Owned(data.len().to_string().into_bytes()),
                     });
                 },
                 Value::Array(ref values) => {
                     elem.push_attribute(Attribute {
-                        key: b"__count",
+                        key: QName(b"__count"),
                         value: Cow::Owned(values.len().to_string().into_bytes()),
                     });
                 },
@@ -45,18 +46,18 @@ impl ToTextXml for Node {
             // Only add a `__type` attribute if this is not a `NodeStart` node
             if node_type != StandardType::NodeStart {
                 elem.push_attribute(Attribute {
-                    key: b"__type",
+                    key: QName(b"__type"),
                     value: Cow::Borrowed(node_type.name.as_bytes()),
                 });
             }
         }
 
         for (key, value) in self.attributes() {
-            let value = BytesText::from_plain_str(value);
+            // let value = BytesText::new(value);
 
             elem.push_attribute(Attribute {
-                key: key.as_bytes(),
-                value: Cow::Borrowed(value.escaped()),
+                key: QName(key.as_bytes()),
+                value: Cow::Borrowed(value.as_bytes()),
             });
         }
 
@@ -65,7 +66,7 @@ impl ToTextXml for Node {
             writer.write_event(Event::Start(elem))?;
 
             let value = value.to_string();
-            let elem = BytesText::from_plain_str(&value);
+            let elem = BytesText::new(&value);
             writer.write_event(Event::Text(elem))?;
 
             None
@@ -90,7 +91,7 @@ impl ToTextXml for Node {
         }
 
         if has_value || has_children {
-            let end_elem = BytesEnd::borrowed(key.as_bytes());
+            let end_elem = BytesEnd::new(key);
             writer.write_event(Event::End(end_elem))?;
         }
 
