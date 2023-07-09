@@ -56,7 +56,9 @@ pub fn is_binary_xml(input: &[u8]) -> bool {
 pub fn from_binary(input: Bytes) -> Result<(NodeCollection, EncodingType)> {
     let reader = Reader::new(input)?;
     let encoding = reader.encoding();
-    let collection = reader.collect::<Option<_>>().ok_or(KbinError::NoNodeCollection)?;
+    let collection = reader
+        .collect::<Option<_>>()
+        .ok_or(KbinError::NoNodeCollection)?;
 
     Ok((collection, encoding))
 }
